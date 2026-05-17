@@ -6,6 +6,7 @@ import java.util.UUID
 
 data class UserPrincipal(
     val id: UUID,
+    val tenantId: UUID,
     val email: String,
     private val authorities: Collection<GrantedAuthority>,
 ) : UserDetails {
