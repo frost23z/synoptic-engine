@@ -11,10 +11,12 @@ data class CreateActivityRequest(
     val title: String,
     @field:NotNull(message = "Type is required")
     val type: ActivityType,
-    @field:NotNull(message = "Schedule start is required")
-    val scheduleFrom: Instant,
-    @field:NotNull(message = "Schedule end is required")
-    val scheduleTo: Instant,
+    /** Required unless type is NOTE or FILE. */
+    val scheduleFrom: Instant? = null,
+    /** Required unless type is NOTE or FILE. */
+    val scheduleTo: Instant? = null,
+    val location: String? = null,
+    val additional: String? = null,
     val comment: String? = null,
     val leadId: UUID? = null,
     val userId: UUID? = null,
@@ -29,10 +31,10 @@ data class UpdateActivityRequest(
     val title: String,
     @field:NotNull(message = "Type is required")
     val type: ActivityType,
-    @field:NotNull(message = "Schedule start is required")
-    val scheduleFrom: Instant,
-    @field:NotNull(message = "Schedule end is required")
-    val scheduleTo: Instant,
+    val scheduleFrom: Instant? = null,
+    val scheduleTo: Instant? = null,
+    val location: String? = null,
+    val additional: String? = null,
     val comment: String? = null,
     val isDone: Boolean = false,
     val leadId: UUID? = null,
@@ -48,9 +50,11 @@ data class ActivityResponse(
     val title: String,
     val type: String,
     val comment: String?,
+    val location: String?,
+    val additional: String?,
     val isDone: Boolean,
-    val scheduleFrom: Instant,
-    val scheduleTo: Instant,
+    val scheduleFrom: Instant?,
+    val scheduleTo: Instant?,
     val leadId: UUID?,
     val userId: UUID?,
     val personId: UUID?,

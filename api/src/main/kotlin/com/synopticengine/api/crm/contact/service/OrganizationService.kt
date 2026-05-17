@@ -3,10 +3,9 @@ package com.synopticengine.api.crm.contact.service
 import com.synopticengine.api.crm.contact.domain.Organization
 import com.synopticengine.api.crm.contact.repo.OrganizationRepository
 import com.synopticengine.api.crm.contact.web.OrganizationResponse
-import com.synopticengine.api.identity.IdentityApi
+import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -16,20 +15,15 @@ import java.util.UUID
 @Transactional(readOnly = true)
 class OrganizationService(
     private val organizationRepository: OrganizationRepository,
-    private val identityApi: IdentityApi,
+    private val scopeResolver: ScopeResolver,
 ) {
     fun findAll(pageable: Pageable): PageResponse<OrganizationResponse> {
-        val scopeIds = resolveScope()
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
         return if (scopeIds == null) {
             PageResponse.of(organizationRepository.findAllByDeletedAtIsNull(pageable)) { it.toResponse() }
         } else {
             PageResponse.of(organizationRepository.findAllScopedByCreatedBy(scopeIds, pageable)) { it.toResponse() }
         }
-    }
-
-    private fun resolveScope(): Set<UUID>? {
-        val email = SecurityContextHolder.getContext().authentication?.name ?: return null
-        return identityApi.resolveViewContextByEmail(email).userIds
     }
 
     fun findById(id: UUID): OrganizationResponse = requireOrg(id).toResponse()

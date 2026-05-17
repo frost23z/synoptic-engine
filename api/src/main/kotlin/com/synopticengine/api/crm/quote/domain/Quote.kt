@@ -47,6 +47,17 @@ class Quote :
     var expiredAt: LocalDate? = null
 
     @Column
+    var personId: UUID? = null
+
+    /** Billing address as JSON: `{ street, city, state, country, postcode }`. */
+    @Column(columnDefinition = "jsonb")
+    var billingAddress: String? = null
+
+    /** Shipping address as JSON: same shape as billingAddress. */
+    @Column(columnDefinition = "jsonb")
+    var shippingAddress: String? = null
+
+    @Column
     override var deletedAt: Instant? = null
 
     @OneToMany(mappedBy = "quote", fetch = FetchType.LAZY, cascade = [CascadeType.ALL], orphanRemoval = true)
