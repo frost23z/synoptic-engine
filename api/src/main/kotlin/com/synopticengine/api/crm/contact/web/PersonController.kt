@@ -100,9 +100,10 @@ class PersonController(
     @PreAuthorize("hasAuthority('contacts.delete')")
     fun massDestroy(
         @RequestBody request: MassDestroyPersonRequest,
-    ): ResponseEntity<Void> {
-        personService.massDestroy(request.ids)
-        return ResponseEntity.noContent().build()
+    ): ResponseEntity<Map<String, Any>> {
+        val deleted = personService.massDestroy(request.ids)
+        val skipped = request.ids - deleted.toSet()
+        return ResponseEntity.ok(mapOf("deleted" to deleted, "skipped" to skipped))
     }
 
     @PostMapping("/{id}/tags")

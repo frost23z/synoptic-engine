@@ -10,13 +10,12 @@ import com.synopticengine.api.crm.quote.web.QuoteItemResponse
 import com.synopticengine.api.crm.quote.web.QuoteLeadProductResponse
 import com.synopticengine.api.crm.quote.web.QuoteResponse
 import com.synopticengine.api.crm.quote.web.SendQuoteMailResponse
-import com.synopticengine.api.identity.IdentityApi
+import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.shared.DomainEvent
 import com.synopticengine.api.shared.email.MailSenderService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -31,7 +30,7 @@ class QuoteService(
     private val quoteRepository: QuoteRepository,
     private val eventPublisher: ApplicationEventPublisher,
     private val mailSenderService: MailSenderService,
-    private val identityApi: IdentityApi,
+    private val scopeResolver: ScopeResolver,
     private val leadProductRepository: LeadProductRepository,
 ) {
     fun filter(
@@ -39,17 +38,12 @@ class QuoteService(
         status: QuoteStatus?,
         pageable: Pageable,
     ): PageResponse<QuoteResponse> {
-        val scopeIds = resolveScope()
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
         return if (scopeIds == null) {
             PageResponse.of(quoteRepository.filter(leadId, status, pageable)) { it.toResponse() }
         } else {
             PageResponse.of(quoteRepository.filterScoped(leadId, status, scopeIds, pageable)) { it.toResponse() }
         }
-    }
-
-    private fun resolveScope(): Set<UUID>? {
-        val email = SecurityContextHolder.getContext().authentication?.name ?: return null
-        return identityApi.resolveViewContextByEmail(email).userIds
     }
 
     fun findById(id: UUID): QuoteResponse =

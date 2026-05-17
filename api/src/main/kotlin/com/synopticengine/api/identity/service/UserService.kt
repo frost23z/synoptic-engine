@@ -115,6 +115,10 @@ class UserService(
     @Transactional
     fun deactivate(id: UUID) {
         val user = requireUser(id)
+        if (id == currentUserId()) {
+            throw IllegalStateException("You cannot deactivate your own account.")
+        }
+        ensureNotLastAdmin(user)
         user.isActive = false
         user.deletedAt = Instant.now()
         userRepository.save(user)
@@ -122,15 +126,38 @@ class UserService(
 
     @Transactional
     fun massDeactivate(ids: List<UUID>) {
-        ids.forEach { id ->
+        val selfId = currentUserId()
+        val toDeactivate = ids.filter { it != selfId }
+        toDeactivate.forEach { id ->
             userRepository.findById(id).ifPresent { user ->
-                if (user.deletedAt == null) {
+                if (user.deletedAt == null && runCatching { ensureNotLastAdmin(user) }.isSuccess) {
                     user.isActive = false
                     user.deletedAt = Instant.now()
                     userRepository.save(user)
                 }
             }
         }
+    }
+
+    private fun ensureNotLastAdmin(user: User) {
+        if (user.roles.none { it.name == "ADMIN" }) return
+        val activeAdmins =
+            userRepository.findAllByDeletedAtIsNull().count { other ->
+                other.id != user.id && other.roles.any { it.name == "ADMIN" }
+            }
+        if (activeAdmins == 0) {
+            throw IllegalStateException("Cannot deactivate the last active ADMIN. Promote another user first.")
+        }
+    }
+
+    private fun currentUserId(): UUID? {
+        val email =
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext()
+                .authentication
+                ?.name
+                ?: return null
+        return userRepository.findByEmail(email)?.id
     }
 
     @Transactional
