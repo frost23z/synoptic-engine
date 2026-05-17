@@ -90,7 +90,24 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         pageable: Pageable,
     ): Page<Lead>
 
+    @Query(
+        """
+        SELECT l FROM Lead l
+        WHERE l.deletedAt IS NULL
+        AND (LOWER(l.title)       LIKE LOWER(CONCAT('%', :q, '%'))
+          OR LOWER(l.description) LIKE LOWER(CONCAT('%', :q, '%')))
+        AND l.userId IN :scopeIds
+    """,
+    )
+    fun searchScoped(
+        q: String,
+        scopeIds: Collection<UUID>,
+        pageable: Pageable,
+    ): Page<Lead>
+
     fun countByDeletedAtIsNull(): Int
+
+    fun existsByPersonIdAndDeletedAtIsNull(personId: UUID): Boolean
 
     fun countByStatusAndDeletedAtIsNull(status: LeadStatus): Int
 

@@ -58,8 +58,8 @@ class ActivityService(
     fun create(
         title: String,
         type: ActivityType,
-        scheduleFrom: Instant,
-        scheduleTo: Instant,
+        scheduleFrom: Instant?,
+        scheduleTo: Instant?,
         comment: String?,
         leadId: UUID?,
         userId: UUID?,
@@ -67,14 +67,19 @@ class ActivityService(
         organizationId: UUID?,
         productId: UUID? = null,
         warehouseId: UUID? = null,
-    ): ActivityResponse =
-        activityRepository
+        location: String? = null,
+        additional: String? = null,
+    ): ActivityResponse {
+        validateSchedule(type, scheduleFrom, scheduleTo)
+        return activityRepository
             .save(
                 Activity().apply {
                     this.title = title
                     this.type = type
                     this.scheduleFrom = scheduleFrom
                     this.scheduleTo = scheduleTo
+                    this.location = location
+                    this.additional = additional
                     this.comment = comment
                     this.leadId = leadId
                     this.userId = userId
@@ -82,16 +87,19 @@ class ActivityService(
                     this.organizationId = organizationId
                     this.productId = productId
                     this.warehouseId = warehouseId
+                    // Notes are inherently completed the moment they're recorded.
+                    this.isDone = (type == ActivityType.NOTE)
                 },
             ).toResponse()
+    }
 
     @Transactional
     fun update(
         id: UUID,
         title: String,
         type: ActivityType,
-        scheduleFrom: Instant,
-        scheduleTo: Instant,
+        scheduleFrom: Instant?,
+        scheduleTo: Instant?,
         comment: String?,
         isDone: Boolean,
         leadId: UUID?,
@@ -100,12 +108,17 @@ class ActivityService(
         organizationId: UUID?,
         productId: UUID? = null,
         warehouseId: UUID? = null,
+        location: String? = null,
+        additional: String? = null,
     ): ActivityResponse {
+        validateSchedule(type, scheduleFrom, scheduleTo)
         val activity = requireActivity(id)
         activity.title = title
         activity.type = type
         activity.scheduleFrom = scheduleFrom
         activity.scheduleTo = scheduleTo
+        activity.location = location
+        activity.additional = additional
         activity.comment = comment
         activity.isDone = isDone
         activity.leadId = leadId
@@ -115,6 +128,20 @@ class ActivityService(
         activity.productId = productId
         activity.warehouseId = warehouseId
         return activityRepository.save(activity).toResponse()
+    }
+
+    private fun validateSchedule(
+        type: ActivityType,
+        from: Instant?,
+        to: Instant?,
+    ) {
+        val scheduleRequired = type != ActivityType.NOTE && type != ActivityType.FILE
+        if (scheduleRequired && (from == null || to == null)) {
+            throw IllegalArgumentException("scheduleFrom and scheduleTo are required for activities of type $type")
+        }
+        if (from != null && to != null && to.isBefore(from)) {
+            throw IllegalArgumentException("scheduleTo must be on or after scheduleFrom")
+        }
     }
 
     @Transactional
@@ -229,6 +256,8 @@ fun Activity.toResponse() =
         title = title,
         type = type.name,
         comment = comment,
+        location = location,
+        additional = additional,
         isDone = isDone,
         scheduleFrom = scheduleFrom,
         scheduleTo = scheduleTo,
