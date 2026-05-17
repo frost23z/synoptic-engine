@@ -1,0 +1,10 @@
+{
+    "$schema": "https://json.schemastore.org/prettierrc",
+    "semi": false,
+    "singleQuote": true,
+    "singleAttributePerLine": false,
+    "htmlWhitespaceSensitivity": "css",
+    "printWidth": 100,
+    "plugins": ["prettier-plugin-organize-imports", "prettier-plugin-tailwindcss"],
+    "trailingComma": "es5"
+}
