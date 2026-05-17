@@ -46,17 +46,24 @@ class Activity :
     @Column(nullable = false)
     var type: ActivityType = ActivityType.TASK
 
+    @Column
+    var location: String? = null
+
+    /** Free-form JSON for activity-type-specific metadata. */
+    @Column(columnDefinition = "jsonb")
+    var additional: String? = null
+
     @Column(columnDefinition = "TEXT")
     var comment: String? = null
 
     @Column(nullable = false)
     var isDone: Boolean = false
 
-    @Column(nullable = false)
-    var scheduleFrom: Instant = Instant.now()
+    @Column
+    var scheduleFrom: Instant? = null
 
-    @Column(nullable = false)
-    var scheduleTo: Instant = Instant.now()
+    @Column
+    var scheduleTo: Instant? = null
 
     @Column
     override var deletedAt: Instant? = null
