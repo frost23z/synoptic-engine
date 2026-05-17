@@ -3,14 +3,14 @@ package com.synopticengine.api.crm.contact.service
 import com.synopticengine.api.crm.contact.domain.Person
 import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.contact.web.PersonResponse
+import com.synopticengine.api.crm.lead.repo.LeadRepository
+import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
-import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.shared.DomainEvent
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -22,20 +22,16 @@ class PersonService(
     private val personRepository: PersonRepository,
     private val tagRepository: TagRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val identityApi: IdentityApi,
+    private val scopeResolver: ScopeResolver,
+    private val leadRepository: LeadRepository,
 ) {
     fun findAll(pageable: Pageable): PageResponse<PersonResponse> {
-        val scopeIds = resolveScope()
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
         return if (scopeIds == null) {
             PageResponse.of(personRepository.findAllByDeletedAtIsNull(pageable)) { it.toResponse() }
         } else {
             PageResponse.of(personRepository.findAllScopedByCreatedBy(scopeIds, pageable)) { it.toResponse() }
         }
-    }
-
-    private fun resolveScope(): Set<UUID>? {
-        val email = SecurityContextHolder.getContext().authentication?.name ?: return null
-        return identityApi.resolveViewContextByEmail(email).userIds
     }
 
     fun findById(id: UUID): PersonResponse =
@@ -101,18 +97,33 @@ class PersonService(
     @Transactional
     fun delete(id: UUID) {
         val person = requirePerson(id)
+        if (leadRepository.existsByPersonIdAndDeletedAtIsNull(id)) {
+            throw IllegalStateException(
+                "Cannot delete a person who has open leads. Detach the leads first.",
+            )
+        }
         person.deletedAt = Instant.now()
         personRepository.save(person)
     }
 
+    /**
+     * Soft-deletes each person that has no open leads; persons with leads are skipped.
+     * Returns the ids that were actually deleted so the API can tell the caller which
+     * mass-delete entries succeeded.
+     */
     @Transactional
-    fun massDestroy(ids: List<UUID>) {
+    fun massDestroy(ids: List<UUID>): List<UUID> {
+        val deleted = mutableListOf<UUID>()
         ids.forEach { id ->
             personRepository.findActiveById(id)?.let { person ->
-                person.deletedAt = Instant.now()
-                personRepository.save(person)
+                if (!leadRepository.existsByPersonIdAndDeletedAtIsNull(id)) {
+                    person.deletedAt = Instant.now()
+                    personRepository.save(person)
+                    deleted.add(id)
+                }
             }
         }
+        return deleted
     }
 
     @Transactional

@@ -12,14 +12,13 @@ import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.crm.lead.web.KanbanStageGroup
 import com.synopticengine.api.crm.lead.web.LeadProductResponse
 import com.synopticengine.api.crm.lead.web.LeadResponse
+import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
-import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.shared.DomainEvent
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -36,10 +35,10 @@ class LeadService(
     private val emailRepository: EmailRepository,
     private val leadProductRepository: LeadProductRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val identityApi: IdentityApi,
+    private val scopeResolver: ScopeResolver,
 ) {
     fun findAll(pageable: Pageable): PageResponse<LeadResponse> {
-        val scopeIds = resolveScope()
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
         return if (scopeIds == null) {
             PageResponse.of(leadRepository.findAllByDeletedAtIsNull(pageable)) { it.toResponse() }
         } else {
@@ -53,7 +52,14 @@ class LeadService(
     fun search(
         q: String,
         pageable: Pageable,
-    ): PageResponse<LeadResponse> = PageResponse.of(leadRepository.search(q, pageable)) { it.toResponse() }
+    ): PageResponse<LeadResponse> {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        return if (scopeIds == null) {
+            PageResponse.of(leadRepository.search(q, pageable)) { it.toResponse() }
+        } else {
+            PageResponse.of(leadRepository.searchScoped(q, scopeIds, pageable)) { it.toResponse() }
+        }
+    }
 
     fun filter(
         pipelineId: UUID,
@@ -62,7 +68,7 @@ class LeadService(
         userId: UUID?,
         pageable: Pageable,
     ): PageResponse<LeadResponse> {
-        val scopeIds = resolveScope()
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
         return if (scopeIds == null) {
             PageResponse.of(leadRepository.filter(pipelineId, stageId, status, userId, pageable)) { it.toResponse() }
         } else {
@@ -72,15 +78,12 @@ class LeadService(
         }
     }
 
-    private fun resolveScope(): Set<UUID>? {
-        val email = SecurityContextHolder.getContext().authentication?.name ?: return null
-        return identityApi.resolveViewContextByEmail(email).userIds
-    }
-
     fun kanban(pipelineId: UUID): List<KanbanStageGroup> {
         val stages = stageRepository.findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(pipelineId)
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
         val leads = leadRepository.findAllByPipelineIdAndDeletedAtIsNull(pipelineId)
-        val leadsByStage = leads.groupBy { it.stageId }
+        val scoped = if (scopeIds == null) leads else leads.filter { it.userId in scopeIds }
+        val leadsByStage = scoped.groupBy { it.stageId }
         return stages.map { stage ->
             val stageLeads = leadsByStage[stage.id] ?: emptyList()
             KanbanStageGroup(

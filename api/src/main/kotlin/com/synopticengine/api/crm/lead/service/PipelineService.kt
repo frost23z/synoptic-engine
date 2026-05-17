@@ -17,6 +17,7 @@ import java.util.UUID
 class PipelineService(
     private val pipelineRepository: PipelineRepository,
     private val stageRepository: StageRepository,
+    private val leadRepository: com.synopticengine.api.crm.lead.repo.LeadRepository,
 ) {
     fun findAll(): List<PipelineResponse> {
         val pipelines = pipelineRepository.findAllActive()
@@ -75,6 +76,22 @@ class PipelineService(
     fun delete(id: UUID) {
         val pipeline = requirePipeline(id)
         if (pipeline.isDefault) throw IllegalStateException("Cannot delete the default pipeline")
+        val leads = leadRepository.findAllByPipelineIdAndDeletedAtIsNull(id)
+        if (leads.isNotEmpty()) {
+            val defaultPipeline =
+                pipelineRepository.findAllActive().firstOrNull { it.isDefault }
+                    ?: throw IllegalStateException("No default pipeline configured; cannot reparent leads.")
+            val firstStage =
+                stageRepository
+                    .findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(defaultPipeline.id!!)
+                    .firstOrNull()
+                    ?: throw IllegalStateException("Default pipeline has no stages; cannot reparent leads.")
+            leads.forEach { lead ->
+                lead.pipelineId = defaultPipeline.id!!
+                lead.stageId = firstStage.id!!
+                leadRepository.save(lead)
+            }
+        }
         pipeline.deletedAt = Instant.now()
         pipelineRepository.save(pipeline)
     }
@@ -135,6 +152,20 @@ class PipelineService(
         val stage =
             stageRepository.findByIdAndDeletedAtIsNull(stageId)
                 ?: throw NoSuchElementException("Stage not found: $stageId")
+        val siblingStages =
+            stageRepository
+                .findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(pipelineId)
+                .filter { it.id != stageId }
+        if (siblingStages.isEmpty()) {
+            throw IllegalStateException("Cannot delete the last stage in a pipeline.")
+        }
+        val target = siblingStages.first()
+        leadRepository
+            .findAllByPipelineIdAndStageIdAndDeletedAtIsNull(pipelineId, stageId)
+            .forEach { lead ->
+                lead.stageId = target.id!!
+                leadRepository.save(lead)
+            }
         stage.deletedAt = Instant.now()
         stageRepository.save(stage)
     }
