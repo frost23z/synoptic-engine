@@ -1,6 +1,7 @@
 package com.synopticengine.api
 
 import com.synopticengine.api.identity.service.UserService
+import com.synopticengine.api.shared.TenantContext
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -30,15 +31,20 @@ abstract class AbstractIntegrationTest {
 
     protected fun salespersonToken(): String = tokenFor(setOf("SALESPERSON"))
 
-    protected fun tokenFor(roleNames: Set<String>): String {
+    protected fun tokenFor(
+        roleNames: Set<String>,
+        tenantId: UUID = TenantContext.SEED_TENANT_ID,
+    ): String {
         val email = "test-${UUID.randomUUID()}@test.com"
-        userService.create(
-            email = email,
-            password = "password123",
-            firstName = "Test",
-            lastName = "User",
-            roleNames = roleNames,
-        )
+        TenantContext.runAs(tenantId) {
+            userService.create(
+                email = email,
+                password = "password123",
+                firstName = "Test",
+                lastName = "User",
+                roleNames = roleNames,
+            )
+        }
         return login(email, "password123")
     }
 

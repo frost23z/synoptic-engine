@@ -1,6 +1,7 @@
 package com.synopticengine.api.identity
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.shared.TenantContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.UUID
@@ -55,13 +56,15 @@ class UserIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `search users returns matching results`() {
         val unique = UUID.randomUUID().toString().replace("-", "")
-        userService.create(
-            email = "search-$unique@test.com",
-            password = "password123",
-            firstName = "Unique$unique",
-            lastName = "Person",
-            roleNames = setOf("VIEWER"),
-        )
+        TenantContext.runAs(TenantContext.SEED_TENANT_ID) {
+            userService.create(
+                email = "search-$unique@test.com",
+                password = "password123",
+                firstName = "Unique$unique",
+                lastName = "Person",
+                roleNames = setOf("VIEWER"),
+            )
+        }
 
         val result = get("/api/users/search?q=Unique$unique", adminToken)
         assertEquals(200, result.status())

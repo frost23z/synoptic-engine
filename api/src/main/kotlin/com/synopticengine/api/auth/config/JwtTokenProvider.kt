@@ -25,6 +25,7 @@ class JwtTokenProvider(
             claims =
                 mapOf(
                     "email" to principal.email,
+                    "tenantId" to principal.tenantId.toString(),
                     "authorities" to principal.authorities.map { it.authority },
                     "type" to "access",
                 ),
@@ -42,6 +43,8 @@ class JwtTokenProvider(
     fun getUserIdFromToken(token: String): UUID = UUID.fromString(parseClaims(token).subject)
 
     fun getEmailFromToken(token: String): String = parseClaims(token)["email"] as String
+
+    fun getTenantIdFromToken(token: String): UUID = UUID.fromString(parseClaims(token)["tenantId"] as String)
 
     @Suppress("UNCHECKED_CAST")
     fun getAuthoritiesFromToken(token: String): List<String> = parseClaims(token)["authorities"] as List<String>
