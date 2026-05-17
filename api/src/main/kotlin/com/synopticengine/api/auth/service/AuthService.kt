@@ -75,6 +75,7 @@ class AuthService(
     private fun UserCredentials.toPrincipal() =
         UserPrincipal(
             id = id,
+            tenantId = tenantId,
             email = email,
             authorities = authorities.map { SimpleGrantedAuthority(it) }.toSet(),
         )

@@ -11,6 +11,7 @@ data class UserSummary(
 
 data class UserCredentials(
     val id: UUID,
+    val tenantId: UUID,
     val email: String,
     val fullName: String,
     val passwordHash: String,

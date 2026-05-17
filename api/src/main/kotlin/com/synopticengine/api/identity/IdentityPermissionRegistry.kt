@@ -19,6 +19,9 @@ class IdentityPermissionRegistry : PermissionRegistry {
             def(IdentityPermissions.GROUPS_VIEW, "View groups"),
             def(IdentityPermissions.GROUPS_EDIT, "Create and edit groups"),
             def(IdentityPermissions.GROUPS_DELETE, "Delete groups"),
+            def(IdentityPermissions.TENANTS, "Manage tenants"),
+            def(IdentityPermissions.TENANTS_VIEW, "View tenants"),
+            def(IdentityPermissions.TENANTS_MANAGE, "Provision and configure tenants"),
         )
 
     private fun def(

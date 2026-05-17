@@ -14,4 +14,8 @@ object IdentityPermissions {
     const val GROUPS_VIEW = "groups.view"
     const val GROUPS_EDIT = "groups.edit"
     const val GROUPS_DELETE = "groups.delete"
+
+    const val TENANTS = "tenants"
+    const val TENANTS_VIEW = "tenants.view"
+    const val TENANTS_MANAGE = "tenants.manage"
 }

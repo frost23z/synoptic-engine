@@ -14,11 +14,16 @@ interface BootstrapPort {
     /**
      * Create or update a role with the given permissions.
      * Permissions are identified by name. Unknown names are silently ignored.
+     *
+     * When [wildcardPermissions] is true the role gets `permission_type = ALL` — it
+     * implicitly holds every permission key in the catalog, including any added in the
+     * future. The [permissionNames] argument is ignored in that case.
      */
     fun upsertRole(
         name: String,
         description: String,
         permissionNames: Set<String>,
+        wildcardPermissions: Boolean = false,
     )
 
     /**

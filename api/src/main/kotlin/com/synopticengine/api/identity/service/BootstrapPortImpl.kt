@@ -3,11 +3,13 @@ package com.synopticengine.api.identity.service
 import com.synopticengine.api.identity.BootstrapPort
 import com.synopticengine.api.identity.domain.Permission
 import com.synopticengine.api.identity.domain.Role
+import com.synopticengine.api.identity.domain.RoleType
 import com.synopticengine.api.identity.domain.User
 import com.synopticengine.api.identity.domain.ViewPermission
 import com.synopticengine.api.identity.repo.PermissionRepository
 import com.synopticengine.api.identity.repo.RoleRepository
 import com.synopticengine.api.identity.repo.UserRepository
+import com.synopticengine.api.shared.config.TenantSession
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -17,11 +19,13 @@ internal class BootstrapPortImpl(
     private val permissionRepository: PermissionRepository,
     private val roleRepository: RoleRepository,
     private val userRepository: UserRepository,
+    private val tenantSession: TenantSession,
 ) : BootstrapPort {
     override fun ensurePermission(
         name: String,
         description: String?,
     ) {
+        // Permissions are a global catalog (no tenant filter).
         if (permissionRepository.findAllByKeyIn(listOf(name)).isEmpty()) {
             permissionRepository.save(
                 Permission().apply {
@@ -38,19 +42,29 @@ internal class BootstrapPortImpl(
         name: String,
         description: String,
         permissionNames: Set<String>,
+        wildcardPermissions: Boolean,
     ) {
-        val permissions = permissionRepository.findAllByKeyIn(permissionNames).toMutableSet()
+        tenantSession.applyFilter()
+        val targetType = if (wildcardPermissions) RoleType.ALL else RoleType.CUSTOM
+        val permissions =
+            if (wildcardPermissions) {
+                mutableSetOf()
+            } else {
+                permissionRepository.findAllByKeyIn(permissionNames).toMutableSet()
+            }
         val existing = roleRepository.findByName(name)
         if (existing == null) {
             roleRepository.save(
                 Role().apply {
                     this.name = name
                     this.description = description
+                    this.permissionType = targetType
                     this.permissions.addAll(permissions)
                 },
             )
         } else {
             existing.description = description
+            existing.permissionType = targetType
             existing.permissions.clear()
             existing.permissions.addAll(permissions)
             roleRepository.save(existing)
@@ -62,6 +76,7 @@ internal class BootstrapPortImpl(
         encodedPassword: String,
         adminRoleName: String,
     ) {
+        tenantSession.applyFilter()
         if (userRepository.existsByEmail(email)) return
         val adminRole =
             roleRepository.findByName(adminRoleName)

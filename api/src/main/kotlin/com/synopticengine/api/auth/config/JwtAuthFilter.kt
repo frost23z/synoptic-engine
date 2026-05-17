@@ -1,5 +1,6 @@
 package com.synopticengine.api.auth.config
 
+import com.synopticengine.api.shared.TenantContext
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -22,6 +23,7 @@ class JwtAuthFilter(
 
         if (token != null && jwtTokenProvider.validateToken(token) && jwtTokenProvider.isAccessToken(token)) {
             val userId = jwtTokenProvider.getUserIdFromToken(token)
+            val tenantId = jwtTokenProvider.getTenantIdFromToken(token)
             val email = jwtTokenProvider.getEmailFromToken(token)
             val authorities =
                 jwtTokenProvider
@@ -31,6 +33,7 @@ class JwtAuthFilter(
             val principal =
                 UserPrincipal(
                     id = userId,
+                    tenantId = tenantId,
                     email = email,
                     authorities = authorities,
                 )
@@ -43,9 +46,14 @@ class JwtAuthFilter(
                 )
 
             SecurityContextHolder.getContext().authentication = authentication
+            TenantContext.set(tenantId)
         }
 
-        filterChain.doFilter(request, response)
+        try {
+            filterChain.doFilter(request, response)
+        } finally {
+            TenantContext.clear()
+        }
     }
 
     private fun extractToken(request: HttpServletRequest): String? {
