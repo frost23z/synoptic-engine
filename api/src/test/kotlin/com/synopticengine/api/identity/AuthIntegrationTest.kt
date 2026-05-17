@@ -1,6 +1,7 @@
 package com.synopticengine.api.identity
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.shared.TenantContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.http.MediaType
@@ -17,13 +18,15 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
     @BeforeEach
     fun setup() {
         email = "auth-test-${UUID.randomUUID()}@test.com"
-        userService.create(
-            email = email,
-            password = password,
-            firstName = "Auth",
-            lastName = "User",
-            roleNames = setOf("ADMIN"),
-        )
+        TenantContext.runAs(TenantContext.SEED_TENANT_ID) {
+            userService.create(
+                email = email,
+                password = password,
+                firstName = "Auth",
+                lastName = "User",
+                roleNames = setOf("ADMIN"),
+            )
+        }
     }
 
     // ── Login ─────────────────────────────────────────────────────────────

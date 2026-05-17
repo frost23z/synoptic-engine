@@ -50,6 +50,12 @@ abstract class BaseEntity {
 
     @PrePersist
     private fun assignTenant() {
-        tenantId = TenantContext.getOrDefault()
+        tenantId =
+            TenantContext.get()
+                ?: error(
+                    "TenantContext is not set. " +
+                        "Entities can only be created inside an authenticated request or a TenantContext.runAs { ... } block. " +
+                        "Class: ${this::class.simpleName}",
+                )
     }
 }

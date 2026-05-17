@@ -1,21 +1,28 @@
 package com.synopticengine.api.bootstrap
 
 import com.synopticengine.api.identity.BootstrapPort
-import com.synopticengine.api.inventory.InventoryPermissions
+import com.synopticengine.api.identity.TenantApi
+import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.bootstrap.PermissionRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
-import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
+/**
+ * One-time application bootstrap. Runs on every startup but is idempotent.
+ *
+ * - Inserts any new permission definitions discovered from [PermissionRegistry] beans (global catalog).
+ * - Seeds the **seed tenant** defaults (roles, default pipeline, lead sources/types) and the admin user.
+ *   Other tenants are provisioned through [TenantApi.provision].
+ */
 @Service
 class BootstrapService(
     private val registries: List<PermissionRegistry>,
     private val bootstrapPort: BootstrapPort,
-    private val passwordEncoder: PasswordEncoder,
+    private val tenantApi: TenantApi,
     @Value("\${synoptic.admin.email:admin@synoptic.dev}")
     private val adminEmail: String,
     @Value("\${synoptic.admin.password:#{null}}")
@@ -26,10 +33,18 @@ class BootstrapService(
     @EventListener(ApplicationReadyEvent::class)
     @Transactional
     fun onApplicationReady() {
-        log.info("Bootstrap: seeding permissions, roles, and admin user")
+        log.info("Bootstrap: seeding permissions and seed tenant defaults")
         upsertPermissions()
-        upsertDefaultRoles()
-        upsertAdminUser()
+        tenantApi.seedTenantDefaults(
+            tenantId = TenantContext.SEED_TENANT_ID,
+            adminEmail = adminEmail.takeIf { adminPassword != null },
+            adminPassword = adminPassword,
+        )
+        if (adminPassword == null) {
+            log.info("Bootstrap: SYNOPTIC_ADMIN_PASSWORD not set — skipped admin user creation for seed tenant")
+        } else {
+            log.info("Bootstrap: ensured admin user $adminEmail in seed tenant")
+        }
         log.info("Bootstrap: complete")
     }
 
@@ -41,67 +56,5 @@ class BootstrapService(
         if (toCreate.isNotEmpty()) {
             log.info("Bootstrap: created ${toCreate.size} permissions")
         }
-    }
-
-    private fun upsertDefaultRoles() {
-        val allPermissionNames = bootstrapPort.allPermissionNames()
-
-        fun matching(predicate: (String) -> Boolean): Set<String> = allPermissionNames.filter(predicate).toSet()
-
-        bootstrapPort.upsertRole(
-            name = "ADMIN",
-            description = "Full system access",
-            permissionNames = allPermissionNames,
-        )
-        bootstrapPort.upsertRole(
-            name = "MANAGER",
-            description = "Manage team leads and reports",
-            permissionNames =
-                matching { key ->
-                    key != "users.delete" && key != "roles.edit"
-                },
-        )
-        bootstrapPort.upsertRole(
-            name = "SALESPERSON",
-            description = "Manage own leads and activities",
-            permissionNames =
-                matching { key ->
-                    (
-                        key.startsWith("leads") ||
-                            key.startsWith("contacts") ||
-                            key.startsWith("activities") ||
-                            key.startsWith("quotes") ||
-                            key.startsWith("tags") ||
-                            key.startsWith("mail") ||
-                            key.startsWith("pipelines") ||
-                            key == "reports.view" ||
-                            key == InventoryPermissions.PRODUCTS_VIEW
-                    ) &&
-                        key.contains(".") &&
-                        !key.endsWith(".delete")
-                },
-        )
-        bootstrapPort.upsertRole(
-            name = "VIEWER",
-            description = "Read-only access",
-            permissionNames =
-                matching { key ->
-                    key.endsWith(".view") && !key.startsWith("imports")
-                },
-        )
-    }
-
-    private fun upsertAdminUser() {
-        val password = adminPassword
-        if (password == null) {
-            log.info("Bootstrap: SYNOPTIC_ADMIN_PASSWORD not set — skipping admin user creation")
-            return
-        }
-        bootstrapPort.ensureAdminUser(
-            email = adminEmail,
-            encodedPassword = passwordEncoder.encode(password).toString(),
-            adminRoleName = "ADMIN",
-        )
-        log.info("Bootstrap: ensured admin user $adminEmail")
     }
 }

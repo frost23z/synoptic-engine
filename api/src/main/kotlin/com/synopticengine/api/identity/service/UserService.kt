@@ -184,20 +184,28 @@ class UserService(
             isActive = isActive,
         )
 
-    private fun User.toCredentials() =
-        UserCredentials(
+    private fun User.toCredentials(): UserCredentials {
+        val allKnownKeys = permissionRepository.findAllKeys()
+        val authorities =
+            if (roles.any { it.permissionType == com.synopticengine.api.identity.domain.RoleType.ALL }) {
+                allKnownKeys.toList()
+            } else {
+                expandAuthorities(
+                    roles.flatMap { it.permissions }.map { it.key },
+                    allKnownKeys,
+                )
+            }
+        return UserCredentials(
             id = id!!,
+            tenantId = tenantId,
             email = email,
             fullName = fullName,
             passwordHash = passwordHash,
             isActive = isActive,
             deletedAt = deletedAt,
-            authorities =
-                expandAuthorities(
-                    roles.flatMap { it.permissions }.map { it.key },
-                    permissionRepository.findAllKeys(),
-                ),
+            authorities = authorities,
         )
+    }
 
     private fun User.toDetailResponse(): UserDetailResponse =
         UserDetailResponse(
