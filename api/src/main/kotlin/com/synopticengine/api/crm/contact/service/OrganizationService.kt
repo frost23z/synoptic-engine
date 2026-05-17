@@ -1,0 +1,116 @@
+package com.synopticengine.api.crm.contact.service
+
+import com.synopticengine.api.crm.contact.domain.Organization
+import com.synopticengine.api.crm.contact.repo.OrganizationRepository
+import com.synopticengine.api.crm.contact.web.OrganizationResponse
+import com.synopticengine.api.identity.IdentityApi
+import com.synopticengine.api.shared.web.PageResponse
+import org.springframework.data.domain.Pageable
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
+import java.util.UUID
+
+@Service
+@Transactional(readOnly = true)
+class OrganizationService(
+    private val organizationRepository: OrganizationRepository,
+    private val identityApi: IdentityApi,
+) {
+    fun findAll(pageable: Pageable): PageResponse<OrganizationResponse> {
+        val scopeIds = resolveScope()
+        return if (scopeIds == null) {
+            PageResponse.of(organizationRepository.findAllByDeletedAtIsNull(pageable)) { it.toResponse() }
+        } else {
+            PageResponse.of(organizationRepository.findAllScopedByCreatedBy(scopeIds, pageable)) { it.toResponse() }
+        }
+    }
+
+    private fun resolveScope(): Set<UUID>? {
+        val email = SecurityContextHolder.getContext().authentication?.name ?: return null
+        return identityApi.resolveViewContextByEmail(email).userIds
+    }
+
+    fun findById(id: UUID): OrganizationResponse = requireOrg(id).toResponse()
+
+    fun search(
+        q: String,
+        pageable: Pageable,
+    ): PageResponse<OrganizationResponse> =
+        PageResponse.of(organizationRepository.search(q, pageable)) { it.toResponse() }
+
+    @Transactional
+    fun create(
+        name: String,
+        email: String?,
+        phone: String?,
+        website: String?,
+        address: String?,
+    ): OrganizationResponse =
+        organizationRepository
+            .save(
+                Organization().apply {
+                    this.name = name
+                    this.email = email
+                    this.phone = phone
+                    this.website = website
+                    this.address = address
+                },
+            ).toResponse()
+
+    @Transactional
+    fun update(
+        id: UUID,
+        name: String,
+        email: String?,
+        phone: String?,
+        website: String?,
+        address: String?,
+    ): OrganizationResponse {
+        val org = requireOrg(id)
+        org.name = name
+        org.email = email
+        org.phone = phone
+        org.website = website
+        org.address = address
+        return organizationRepository.save(org).toResponse()
+    }
+
+    @Transactional
+    fun delete(id: UUID) {
+        val org = requireOrg(id)
+        org.deletedAt = Instant.now()
+        organizationRepository.save(org)
+    }
+
+    @Transactional
+    fun massDestroy(ids: List<UUID>) {
+        ids.forEach { id ->
+            organizationRepository.findById(id).orElse(null)?.let { org ->
+                if (org.deletedAt == null) {
+                    org.deletedAt = Instant.now()
+                    organizationRepository.save(org)
+                }
+            }
+        }
+    }
+
+    private fun requireOrg(id: UUID): Organization =
+        organizationRepository
+            .findById(id)
+            .orElseThrow { NoSuchElementException("Organization not found: $id") }
+            .also { if (it.deletedAt != null) throw NoSuchElementException("Organization not found: $id") }
+}
+
+fun Organization.toResponse() =
+    OrganizationResponse(
+        id = id!!,
+        name = name,
+        email = email,
+        phone = phone,
+        website = website,
+        address = address,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
