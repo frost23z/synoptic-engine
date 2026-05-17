@@ -45,4 +45,5 @@ out/
 !.env.example
 Reference
 
-storage/
+uploads/
+build/tmp/storage/
