@@ -10,6 +10,8 @@ import jakarta.persistence.FetchType
 import jakarta.persistence.OneToMany
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -50,10 +52,12 @@ class Quote :
     var personId: UUID? = null
 
     /** Billing address as JSON: `{ street, city, state, country, postcode }`. */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     var billingAddress: String? = null
 
     /** Shipping address as JSON: same shape as billingAddress. */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     var shippingAddress: String? = null
 

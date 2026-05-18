@@ -8,6 +8,7 @@ import com.synopticengine.api.crm.email.web.EmailAttachmentResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
+import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.email.MailSenderService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
@@ -180,16 +181,21 @@ class EmailService(
         subject: String?,
         body: String?,
     ): EmailResponse {
+        // The inbound endpoint is public, so no JWT has populated TenantContext.
+        // Until Phase 2 resolves the tenant from the recipient address, land the
+        // email in the seed tenant so BaseEntity.@PrePersist has a tenant to assign.
         val email =
-            emailRepository.save(
-                Email().apply {
-                    this.from = mapOf("email" to from)
-                    this.subject = subject
-                    this.body = body
-                    this.folders = listOf("inbox")
-                    this.isRead = false
-                },
-            )
+            TenantContext.runAs(TenantContext.SEED_TENANT_ID) {
+                emailRepository.save(
+                    Email().apply {
+                        this.from = mapOf("email" to from)
+                        this.subject = subject
+                        this.body = body
+                        this.folders = listOf("inbox")
+                        this.isRead = false
+                    },
+                )
+            }
         return email.toResponse()
     }
 

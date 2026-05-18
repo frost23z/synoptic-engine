@@ -157,11 +157,18 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
                 adminToken,
                 mapOf("name" to "DS-${UUID.randomUUID().toString().take(8)}"),
             ).bodyAsMap()!!["id"] as String
+        // Need a sibling stage — the service refuses to delete the only stage in a pipeline
+        // since any leads on it would have nowhere to move.
+        post(
+            "/api/pipelines/$pipelineId/stages",
+            adminToken,
+            mapOf("name" to "Keeper", "sortOrder" to 1, "probability" to 50),
+        )
         val stageId =
             post(
                 "/api/pipelines/$pipelineId/stages",
                 adminToken,
-                mapOf("name" to "To Delete", "sortOrder" to 1, "probability" to 0),
+                mapOf("name" to "To Delete", "sortOrder" to 2, "probability" to 0),
             ).bodyAsMap()!!["id"] as String
 
         assertEquals(204, delete("/api/pipelines/$pipelineId/stages/$stageId", adminToken).status())
