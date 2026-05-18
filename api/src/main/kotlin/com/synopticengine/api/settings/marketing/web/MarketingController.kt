@@ -31,7 +31,7 @@ class MarketingEventController(
     ): ResponseEntity<MarketingEventResponse> = ResponseEntity.ok(marketingService.findEventById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('marketing.edit')")
+    @PreAuthorize("hasAuthority('marketing.create')")
     fun create(
         @Valid @RequestBody request: CreateMarketingEventRequest,
     ): ResponseEntity<MarketingEventResponse> =
@@ -83,7 +83,7 @@ class MarketingCampaignController(
     ): ResponseEntity<MarketingCampaignResponse> = ResponseEntity.ok(marketingService.findCampaignById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('marketing.edit')")
+    @PreAuthorize("hasAuthority('marketing.create')")
     fun create(
         @Valid @RequestBody request: CreateMarketingCampaignRequest,
     ): ResponseEntity<MarketingCampaignResponse> =

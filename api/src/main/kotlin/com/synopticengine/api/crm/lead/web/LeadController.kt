@@ -69,7 +69,7 @@ class LeadController(
     ): ResponseEntity<LeadResponse> = ResponseEntity.ok(leadService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('leads.edit')")
+    @PreAuthorize("hasAuthority('leads.create')")
     fun create(
         @Valid @RequestBody request: CreateLeadRequest,
     ): ResponseEntity<LeadResponse> =

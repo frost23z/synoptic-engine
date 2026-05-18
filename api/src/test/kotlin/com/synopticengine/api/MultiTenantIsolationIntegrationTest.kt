@@ -62,6 +62,7 @@ class MultiTenantIsolationIntegrationTest : AbstractIntegrationTest() {
         val aListResult = get("/api/leads", tokenA)
         assertEquals(200, aListResult.status())
         val aList = aListResult.bodyAsMap()!!
+
         @Suppress("UNCHECKED_CAST")
         val aContent = aList["content"] as List<Map<String, Any>>
         assertTrue(aContent.any { it["id"] == leadId }, "Tenant A should see its own lead")
@@ -70,6 +71,7 @@ class MultiTenantIsolationIntegrationTest : AbstractIntegrationTest() {
         val bListResult = get("/api/leads", tokenB)
         assertEquals(200, bListResult.status())
         val bList = bListResult.bodyAsMap()!!
+
         @Suppress("UNCHECKED_CAST")
         val bContent = bList["content"] as List<Map<String, Any>>
         assertTrue(bContent.none { it["id"] == leadId }, "Tenant B must not see Tenant A's lead")
@@ -120,6 +122,7 @@ class MultiTenantIsolationIntegrationTest : AbstractIntegrationTest() {
             pipelines.firstOrNull { it["isDefault"] == true }
                 ?: error("No default pipeline found via API")
         val pipelineId = defaultPipeline["id"] as String
+
         @Suppress("UNCHECKED_CAST")
         val stages = defaultPipeline["stages"] as List<Map<String, Any>>
         val firstStageId = stages.first()["id"] as String

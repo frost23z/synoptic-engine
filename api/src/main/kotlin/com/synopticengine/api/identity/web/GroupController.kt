@@ -31,7 +31,7 @@ class GroupController(
     ): ResponseEntity<GroupResponse> = ResponseEntity.ok(groupService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('groups.edit')")
+    @PreAuthorize("hasAuthority('groups.create')")
     fun create(
         @Valid @RequestBody request: CreateGroupRequest,
     ): ResponseEntity<GroupResponse> =

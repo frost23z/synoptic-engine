@@ -45,6 +45,12 @@ data class UpdateActivityRequest(
     val warehouseId: UUID? = null,
 )
 
+data class ActivityParticipantResponse(
+    val id: UUID,
+    val userId: UUID?,
+    val personId: UUID?,
+)
+
 data class ActivityResponse(
     val id: UUID,
     val title: String,
@@ -61,13 +67,26 @@ data class ActivityResponse(
     val organizationId: UUID?,
     val productId: UUID?,
     val warehouseId: UUID?,
+    /** Back-compat: just the user-typed participants. Prefer [participants]. */
     val participantIds: List<UUID>,
+    /** Person-typed participants. Prefer [participants]. */
+    val participantPersonIds: List<UUID>,
+    val participants: List<ActivityParticipantResponse>,
     val createdAt: Instant?,
     val updatedAt: Instant?,
 )
 
+/** Back-compat shim: defaults to a user participant when only `userId` is supplied. */
 data class AddParticipantRequest(
     val userId: UUID,
+)
+
+data class AddUserParticipantRequest(
+    val userId: UUID,
+)
+
+data class AddPersonParticipantRequest(
+    val personId: UUID,
 )
 
 data class MassUpdateActivityRequest(
