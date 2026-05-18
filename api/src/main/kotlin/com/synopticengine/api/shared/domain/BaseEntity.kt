@@ -54,7 +54,8 @@ abstract class BaseEntity {
             TenantContext.get()
                 ?: error(
                     "TenantContext is not set. " +
-                        "Entities can only be created inside an authenticated request or a TenantContext.runAs { ... } block. " +
+                        "Entities can only be created inside an authenticated request " +
+                        "or a TenantContext.runAs { ... } block. " +
                         "Class: ${this::class.simpleName}",
                 )
     }

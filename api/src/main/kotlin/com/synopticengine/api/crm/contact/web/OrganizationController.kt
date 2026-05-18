@@ -55,7 +55,7 @@ class OrganizationController(
     ): ResponseEntity<OrganizationResponse> = ResponseEntity.ok(organizationService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAuthority('contacts.create')")
     fun create(
         @Valid @RequestBody request: CreateOrganizationRequest,
     ): ResponseEntity<OrganizationResponse> =

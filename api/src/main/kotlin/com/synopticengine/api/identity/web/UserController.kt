@@ -74,7 +74,7 @@ class UserController(
     ): ResponseEntity<UserDetailResponse> = ResponseEntity.ok(userService.findDetailById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('users.edit')")
+    @PreAuthorize("hasAuthority('users.create')")
     fun create(
         @Valid @RequestBody request: CreateUserRequest,
     ): ResponseEntity<UserDetailResponse> {

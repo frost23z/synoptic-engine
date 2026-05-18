@@ -11,12 +11,18 @@ import jakarta.persistence.JoinTable
 import jakarta.persistence.ManyToMany
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.annotations.SQLDelete
+import org.hibernate.annotations.SQLRestriction
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 import java.util.UUID
 
 @Entity
 @Table(name = "persons")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+@SQLDelete(sql = "UPDATE persons SET deleted_at = NOW() WHERE id = ? AND version = ?")
+@SQLRestriction("deleted_at IS NULL")
 class Person :
     AuditableEntity(),
     SoftDeletable {
@@ -29,11 +35,23 @@ class Person :
     @Column(nullable = false)
     var lastName: String = ""
 
+    /** Legacy scalar; kept transitionally until the read path is fully on [emails]. */
     @Column
     var email: String? = null
 
+    /** Legacy scalar; kept transitionally until the read path is fully on [contactNumbers]. */
     @Column
     var phone: String? = null
+
+    /** JSON-encoded `List<ContactEntry>`. Always populated; defaults to `"[]"`. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var emails: String = "[]"
+
+    /** JSON-encoded `List<ContactEntry>`. Always populated; defaults to `"[]"`. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "contact_numbers", columnDefinition = "jsonb", nullable = false)
+    var contactNumbers: String = "[]"
 
     @Column
     var jobTitle: String? = null

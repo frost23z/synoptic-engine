@@ -54,7 +54,7 @@ class ProductController(
     ): ResponseEntity<List<InventoryEntryResponse>> = ResponseEntity.ok(productService.getInventory(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('products.edit')")
+    @PreAuthorize("hasAuthority('products.create')")
     fun create(
         @Valid @RequestBody request: CreateProductRequest,
     ): ResponseEntity<ProductResponse> =

@@ -1,7 +1,7 @@
 package com.synopticengine.api.shared.config
 
-import org.springframework.core.Ordered
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.Ordered
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 

@@ -38,7 +38,7 @@ class TagController(
     ): ResponseEntity<TagResponse> = ResponseEntity.ok(tagService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('leads.edit')")
+    @PreAuthorize("hasAuthority('tags.create')")
     fun create(
         @Valid @RequestBody request: CreateTagRequest,
     ): ResponseEntity<TagResponse> =

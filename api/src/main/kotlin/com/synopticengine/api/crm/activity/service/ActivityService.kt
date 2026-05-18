@@ -2,10 +2,13 @@ package com.synopticengine.api.crm.activity.service
 
 import com.synopticengine.api.crm.activity.domain.Activity
 import com.synopticengine.api.crm.activity.domain.ActivityFile
+import com.synopticengine.api.crm.activity.domain.ActivityParticipant
 import com.synopticengine.api.crm.activity.domain.ActivityType
 import com.synopticengine.api.crm.activity.repo.ActivityFileRepository
+import com.synopticengine.api.crm.activity.repo.ActivityParticipantRepository
 import com.synopticengine.api.crm.activity.repo.ActivityRepository
 import com.synopticengine.api.crm.activity.web.ActivityFileResponse
+import com.synopticengine.api.crm.activity.web.ActivityParticipantResponse
 import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.shared.storage.StorageService
 import com.synopticengine.api.shared.web.PageResponse
@@ -20,6 +23,7 @@ import java.util.UUID
 class ActivityService(
     private val activityRepository: ActivityRepository,
     private val activityFileRepository: ActivityFileRepository,
+    private val activityParticipantRepository: ActivityParticipantRepository,
     private val storageService: StorageService,
 ) {
     fun filter(
@@ -45,14 +49,14 @@ class ActivityService(
                 warehouseId,
                 pageable,
             ),
-        ) { it.toResponse() }
+        ) { it.toResponseWithParticipants() }
 
     fun findById(id: UUID): ActivityResponse =
         (
             activityRepository.findByIdAndDeletedAtIsNull(
                 id,
             ) ?: throw NoSuchElementException("Activity not found: $id")
-        ).toResponse()
+        ).toResponseWithParticipants()
 
     @Transactional
     fun create(
@@ -90,7 +94,7 @@ class ActivityService(
                     // Notes are inherently completed the moment they're recorded.
                     this.isDone = (type == ActivityType.NOTE)
                 },
-            ).toResponse()
+            ).toResponseWithParticipants()
     }
 
     @Transactional
@@ -127,7 +131,7 @@ class ActivityService(
         activity.organizationId = organizationId
         activity.productId = productId
         activity.warehouseId = warehouseId
-        return activityRepository.save(activity).toResponse()
+        return activityRepository.save(activity).toResponseWithParticipants()
     }
 
     private fun validateSchedule(
@@ -148,7 +152,7 @@ class ActivityService(
     fun toggleDone(id: UUID): ActivityResponse {
         val activity = requireActivity(id)
         activity.isDone = !activity.isDone
-        return activityRepository.save(activity).toResponse()
+        return activityRepository.save(activity).toResponseWithParticipants()
     }
 
     @Transactional
@@ -184,23 +188,68 @@ class ActivityService(
     }
 
     @Transactional
-    fun addParticipant(
+    fun addUserParticipant(
         activityId: UUID,
         userId: UUID,
     ): ActivityResponse {
         val activity = requireActivity(activityId)
-        activity.participantIds.add(userId)
-        return activityRepository.save(activity).toResponse()
+        // Idempotent: a (activity, user) pair is unique by intent.
+        if (activityParticipantRepository.findByActivityIdAndUserId(activityId, userId) == null) {
+            activityParticipantRepository.save(
+                ActivityParticipant().apply {
+                    this.activityId = activityId
+                    this.userId = userId
+                },
+            )
+        }
+        return activity.toResponseWithParticipants()
     }
 
     @Transactional
-    fun removeParticipant(
+    fun addPersonParticipant(
+        activityId: UUID,
+        personId: UUID,
+    ): ActivityResponse {
+        val activity = requireActivity(activityId)
+        if (activityParticipantRepository.findByActivityIdAndPersonId(activityId, personId) == null) {
+            activityParticipantRepository.save(
+                ActivityParticipant().apply {
+                    this.activityId = activityId
+                    this.personId = personId
+                },
+            )
+        }
+        return activity.toResponseWithParticipants()
+    }
+
+    @Transactional
+    fun removeUserParticipant(
         activityId: UUID,
         userId: UUID,
     ): ActivityResponse {
         val activity = requireActivity(activityId)
-        activity.participantIds.remove(userId)
-        return activityRepository.save(activity).toResponse()
+        activityParticipantRepository.deleteByActivityIdAndUserId(activityId, userId)
+        return activity.toResponseWithParticipants()
+    }
+
+    @Transactional
+    fun removePersonParticipant(
+        activityId: UUID,
+        personId: UUID,
+    ): ActivityResponse {
+        val activity = requireActivity(activityId)
+        activityParticipantRepository.deleteByActivityIdAndPersonId(activityId, personId)
+        return activity.toResponseWithParticipants()
+    }
+
+    @Transactional
+    fun removeParticipantById(
+        activityId: UUID,
+        participantId: UUID,
+    ): ActivityResponse {
+        val activity = requireActivity(activityId)
+        activityParticipantRepository.deleteByParticipantId(participantId)
+        return activity.toResponseWithParticipants()
     }
 
     @Transactional
@@ -248,29 +297,40 @@ class ActivityService(
 
     private fun requireActivity(id: UUID): Activity =
         activityRepository.findByIdAndDeletedAtIsNull(id) ?: throw NoSuchElementException("Activity not found: $id")
-}
 
-fun Activity.toResponse() =
-    ActivityResponse(
-        id = id!!,
-        title = title,
-        type = type.name,
-        comment = comment,
-        location = location,
-        additional = additional,
-        isDone = isDone,
-        scheduleFrom = scheduleFrom,
-        scheduleTo = scheduleTo,
-        leadId = leadId,
-        userId = userId,
-        personId = personId,
-        organizationId = organizationId,
-        productId = productId,
-        warehouseId = warehouseId,
-        participantIds = participantIds.toList(),
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
+    private fun Activity.toResponseWithParticipants(): ActivityResponse {
+        val participants = activityParticipantRepository.findAllByActivityId(id!!)
+        return ActivityResponse(
+            id = id!!,
+            title = title,
+            type = type.name,
+            comment = comment,
+            location = location,
+            additional = additional,
+            isDone = isDone,
+            scheduleFrom = scheduleFrom,
+            scheduleTo = scheduleTo,
+            leadId = leadId,
+            userId = userId,
+            personId = personId,
+            organizationId = organizationId,
+            productId = productId,
+            warehouseId = warehouseId,
+            participantIds = participants.mapNotNull { it.userId },
+            participantPersonIds = participants.mapNotNull { it.personId },
+            participants =
+                participants.map {
+                    ActivityParticipantResponse(
+                        id = it.id!!,
+                        userId = it.userId,
+                        personId = it.personId,
+                    )
+                },
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+        )
+    }
+}
 
 fun ActivityFile.toFileResponse() =
     ActivityFileResponse(

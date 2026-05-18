@@ -3,26 +3,31 @@ package com.synopticengine.api.crm
 object CrmPermissions {
     const val TAGS = "tags"
     const val TAGS_VIEW = "tags.view"
+    const val TAGS_CREATE = "tags.create"
     const val TAGS_EDIT = "tags.edit"
     const val TAGS_DELETE = "tags.delete"
 
     const val LEADS = "leads"
     const val LEADS_VIEW = "leads.view"
+    const val LEADS_CREATE = "leads.create"
     const val LEADS_EDIT = "leads.edit"
     const val LEADS_DELETE = "leads.delete"
 
     const val CONTACTS = "contacts"
     const val CONTACTS_VIEW = "contacts.view"
+    const val CONTACTS_CREATE = "contacts.create"
     const val CONTACTS_EDIT = "contacts.edit"
     const val CONTACTS_DELETE = "contacts.delete"
 
     const val ACTIVITIES = "activities"
     const val ACTIVITIES_VIEW = "activities.view"
+    const val ACTIVITIES_CREATE = "activities.create"
     const val ACTIVITIES_EDIT = "activities.edit"
     const val ACTIVITIES_DELETE = "activities.delete"
 
     const val QUOTES = "quotes"
     const val QUOTES_VIEW = "quotes.view"
+    const val QUOTES_CREATE = "quotes.create"
     const val QUOTES_EDIT = "quotes.edit"
     const val QUOTES_DELETE = "quotes.delete"
 
@@ -32,6 +37,7 @@ object CrmPermissions {
 
     const val PIPELINES = "pipelines"
     const val PIPELINES_VIEW = "pipelines.view"
+    const val PIPELINES_CREATE = "pipelines.create"
     const val PIPELINES_EDIT = "pipelines.edit"
 
     const val REPORTS = "reports"
