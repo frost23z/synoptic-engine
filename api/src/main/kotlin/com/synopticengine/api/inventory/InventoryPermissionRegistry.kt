@@ -10,11 +10,13 @@ class InventoryPermissionRegistry : PermissionRegistry {
         listOf(
             def(InventoryPermissions.PRODUCTS, "Manage products"),
             def(InventoryPermissions.PRODUCTS_VIEW, "View products"),
-            def(InventoryPermissions.PRODUCTS_EDIT, "Create and edit products"),
+            def(InventoryPermissions.PRODUCTS_CREATE, "Create products"),
+            def(InventoryPermissions.PRODUCTS_EDIT, "Edit products"),
             def(InventoryPermissions.PRODUCTS_DELETE, "Delete products"),
             def(InventoryPermissions.WAREHOUSES, "Manage warehouses"),
             def(InventoryPermissions.WAREHOUSES_VIEW, "View warehouses"),
-            def(InventoryPermissions.WAREHOUSES_EDIT, "Create and edit warehouses"),
+            def(InventoryPermissions.WAREHOUSES_CREATE, "Create warehouses"),
+            def(InventoryPermissions.WAREHOUSES_EDIT, "Edit warehouses"),
             def(InventoryPermissions.WAREHOUSES_DELETE, "Delete warehouses"),
         )
 

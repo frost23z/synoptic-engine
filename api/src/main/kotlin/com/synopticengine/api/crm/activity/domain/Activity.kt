@@ -2,17 +2,15 @@ package com.synopticengine.api.crm.activity.domain
 
 import com.synopticengine.api.shared.domain.AuditableEntity
 import com.synopticengine.api.shared.domain.SoftDeletable
-import jakarta.persistence.CollectionTable
 import jakarta.persistence.Column
-import jakarta.persistence.ElementCollection
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
-import jakarta.persistence.FetchType
-import jakarta.persistence.JoinColumn
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
 import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.annotations.SQLDelete
+import org.hibernate.annotations.SQLRestriction
 import org.hibernate.type.SqlTypes
 import java.time.Instant
 import java.util.UUID
@@ -20,6 +18,8 @@ import java.util.UUID
 @Entity
 @Table(name = "activities")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+@SQLDelete(sql = "UPDATE activities SET deleted_at = NOW() WHERE id = ? AND version = ?")
+@SQLRestriction("deleted_at IS NULL")
 class Activity :
     AuditableEntity(),
     SoftDeletable {
@@ -70,9 +70,4 @@ class Activity :
 
     @Column
     override var deletedAt: Instant? = null
-
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "activity_participants", joinColumns = [JoinColumn(name = "activity_id")])
-    @Column(name = "user_id")
-    val participantIds: MutableSet<UUID> = mutableSetOf()
 }

@@ -1,5 +1,6 @@
 package com.synopticengine.api.crm.contact.service
 
+import com.synopticengine.api.crm.contact.domain.ContactEntry
 import com.synopticengine.api.crm.contact.domain.Person
 import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.contact.web.PersonResponse
@@ -13,6 +14,8 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.core.type.TypeReference
+import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 import java.util.UUID
 
@@ -24,6 +27,7 @@ class PersonService(
     private val eventPublisher: ApplicationEventPublisher,
     private val scopeResolver: ScopeResolver,
     private val leadRepository: LeadRepository,
+    private val objectMapper: ObjectMapper,
 ) {
     fun findAll(pageable: Pageable): PageResponse<PersonResponse> {
         val scopeIds = scopeResolver.userIdsForCurrentUser()
@@ -58,15 +62,21 @@ class PersonService(
         email: String?,
         phone: String?,
         jobTitle: String?,
+        emails: List<ContactEntry>? = null,
+        contactNumbers: List<ContactEntry>? = null,
     ): PersonResponse {
+        val resolvedEmails = resolveEntries(emails, email)
+        val resolvedNumbers = resolveEntries(contactNumbers, phone)
         val person =
             personRepository.save(
                 Person().apply {
                     this.firstName = firstName
                     this.lastName = lastName
                     this.organizationId = organizationId
-                    this.email = email
-                    this.phone = phone
+                    this.email = resolvedEmails.firstOrNull()?.value ?: email
+                    this.phone = resolvedNumbers.firstOrNull()?.value ?: phone
+                    this.emails = writeJson(resolvedEmails)
+                    this.contactNumbers = writeJson(resolvedNumbers)
                     this.jobTitle = jobTitle
                 },
             )
@@ -83,13 +93,19 @@ class PersonService(
         email: String?,
         phone: String?,
         jobTitle: String?,
+        emails: List<ContactEntry>? = null,
+        contactNumbers: List<ContactEntry>? = null,
     ): PersonResponse {
         val person = requirePerson(id)
+        val resolvedEmails = resolveEntries(emails, email)
+        val resolvedNumbers = resolveEntries(contactNumbers, phone)
         person.firstName = firstName
         person.lastName = lastName
         person.organizationId = organizationId
-        person.email = email
-        person.phone = phone
+        person.email = resolvedEmails.firstOrNull()?.value ?: email
+        person.phone = resolvedNumbers.firstOrNull()?.value ?: phone
+        person.emails = writeJson(resolvedEmails)
+        person.contactNumbers = writeJson(resolvedNumbers)
         person.jobTitle = jobTitle
         return personRepository.save(person).toResponse()
     }
@@ -152,19 +168,45 @@ class PersonService(
             .findById(id)
             .orElseThrow { NoSuchElementException("Person not found: $id") }
             .also { if (it.deletedAt != null) throw NoSuchElementException("Person not found: $id") }
-}
 
-fun Person.toResponse() =
-    PersonResponse(
-        id = id!!,
-        firstName = firstName,
-        lastName = lastName,
-        fullName = fullName,
-        organizationId = organizationId,
-        email = email,
-        phone = phone,
-        jobTitle = jobTitle,
-        tags = tags.map { it.toResponse() },
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
+    private fun Person.toResponse(): PersonResponse {
+        val emailEntries = readEntries(emails)
+        val numberEntries = readEntries(contactNumbers)
+        return PersonResponse(
+            id = id!!,
+            firstName = firstName,
+            lastName = lastName,
+            fullName = fullName,
+            organizationId = organizationId,
+            email = emailEntries.firstOrNull()?.value ?: email,
+            emails = emailEntries,
+            phone = numberEntries.firstOrNull()?.value ?: phone,
+            contactNumbers = numberEntries,
+            jobTitle = jobTitle,
+            tags = tags.map { it.toResponse() },
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+        )
+    }
+
+    private fun resolveEntries(
+        provided: List<ContactEntry>?,
+        legacy: String?,
+    ): List<ContactEntry> =
+        when {
+            !provided.isNullOrEmpty() -> provided
+            !legacy.isNullOrBlank() -> listOf(ContactEntry(value = legacy, label = "primary"))
+            else -> emptyList()
+        }
+
+    private fun writeJson(entries: List<ContactEntry>): String = objectMapper.writeValueAsString(entries)
+
+    private fun readEntries(json: String?): List<ContactEntry> {
+        if (json.isNullOrBlank() || json == "[]") return emptyList()
+        return try {
+            objectMapper.readValue(json, object : TypeReference<List<ContactEntry>>() {})
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+}

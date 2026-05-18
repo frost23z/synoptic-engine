@@ -67,7 +67,7 @@ class ActivityController(
     ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('activities.edit')")
+    @PreAuthorize("hasAuthority('activities.create')")
     fun create(
         @Valid @RequestBody request: CreateActivityRequest,
     ): ResponseEntity<ActivityResponse> =
@@ -150,19 +150,52 @@ class ActivityController(
         return ResponseEntity.noContent().build()
     }
 
+    /**
+     * Back-compat shim: defaults to a user participant. Callers should migrate to
+     * the explicit `/participants/users` and `/participants/persons` endpoints below.
+     */
     @PostMapping("/{id}/participants")
     @PreAuthorize("hasAuthority('activities.edit')")
     fun addParticipant(
         @PathVariable id: UUID,
         @RequestBody request: AddParticipantRequest,
-    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.addParticipant(id, request.userId))
+    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.addUserParticipant(id, request.userId))
 
+    @PostMapping("/{id}/participants/users")
+    @PreAuthorize("hasAuthority('activities.edit')")
+    fun addUserParticipant(
+        @PathVariable id: UUID,
+        @RequestBody request: AddUserParticipantRequest,
+    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.addUserParticipant(id, request.userId))
+
+    @PostMapping("/{id}/participants/persons")
+    @PreAuthorize("hasAuthority('activities.edit')")
+    fun addPersonParticipant(
+        @PathVariable id: UUID,
+        @RequestBody request: AddPersonParticipantRequest,
+    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.addPersonParticipant(id, request.personId))
+
+    @DeleteMapping("/{id}/participants/users/{userId}")
+    @PreAuthorize("hasAuthority('activities.edit')")
+    fun removeUserParticipant(
+        @PathVariable id: UUID,
+        @PathVariable userId: UUID,
+    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.removeUserParticipant(id, userId))
+
+    @DeleteMapping("/{id}/participants/persons/{personId}")
+    @PreAuthorize("hasAuthority('activities.edit')")
+    fun removePersonParticipant(
+        @PathVariable id: UUID,
+        @PathVariable personId: UUID,
+    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.removePersonParticipant(id, personId))
+
+    /** Back-compat: original delete-by-userId path stays so existing clients keep working. */
     @DeleteMapping("/{id}/participants/{userId}")
     @PreAuthorize("hasAuthority('activities.edit')")
     fun removeParticipant(
         @PathVariable id: UUID,
         @PathVariable userId: UUID,
-    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.removeParticipant(id, userId))
+    ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.removeUserParticipant(id, userId))
 
     @PostMapping("/{id}/file", consumes = ["multipart/form-data"])
     @PreAuthorize("hasAuthority('activities.edit')")

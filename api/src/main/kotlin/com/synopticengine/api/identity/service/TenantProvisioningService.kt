@@ -80,7 +80,12 @@ internal class TenantProvisioningService(
         }
     }
 
-    private fun tenantSlugOrUnknown(tenantId: UUID): String = tenantRepository.findById(tenantId).map { it.slug }.orElse("unknown")
+    private fun tenantSlugOrUnknown(tenantId: UUID): String =
+        tenantRepository
+            .findById(tenantId)
+            .map {
+                it.slug
+            }.orElse("unknown")
 
     private fun seedDefaultRoles() {
         val allPermissionNames = permissionRepository.findAll().map { it.key }.toSet()
@@ -95,9 +100,10 @@ internal class TenantProvisioningService(
             name = "MANAGER",
             description = "Manage team leads and reports",
             permissionNames =
-                allPermissionNames.filter { key ->
-                    key != "users.delete" && key != "roles.edit"
-                }.toSet(),
+                allPermissionNames
+                    .filter { key ->
+                        key != "users.delete" && key != "roles.edit"
+                    }.toSet(),
         )
         bootstrapPort.upsertRole(
             name = "SALESPERSON",

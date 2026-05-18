@@ -9,12 +9,16 @@ import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
+import org.hibernate.annotations.SQLDelete
+import org.hibernate.annotations.SQLRestriction
 import java.time.Instant
 import java.util.UUID
 
 @Entity
 @Table(name = "stages")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+@SQLDelete(sql = "UPDATE stages SET deleted_at = NOW() WHERE id = ? AND version = ?")
+@SQLRestriction("deleted_at IS NULL")
 class Stage :
     AuditableEntity(),
     SoftDeletable {

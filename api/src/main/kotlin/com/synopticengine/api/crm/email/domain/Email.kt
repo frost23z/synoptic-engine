@@ -2,6 +2,7 @@ package com.synopticengine.api.crm.email.domain
 
 import com.synopticengine.api.crm.tag.domain.Tag
 import com.synopticengine.api.shared.domain.BaseEntity
+import com.synopticengine.api.shared.domain.SoftDeletable
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -13,13 +14,20 @@ import jakarta.persistence.OneToMany
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
 import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.annotations.SQLDelete
+import org.hibernate.annotations.SQLRestriction
 import org.hibernate.type.SqlTypes
+import java.time.Instant
 import java.util.UUID
 
 @Entity
 @Table(name = "emails")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
-class Email : BaseEntity() {
+@SQLDelete(sql = "UPDATE emails SET deleted_at = NOW() WHERE id = ? AND version = ?")
+@SQLRestriction("deleted_at IS NULL")
+class Email :
+    BaseEntity(),
+    SoftDeletable {
     @Column
     var subject: String? = null
 
@@ -83,6 +91,9 @@ class Email : BaseEntity() {
 
     @Column(name = "lead_id")
     var leadId: UUID? = null
+
+    @Column
+    override var deletedAt: Instant? = null
 
     @OneToMany(mappedBy = "email", fetch = FetchType.LAZY, cascade = [CascadeType.ALL], orphanRemoval = true)
     val attachments: MutableList<EmailAttachment> = mutableListOf()

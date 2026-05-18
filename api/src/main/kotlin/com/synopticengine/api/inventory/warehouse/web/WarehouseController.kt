@@ -63,7 +63,7 @@ class WarehouseController(
     ): ResponseEntity<List<WarehouseLocationResponse>> = ResponseEntity.ok(warehouseService.getLocations(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('warehouses.edit')")
+    @PreAuthorize("hasAuthority('warehouses.create')")
     fun create(
         @Valid @RequestBody request: CreateWarehouseRequest,
     ): ResponseEntity<WarehouseResponse> =

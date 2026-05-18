@@ -12,10 +12,14 @@ import jakarta.persistence.JoinTable
 import jakarta.persistence.ManyToMany
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
+import org.hibernate.annotations.SQLDelete
+import org.hibernate.annotations.SQLRestriction
 
 @Entity
 @Table(name = "users")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+@SQLDelete(sql = "UPDATE users SET deleted_at = NOW() WHERE id = ? AND version = ?")
+@SQLRestriction("deleted_at IS NULL")
 class User :
     AuditableEntity(),
     SoftDeletable {

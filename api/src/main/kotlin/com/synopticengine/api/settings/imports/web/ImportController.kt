@@ -35,7 +35,7 @@ class ImportController(
     ): ResponseEntity<DataImportResponse> = ResponseEntity.ok(dataImportService.findById(id))
 
     @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
-    @PreAuthorize("hasAuthority('imports.edit')")
+    @PreAuthorize("hasAuthority('imports.create')")
     fun upload(
         @RequestParam file: MultipartFile,
         @RequestParam entityType: String,

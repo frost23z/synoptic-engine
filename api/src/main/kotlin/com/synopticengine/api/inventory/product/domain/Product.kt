@@ -7,6 +7,8 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 import org.hibernate.annotations.Filter
+import org.hibernate.annotations.SQLDelete
+import org.hibernate.annotations.SQLRestriction
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -16,6 +18,8 @@ import java.time.Instant
     uniqueConstraints = [UniqueConstraint(name = "uq_products_tenant_sku", columnNames = ["tenant_id", "sku"])],
 )
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+@SQLDelete(sql = "UPDATE products SET deleted_at = NOW() WHERE id = ? AND version = ?")
+@SQLRestriction("deleted_at IS NULL")
 class Product :
     AuditableEntity(),
     SoftDeletable {

@@ -36,7 +36,7 @@ class RoleController(
     ): ResponseEntity<RoleResponse> = ResponseEntity.ok(roleService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('roles.edit')")
+    @PreAuthorize("hasAuthority('roles.create')")
     fun create(
         @Valid @RequestBody request: CreateRoleRequest,
     ): ResponseEntity<RoleResponse> =

@@ -13,7 +13,9 @@ import com.synopticengine.api.crm.PersonSummary
 import com.synopticengine.api.crm.SalespersonStats
 import com.synopticengine.api.crm.StageStats
 import com.synopticengine.api.crm.TagDto
+import com.synopticengine.api.crm.activity.repo.ActivityParticipantRepository
 import com.synopticengine.api.crm.activity.repo.ActivityRepository
+import com.synopticengine.api.crm.contact.domain.ContactEntry
 import com.synopticengine.api.crm.contact.domain.Person
 import com.synopticengine.api.crm.contact.repo.OrganizationRepository
 import com.synopticengine.api.crm.contact.repo.PersonRepository
@@ -26,6 +28,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
@@ -38,7 +41,9 @@ class CrmApiImpl(
     private val leadRepository: LeadRepository,
     private val stageRepository: StageRepository,
     private val activityRepository: ActivityRepository,
+    private val activityParticipantRepository: ActivityParticipantRepository,
     private val tagRepository: TagRepository,
+    private val objectMapper: ObjectMapper,
 ) : CrmApi {
     override fun findPersonById(id: UUID): PersonSummary? =
         personRepository.findActiveById(id)?.let {
@@ -62,6 +67,22 @@ class CrmApiImpl(
         phone: String?,
         jobTitle: String?,
     ): PersonSummary {
+        val emailJson =
+            if (email.isNullOrBlank()) {
+                "[]"
+            } else {
+                objectMapper.writeValueAsString(
+                    listOf(ContactEntry(email)),
+                )
+            }
+        val phoneJson =
+            if (phone.isNullOrBlank()) {
+                "[]"
+            } else {
+                objectMapper.writeValueAsString(
+                    listOf(ContactEntry(phone)),
+                )
+            }
         val person =
             personRepository.save(
                 Person().apply {
@@ -69,6 +90,8 @@ class CrmApiImpl(
                     this.lastName = lastName
                     this.email = email
                     this.phone = phone
+                    this.emails = emailJson
+                    this.contactNumbers = phoneJson
                     this.jobTitle = jobTitle
                 },
             )
@@ -244,8 +267,9 @@ class CrmApiImpl(
             scheduleTo = scheduleTo,
         )
 
-    private fun com.synopticengine.api.crm.activity.domain.Activity.toPageEntry() =
-        ActivityPageEntry(
+    private fun com.synopticengine.api.crm.activity.domain.Activity.toPageEntry(): ActivityPageEntry {
+        val participants = activityParticipantRepository.findAllByActivityId(id!!)
+        return ActivityPageEntry(
             id = id!!,
             title = title,
             type = type.name,
@@ -259,8 +283,9 @@ class CrmApiImpl(
             organizationId = organizationId,
             productId = productId,
             warehouseId = warehouseId,
-            participantIds = participantIds.toList(),
+            participantIds = participants.mapNotNull { it.userId },
             createdAt = createdAt,
             updatedAt = updatedAt,
         )
+    }
 }
