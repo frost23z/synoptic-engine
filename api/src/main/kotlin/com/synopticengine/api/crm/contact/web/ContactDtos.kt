@@ -1,5 +1,6 @@
 package com.synopticengine.api.crm.contact.web
 
+import com.synopticengine.api.crm.contact.domain.ContactEntry
 import com.synopticengine.api.crm.tag.web.TagResponse
 import jakarta.validation.constraints.NotBlank
 import java.time.Instant
@@ -44,8 +45,14 @@ data class CreatePersonRequest(
     @field:NotBlank(message = "Last name is required")
     val lastName: String,
     val organizationId: UUID? = null,
+    /** Legacy single-email shortcut; ignored when [emails] is provided. */
     val email: String? = null,
+    /** Preferred — `[{value, label}]` array. Wins over [email] when both are set. */
+    val emails: List<ContactEntry>? = null,
+    /** Legacy single-phone shortcut; ignored when [contactNumbers] is provided. */
     val phone: String? = null,
+    /** Preferred — `[{value, label}]` array. Wins over [phone] when both are set. */
+    val contactNumbers: List<ContactEntry>? = null,
     val jobTitle: String? = null,
 )
 
@@ -56,7 +63,9 @@ data class UpdatePersonRequest(
     val lastName: String,
     val organizationId: UUID? = null,
     val email: String? = null,
+    val emails: List<ContactEntry>? = null,
     val phone: String? = null,
+    val contactNumbers: List<ContactEntry>? = null,
     val jobTitle: String? = null,
 )
 
@@ -66,8 +75,12 @@ data class PersonResponse(
     val lastName: String,
     val fullName: String,
     val organizationId: UUID?,
+    /** Convenience: first email value, falling back to the legacy scalar column. */
     val email: String?,
+    val emails: List<ContactEntry>,
+    /** Convenience: first phone value, falling back to the legacy scalar column. */
     val phone: String?,
+    val contactNumbers: List<ContactEntry>,
     val jobTitle: String?,
     val tags: List<TagResponse>,
     val createdAt: Instant?,

@@ -11,6 +11,8 @@ import jakarta.persistence.OneToMany
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
 import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.annotations.SQLDelete
+import org.hibernate.annotations.SQLRestriction
 import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.Instant
@@ -20,6 +22,8 @@ import java.util.UUID
 @Entity
 @Table(name = "quotes")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+@SQLDelete(sql = "UPDATE quotes SET deleted_at = NOW() WHERE id = ? AND version = ?")
+@SQLRestriction("deleted_at IS NULL")
 class Quote :
     AuditableEntity(),
     SoftDeletable {

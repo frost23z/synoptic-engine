@@ -52,7 +52,7 @@ class PersonController(
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAuthority('contacts.create')")
     fun create(
         @Valid @RequestBody request: CreatePersonRequest,
     ): ResponseEntity<PersonResponse> =
@@ -60,12 +60,14 @@ class PersonController(
             .status(HttpStatus.CREATED)
             .body(
                 personService.create(
-                    request.firstName,
-                    request.lastName,
-                    request.organizationId,
-                    request.email,
-                    request.phone,
-                    request.jobTitle,
+                    firstName = request.firstName,
+                    lastName = request.lastName,
+                    organizationId = request.organizationId,
+                    email = request.email,
+                    phone = request.phone,
+                    jobTitle = request.jobTitle,
+                    emails = request.emails,
+                    contactNumbers = request.contactNumbers,
                 ),
             )
 
@@ -77,13 +79,15 @@ class PersonController(
     ): ResponseEntity<PersonResponse> =
         ResponseEntity.ok(
             personService.update(
-                id,
-                request.firstName,
-                request.lastName,
-                request.organizationId,
-                request.email,
-                request.phone,
-                request.jobTitle,
+                id = id,
+                firstName = request.firstName,
+                lastName = request.lastName,
+                organizationId = request.organizationId,
+                email = request.email,
+                phone = request.phone,
+                jobTitle = request.jobTitle,
+                emails = request.emails,
+                contactNumbers = request.contactNumbers,
             ),
         )
 

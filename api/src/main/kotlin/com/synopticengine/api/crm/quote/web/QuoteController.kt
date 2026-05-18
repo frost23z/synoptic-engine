@@ -50,7 +50,7 @@ class QuoteController(
     ): ResponseEntity<QuoteResponse> = ResponseEntity.ok(quoteService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('quotes.edit')")
+    @PreAuthorize("hasAuthority('quotes.create')")
     fun create(
         @Valid @RequestBody request: CreateQuoteRequest,
     ): ResponseEntity<QuoteResponse> =

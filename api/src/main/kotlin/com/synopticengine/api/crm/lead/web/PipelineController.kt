@@ -32,7 +32,7 @@ class PipelineController(
     ): ResponseEntity<PipelineResponse> = ResponseEntity.ok(pipelineService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('leads.edit')")
+    @PreAuthorize("hasAuthority('pipelines.create')")
     fun create(
         @Valid @RequestBody request: CreatePipelineRequest,
     ): ResponseEntity<PipelineResponse> =

@@ -31,7 +31,7 @@ class WorkflowController(
     ): ResponseEntity<WorkflowResponse> = ResponseEntity.ok(automationService.findWorkflowById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('automations.edit')")
+    @PreAuthorize("hasAuthority('automations.create')")
     fun create(
         @Valid @RequestBody request: CreateWorkflowRequest,
     ): ResponseEntity<WorkflowResponse> =
@@ -92,7 +92,7 @@ class WebhookController(
     ): ResponseEntity<WebhookResponse> = ResponseEntity.ok(automationService.findWebhookById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('automations.edit')")
+    @PreAuthorize("hasAuthority('automations.create')")
     fun create(
         @Valid @RequestBody request: CreateWebhookRequest,
     ): ResponseEntity<WebhookResponse> =
