@@ -44,7 +44,14 @@ class PersonService(
     fun search(
         q: String,
         pageable: Pageable,
-    ): PageResponse<PersonResponse> = PageResponse.of(personRepository.search(q, pageable)) { it.toResponse() }
+    ): PageResponse<PersonResponse> {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        return if (scopeIds == null) {
+            PageResponse.of(personRepository.search(q, pageable)) { it.toResponse() }
+        } else {
+            PageResponse.of(personRepository.searchScopedByCreatedBy(q, scopeIds, pageable)) { it.toResponse() }
+        }
+    }
 
     fun findByOrganization(
         organizationId: UUID,

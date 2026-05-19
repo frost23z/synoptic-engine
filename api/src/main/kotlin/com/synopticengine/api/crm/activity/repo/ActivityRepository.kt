@@ -40,6 +40,34 @@ interface ActivityRepository : JpaRepository<Activity, UUID> {
     ): Page<Activity>
 
     @Query(
+        """
+        SELECT a FROM Activity a
+        WHERE a.deletedAt IS NULL
+        AND (:leadId IS NULL OR a.leadId = :leadId)
+        AND (:personId IS NULL OR a.personId = :personId)
+        AND (:organizationId IS NULL OR a.organizationId = :organizationId)
+        AND (:userId IS NULL OR a.userId = :userId)
+        AND (:type IS NULL OR a.type = :type)
+        AND (:isDone IS NULL OR a.isDone = :isDone)
+        AND (:productId IS NULL OR a.productId = :productId)
+        AND (:warehouseId IS NULL OR a.warehouseId = :warehouseId)
+        AND a.userId IN :scopeIds
+    """,
+    )
+    fun filterScoped(
+        leadId: UUID?,
+        personId: UUID?,
+        organizationId: UUID?,
+        userId: UUID?,
+        type: ActivityType?,
+        isDone: Boolean?,
+        productId: UUID?,
+        warehouseId: UUID?,
+        scopeIds: Collection<UUID>,
+        pageable: Pageable,
+    ): Page<Activity>
+
+    @Query(
         "SELECT a FROM Activity a WHERE a.deletedAt IS NULL ORDER BY a.createdAt DESC",
     )
     fun findRecent(pageable: Pageable): List<Activity>
