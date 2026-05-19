@@ -87,6 +87,11 @@ internal class TenantProvisioningService(
                 it.slug
             }.orElse("unknown")
 
+    override fun exists(tenantId: UUID): Boolean = tenantRepository.existsById(tenantId)
+
+    override fun findSummary(tenantId: UUID): TenantSummary? =
+        tenantRepository.findById(tenantId).map { it.toSummary() }.orElse(null)
+
     private fun seedDefaultRoles() {
         val allPermissionNames = permissionRepository.findAll().map { it.key }.toSet()
 

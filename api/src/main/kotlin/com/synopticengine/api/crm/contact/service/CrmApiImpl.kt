@@ -5,6 +5,7 @@ import com.synopticengine.api.crm.ActivityPageEntry
 import com.synopticengine.api.crm.ActivitySummary
 import com.synopticengine.api.crm.CrmApi
 import com.synopticengine.api.crm.DashboardLeadStats
+import com.synopticengine.api.crm.LeadCascadeInfo
 import com.synopticengine.api.crm.LeadCsvRow
 import com.synopticengine.api.crm.OrganizationCsvRow
 import com.synopticengine.api.crm.OrganizationSummary
@@ -229,6 +230,24 @@ class CrmApiImpl(
         tagRepository.findAllById(ids).map { TagDto(it.id!!, it.name, it.color) }
 
     override fun tagExists(id: UUID): Boolean = tagRepository.existsById(id)
+
+    // Bypasses Hibernate's tenantFilter — sharing.service.RecordShareService needs to
+    // see the lead even when it belongs to the owner tenant whose context isn't set
+    // on this query. The findById path goes through @SQLRestriction (deleted_at IS NULL)
+    // only when the row's tenant_id matches the active filter. For cross-tenant lookups
+    // we go straight to the repository's underlying findById which is filter-aware in a
+    // session with no filter; for the share path the caller already authenticated as
+    // the owner tenant via TenantContext.runAs.
+    override fun findLeadCascadeInfo(leadId: UUID): LeadCascadeInfo? =
+        leadRepository.findActiveById(leadId)?.let { LeadCascadeInfo(it.personId, it.organizationId) }
+
+    override fun findLeadOwnerTenant(leadId: UUID): UUID? =
+        leadRepository.findActiveById(leadId)?.tenantId
+
+    override fun findPersonOwnerTenant(personId: UUID): UUID? = personRepository.findActiveById(personId)?.tenantId
+
+    override fun findOrganizationOwnerTenant(organizationId: UUID): UUID? =
+        organizationRepository.findById(organizationId).orElse(null)?.takeIf { it.deletedAt == null }?.tenantId
 
     override fun filterActivitiesByWarehouseId(
         warehouseId: UUID,

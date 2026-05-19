@@ -13,27 +13,31 @@ interface UserRepository :
 
     fun existsByEmail(email: String): Boolean
 
+    // Returns a list intentionally: with `LEFT JOIN FETCH` on two Set collections
+    // (roles, permissions), Hibernate 7's `getSingleResult` raises NonUniqueResultException
+    // even when DISTINCT collapses the entity stream to one user. Take the first row at
+    // the call site instead.
     @Query(
         """
-        SELECT u FROM User u
+        SELECT DISTINCT u FROM User u
         LEFT JOIN FETCH u.roles r
         LEFT JOIN FETCH r.permissions
         WHERE u.email = :email
         AND u.deletedAt IS NULL
     """,
     )
-    fun findActiveByEmailWithRoles(email: String): User?
+    fun findActiveByEmailWithRolesAsList(email: String): List<User>
 
     @Query(
         """
-        SELECT u FROM User u
+        SELECT DISTINCT u FROM User u
         LEFT JOIN FETCH u.roles r
         LEFT JOIN FETCH r.permissions
         WHERE u.id = :id
         AND u.deletedAt IS NULL
     """,
     )
-    fun findActiveByIdWithRoles(id: UUID): User?
+    fun findActiveByIdWithRolesAsList(id: UUID): List<User>
 
     fun findAllByDeletedAtIsNull(): List<User>
 

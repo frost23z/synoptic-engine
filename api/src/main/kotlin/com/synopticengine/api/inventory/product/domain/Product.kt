@@ -18,6 +18,7 @@ import java.time.Instant
     uniqueConstraints = [UniqueConstraint(name = "uq_products_tenant_sku", columnNames = ["tenant_id", "sku"])],
 )
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+// Cross-tenant visibility: see Lead.kt — handled at service layer.
 @SQLDelete(sql = "UPDATE products SET deleted_at = NOW() WHERE id = ? AND version = ?")
 @SQLRestriction("deleted_at IS NULL")
 class Product :
