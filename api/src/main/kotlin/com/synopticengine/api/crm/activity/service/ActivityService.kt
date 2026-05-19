@@ -10,6 +10,7 @@ import com.synopticengine.api.crm.activity.repo.ActivityRepository
 import com.synopticengine.api.crm.activity.web.ActivityFileResponse
 import com.synopticengine.api.crm.activity.web.ActivityParticipantResponse
 import com.synopticengine.api.crm.activity.web.ActivityResponse
+import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.shared.storage.StorageService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
@@ -25,6 +26,7 @@ class ActivityService(
     private val activityFileRepository: ActivityFileRepository,
     private val activityParticipantRepository: ActivityParticipantRepository,
     private val storageService: StorageService,
+    private val scopeResolver: ScopeResolver,
 ) {
     fun filter(
         leadId: UUID?,
@@ -36,20 +38,37 @@ class ActivityService(
         productId: UUID?,
         warehouseId: UUID?,
         pageable: Pageable,
-    ): PageResponse<ActivityResponse> =
-        PageResponse.of(
-            activityRepository.filter(
-                leadId,
-                personId,
-                organizationId,
-                userId,
-                type,
-                isDone,
-                productId,
-                warehouseId,
-                pageable,
-            ),
-        ) { it.toResponseWithParticipants() }
+    ): PageResponse<ActivityResponse> {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        val page =
+            if (scopeIds == null) {
+                activityRepository.filter(
+                    leadId,
+                    personId,
+                    organizationId,
+                    userId,
+                    type,
+                    isDone,
+                    productId,
+                    warehouseId,
+                    pageable,
+                )
+            } else {
+                activityRepository.filterScoped(
+                    leadId,
+                    personId,
+                    organizationId,
+                    userId,
+                    type,
+                    isDone,
+                    productId,
+                    warehouseId,
+                    scopeIds,
+                    pageable,
+                )
+            }
+        return PageResponse.of(page) { it.toResponseWithParticipants() }
+    }
 
     fun findById(id: UUID): ActivityResponse =
         (
