@@ -23,6 +23,10 @@ import java.util.UUID
 @Entity
 @Table(name = "leads")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+// Cross-tenant visibility is implemented in the service layer (LeadService.findAll
+// merges own-tenant + sharedResourceFinder.idsFor(LEADS)). The Hibernate filter
+// remains tenant-strict to avoid alias/JOIN-FETCH ambiguity; RLS (V040) is the
+// authoritative trust boundary against native queries that bypass Hibernate.
 @SQLDelete(sql = "UPDATE leads SET deleted_at = NOW() WHERE id = ? AND version = ?")
 @SQLRestriction("deleted_at IS NULL")
 class Lead :

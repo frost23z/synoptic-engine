@@ -21,6 +21,7 @@ import java.util.UUID
 @Entity
 @Table(name = "persons")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+// Cross-tenant visibility: see Lead.kt — handled at service layer.
 @SQLDelete(sql = "UPDATE persons SET deleted_at = NOW() WHERE id = ? AND version = ?")
 @SQLRestriction("deleted_at IS NULL")
 class Person :
