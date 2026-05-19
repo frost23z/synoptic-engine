@@ -103,4 +103,3 @@ class CrossTenantInterceptorCustomizer(
             CrossTenantWriteInterceptor(eventPublisher)
     }
 }
-
