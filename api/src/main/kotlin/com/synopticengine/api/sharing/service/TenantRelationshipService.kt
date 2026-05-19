@@ -3,8 +3,10 @@ package com.synopticengine.api.sharing.service
 import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.sharing.domain.RelationshipStatus
 import com.synopticengine.api.sharing.domain.RelationshipType
+import com.synopticengine.api.sharing.domain.ShareMaterializationOp
 import com.synopticengine.api.sharing.domain.TenantRelationship
 import com.synopticengine.api.sharing.repo.TenantRelationshipRepository
+import com.synopticengine.api.sharing.repo.TenantSharePolicyRepository
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -24,6 +26,8 @@ import java.util.UUID
 @Service
 class TenantRelationshipService(
     private val relationshipRepository: TenantRelationshipRepository,
+    private val policyRepository: TenantSharePolicyRepository,
+    private val materializationWorker: ShareMaterializationWorker,
     private val tenantApi: TenantApi,
 ) {
     @Transactional
@@ -75,6 +79,10 @@ class TenantRelationshipService(
         rel.status = RelationshipStatus.ACTIVE
         rel.acceptedBy = actingUserId
         rel.acceptedAt = Instant.now()
+        // Once the relationship is active, replay any pre-existing policies.
+        policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
+            materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.INSERT)
+        }
         return rel
     }
 
@@ -94,6 +102,10 @@ class TenantRelationshipService(
         }
         rel.status = RelationshipStatus.REVOKED
         rel.revokedAt = Instant.now()
+        // Tear down visibility for every policy on this relationship.
+        policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
+            materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.REVOKE)
+        }
         return rel
     }
 
@@ -107,6 +119,10 @@ class TenantRelationshipService(
             throw IllegalStateException("Only ACTIVE relationships may be suspended")
         }
         rel.status = RelationshipStatus.SUSPENDED
+        // Suspended = visibility temporarily torn down; resuming re-materializes.
+        policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
+            materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.REVOKE)
+        }
         return rel
     }
 
@@ -120,6 +136,9 @@ class TenantRelationshipService(
             throw IllegalStateException("Only SUSPENDED relationships may be resumed")
         }
         rel.status = RelationshipStatus.ACTIVE
+        policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
+            materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.INSERT)
+        }
         return rel
     }
 

@@ -3,6 +3,7 @@ package com.synopticengine.api.sharing.service
 import com.synopticengine.api.sharing.domain.AccessLevel
 import com.synopticengine.api.sharing.domain.RelationshipStatus
 import com.synopticengine.api.sharing.domain.ResourceType
+import com.synopticengine.api.sharing.domain.ShareMaterializationOp
 import com.synopticengine.api.sharing.domain.TenantSharePolicy
 import com.synopticengine.api.sharing.repo.TenantRelationshipRepository
 import com.synopticengine.api.sharing.repo.TenantSharePolicyRepository
@@ -23,6 +24,7 @@ import java.util.UUID
 class TenantSharePolicyService(
     private val policyRepository: TenantSharePolicyRepository,
     private val relationshipRepository: TenantRelationshipRepository,
+    private val materializationWorker: ShareMaterializationWorker,
 ) {
     @Transactional
     fun create(
@@ -54,7 +56,9 @@ class TenantSharePolicyService(
                 this.materialize = materialize
                 this.createdBy = actingUserId
             }
-        return policyRepository.save(policy)
+        val saved = policyRepository.save(policy)
+        materializationWorker.enqueue(saved.id!!, ShareMaterializationOp.INSERT)
+        return saved
     }
 
     @Transactional
@@ -66,9 +70,20 @@ class TenantSharePolicyService(
         cascadeJson: String? = null,
     ): TenantSharePolicy {
         val policy = loadOwnedPolicy(policyId, actingTenantId)
-        if (accessLevel != null) policy.accessLevel = accessLevel
-        if (filterJson != null) policy.filterJson = filterJson
-        if (cascadeJson != null) policy.cascadeJson = cascadeJson
+        var changed = false
+        if (accessLevel != null && policy.accessLevel != accessLevel) {
+            policy.accessLevel = accessLevel
+            changed = true
+        }
+        if (filterJson != null && policy.filterJson != filterJson) {
+            policy.filterJson = filterJson
+            changed = true
+        }
+        if (cascadeJson != null && policy.cascadeJson != cascadeJson) {
+            policy.cascadeJson = cascadeJson
+            changed = true
+        }
+        if (changed) materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.UPDATE)
         return policy
     }
 
@@ -79,6 +94,7 @@ class TenantSharePolicyService(
     ): TenantSharePolicy {
         val policy = loadOwnedPolicy(policyId, actingTenantId)
         policy.revokedAt = Instant.now()
+        materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.REVOKE)
         return policy
     }
 
