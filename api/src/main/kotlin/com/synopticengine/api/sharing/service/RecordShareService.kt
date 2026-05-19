@@ -6,7 +6,10 @@ import com.synopticengine.api.sharing.domain.AccessLevel
 import com.synopticengine.api.sharing.domain.RecordShare
 import com.synopticengine.api.sharing.domain.ResourceType
 import com.synopticengine.api.sharing.domain.VisibilitySource
+import com.synopticengine.api.sharing.events.RecordShareRevokedEvent
+import com.synopticengine.api.sharing.events.RecordSharedEvent
 import com.synopticengine.api.sharing.repo.RecordShareRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -29,6 +32,7 @@ class RecordShareService(
     private val visibilityService: ResourceVisibilityService,
     private val tenantApi: TenantApi,
     private val crmApi: CrmApi,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
     @Transactional
     fun share(
@@ -90,6 +94,18 @@ class RecordShareService(
             expiresAt = expiresAt,
         )
 
+        eventPublisher.publishEvent(
+            RecordSharedEvent(
+                shareId = share.id!!,
+                ownerTenantId = ownerTenantId,
+                consumerTenantId = consumerTenantId,
+                resourceType = resourceType,
+                resourceId = resourceId,
+                accessLevel = accessLevel,
+                sharedBy = sharedBy,
+            ),
+        )
+
         // Cascade — for `leads`, propagate to person/org as READ.
         if (resourceType == ResourceType.LEADS.literal) {
             val info = crmApi.findLeadCascadeInfo(resourceId)
@@ -134,6 +150,15 @@ class RecordShareService(
         // Remove direct + cascaded visibility rows attached to this share.
         visibilityService.deleteBySource(VisibilitySource.RECORD, share.id!!)
         visibilityService.deleteBySource(VisibilitySource.CASCADE, share.id!!)
+        eventPublisher.publishEvent(
+            RecordShareRevokedEvent(
+                shareId = share.id!!,
+                ownerTenantId = share.ownerTenantId,
+                consumerTenantId = share.consumerTenantId,
+                resourceType = share.resourceType,
+                resourceId = share.resourceId,
+            ),
+        )
         return share
     }
 

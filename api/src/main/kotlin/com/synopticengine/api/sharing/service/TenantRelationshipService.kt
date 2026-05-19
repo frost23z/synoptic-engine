@@ -5,8 +5,12 @@ import com.synopticengine.api.sharing.domain.RelationshipStatus
 import com.synopticengine.api.sharing.domain.RelationshipType
 import com.synopticengine.api.sharing.domain.ShareMaterializationOp
 import com.synopticengine.api.sharing.domain.TenantRelationship
+import com.synopticengine.api.sharing.events.RelationshipAcceptedEvent
+import com.synopticengine.api.sharing.events.RelationshipRequestedEvent
+import com.synopticengine.api.sharing.events.RelationshipRevokedEvent
 import com.synopticengine.api.sharing.repo.TenantRelationshipRepository
 import com.synopticengine.api.sharing.repo.TenantSharePolicyRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -29,6 +33,7 @@ class TenantRelationshipService(
     private val policyRepository: TenantSharePolicyRepository,
     private val materializationWorker: ShareMaterializationWorker,
     private val tenantApi: TenantApi,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
     @Transactional
     fun request(
@@ -60,7 +65,17 @@ class TenantRelationshipService(
                 this.note = note
                 this.status = RelationshipStatus.PENDING
             }
-        return relationshipRepository.save(relationship)
+        val saved = relationshipRepository.save(relationship)
+        eventPublisher.publishEvent(
+            RelationshipRequestedEvent(
+                relationshipId = saved.id!!,
+                sourceTenantId = sourceTenantId,
+                targetTenantId = targetTenantId,
+                relationshipType = relationshipType,
+                initiatedBy = initiatedBy,
+            ),
+        )
+        return saved
     }
 
     @Transactional
@@ -83,6 +98,14 @@ class TenantRelationshipService(
         policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
             materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.INSERT)
         }
+        eventPublisher.publishEvent(
+            RelationshipAcceptedEvent(
+                relationshipId = rel.id!!,
+                sourceTenantId = rel.sourceTenantId,
+                targetTenantId = rel.targetTenantId,
+                acceptedBy = actingUserId,
+            ),
+        )
         return rel
     }
 
@@ -106,6 +129,13 @@ class TenantRelationshipService(
         policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
             materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.REVOKE)
         }
+        eventPublisher.publishEvent(
+            RelationshipRevokedEvent(
+                relationshipId = rel.id!!,
+                sourceTenantId = rel.sourceTenantId,
+                targetTenantId = rel.targetTenantId,
+            ),
+        )
         return rel
     }
 
