@@ -123,14 +123,16 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `same-tenant edit does not write to cross_tenant_audit`() {
-        val slug = "audit-same-${UUID.randomUUID().toString().take(6)}"
-        val email = "audit-same-${UUID.randomUUID()}@test.com"
+    fun `same-tenant edit on a shareable entity does not write to cross_tenant_audit`() {
+        val ownerSlug = "audit-same-${UUID.randomUUID().toString().take(6)}"
+        val ownerEmail = "audit-same-${UUID.randomUUID()}@test.com"
         val pw = "Password123!"
-        val owner = tenantApi.provision("AuditSame", slug, email, pw)
-        val token = login(email, pw)
+        val owner = tenantApi.provision("AuditSame", ownerSlug, ownerEmail, pw)
+        val ownerToken = login(ownerEmail, pw)
+        val ownerUserId =
+            UUID.fromString(get("/auth/me", ownerToken).bodyAsMap()!!["id"] as String)
 
-        val pipelines = get("/api/pipelines", token).bodyAsList()!!
+        val pipelines = get("/api/pipelines", ownerToken).bodyAsList()!!
         val defaultPipeline = pipelines.first { it["isDefault"] == true }
         val pipelineId = UUID.fromString(defaultPipeline["id"] as String)
         @Suppress("UNCHECKED_CAST")
@@ -142,7 +144,7 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
             UUID.fromString(
                 post(
                     "/api/leads",
-                    token,
+                    ownerToken,
                     mapOf(
                         "title" to "Same-tenant edit",
                         "pipelineId" to pipelineId.toString(),
@@ -151,28 +153,24 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
                 ).bodyAsMap()!!["id"] as String,
             )
 
-        val auditCountBefore = auditRepository.findAll().count { it.resourceId == leadId }
+        // Same-tenant edit via the repository (bypassing async workflow races on PUT).
+        val tx = TransactionTemplate(transactionManager)
+        tx.execute {
+            TenantContext.runAs(owner.id) {
+                ActorContext.runAs(ownerUserId) {
+                    val lead =
+                        leadRepository.findActiveById(leadId)
+                            ?: error("Lead not found in owner tenant scope")
+                    lead.title = "Same-tenant updated"
+                    leadRepository.saveAndFlush(lead)
+                }
+            }
+        }
 
-        // In-tenant update via the HTTP API.
-        val updated =
-            put(
-                "/api/leads/$leadId",
-                token,
-                mapOf(
-                    "title" to "Same-tenant updated",
-                    "pipelineId" to pipelineId.toString(),
-                    "stageId" to stageId.toString(),
-                ),
-            )
-        assertEquals(200, updated.status())
-
-        val auditCountAfter = auditRepository.findAll().count { it.resourceId == leadId }
-        assertEquals(
-            auditCountBefore,
-            auditCountAfter,
-            "Same-tenant edit should not append to cross_tenant_audit",
+        val rows = auditRepository.findAll().filter { it.resourceId == leadId }
+        assertTrue(
+            rows.isEmpty(),
+            "Same-tenant edit should not append to cross_tenant_audit (got ${rows.size} row(s))",
         )
-        // Silence "unused" warning.
-        assertTrue(owner.id != UUID(0, 0))
     }
 }
