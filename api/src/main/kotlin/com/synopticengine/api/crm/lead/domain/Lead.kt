@@ -4,9 +4,11 @@ import com.synopticengine.api.crm.email.domain.Email
 import com.synopticengine.api.crm.tag.domain.Tag
 import com.synopticengine.api.shared.domain.AuditableEntity
 import com.synopticengine.api.shared.domain.SoftDeletable
+import com.synopticengine.api.sharing.CrossTenantWriteListener
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity
+import jakarta.persistence.EntityListeners
 import jakarta.persistence.FetchType
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.JoinTable
@@ -29,6 +31,7 @@ import java.util.UUID
 // authoritative trust boundary against native queries that bypass Hibernate.
 @SQLDelete(sql = "UPDATE leads SET deleted_at = NOW() WHERE id = ? AND version = ?")
 @SQLRestriction("deleted_at IS NULL")
+@EntityListeners(CrossTenantWriteListener::class)
 class Lead :
     AuditableEntity(),
     SoftDeletable {

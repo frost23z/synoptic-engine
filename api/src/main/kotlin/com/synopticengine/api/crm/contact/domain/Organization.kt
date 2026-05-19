@@ -2,8 +2,10 @@ package com.synopticengine.api.crm.contact.domain
 
 import com.synopticengine.api.shared.domain.AuditableEntity
 import com.synopticengine.api.shared.domain.SoftDeletable
+import com.synopticengine.api.sharing.CrossTenantWriteListener
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EntityListeners
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
 import org.hibernate.annotations.SQLDelete
@@ -16,6 +18,7 @@ import java.time.Instant
 // Cross-tenant visibility: see Lead.kt — handled at service layer.
 @SQLDelete(sql = "UPDATE organizations SET deleted_at = NOW() WHERE id = ? AND version = ?")
 @SQLRestriction("deleted_at IS NULL")
+@EntityListeners(CrossTenantWriteListener::class)
 class Organization :
     AuditableEntity(),
     SoftDeletable {
