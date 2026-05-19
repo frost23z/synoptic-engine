@@ -6,6 +6,8 @@ import com.synopticengine.api.shared.domain.SoftDeletable
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.FetchType
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.JoinTable
@@ -42,6 +44,11 @@ class Email :
 
     @Column(nullable = false)
     var isRead: Boolean = false
+
+    /** P3.3: DRAFT until explicitly sent; SENT for outbound/inbound that arrived. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var status: EmailStatus = EmailStatus.SENT
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)

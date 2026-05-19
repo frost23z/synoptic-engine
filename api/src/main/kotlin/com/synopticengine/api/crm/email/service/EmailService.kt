@@ -2,6 +2,7 @@ package com.synopticengine.api.crm.email.service
 
 import com.synopticengine.api.crm.email.domain.Email
 import com.synopticengine.api.crm.email.domain.EmailAttachment
+import com.synopticengine.api.crm.email.domain.EmailStatus
 import com.synopticengine.api.crm.email.repo.EmailAttachmentRepository
 import com.synopticengine.api.crm.email.repo.EmailRepository
 import com.synopticengine.api.crm.email.web.EmailAttachmentResponse
@@ -10,10 +11,12 @@ import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
 import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.email.MailSenderService
+import com.synopticengine.api.shared.storage.StorageService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 @Service
@@ -23,6 +26,7 @@ class EmailService(
     private val mailSenderService: MailSenderService,
     private val tagRepository: TagRepository,
     private val attachmentRepository: EmailAttachmentRepository,
+    private val storageService: StorageService,
 ) {
     fun findByFolder(
         folder: String,
@@ -43,8 +47,13 @@ class EmailService(
         leadId: UUID?,
         parentId: UUID?,
         folders: List<String>,
-        send: Boolean,
+        isDraft: Boolean,
+        attachmentIds: List<UUID> = emptyList(),
+        uploads: List<MultipartFile> = emptyList(),
     ): EmailResponse {
+        // Draft goes to "drafts" folder regardless of what the caller asked for —
+        // a draft in "sent" or "inbox" makes no sense for the UI's folder filters.
+        val effectiveFolders = if (isDraft) listOf("drafts") else folders.ifEmpty { listOf("sent") }
         val email =
             emailRepository.save(
                 Email().apply {
@@ -53,16 +62,111 @@ class EmailService(
                     this.personId = personId
                     this.leadId = leadId
                     this.parentId = parentId
-                    this.folders = folders
+                    this.folders = effectiveFolders
+                    this.status = if (isDraft) EmailStatus.DRAFT else EmailStatus.SENT
                     this.from = mapOf("email" to to)
                     if (cc != null) this.cc = cc.map { mapOf("email" to it) }
                     if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
                 },
             )
-        if (send) {
+        // Attach any pre-uploaded files (e.g. from a separate /api/mail/attachments
+        // staging endpoint — out of scope for this PR) by id.
+        attachmentIds.forEach { aid ->
+            attachmentRepository.findById(aid).ifPresent { a ->
+                a.email = email
+                a.emailId = email.id!!
+                attachmentRepository.save(a)
+            }
+        }
+        // Also accept fresh multipart uploads bundled with the compose request.
+        uploads.forEach { upload ->
+            val storedPath =
+                storageService.store(
+                    directory = "emails/${email.id}",
+                    filename = "${UUID.randomUUID()}_${upload.originalFilename ?: upload.name}",
+                    bytes = upload.bytes,
+                    contentType = upload.contentType ?: "application/octet-stream",
+                )
+            attachmentRepository.save(
+                EmailAttachment().apply {
+                    this.email = email
+                    this.emailId = email.id!!
+                    this.attachmentFilename = upload.originalFilename ?: upload.name
+                    this.attachmentPath = storedPath
+                    this.contentType = upload.contentType
+                    this.size = upload.size
+                },
+            )
+        }
+        if (!isDraft) {
             mailSenderService.sendEmail(to, subject ?: "", body ?: "", cc, bcc)
         }
-        return email.toResponse()
+        // Re-read so the attachments collection is populated for the response.
+        val refreshed = emailRepository.findById(email.id!!).get()
+        return refreshed.toResponse()
+    }
+
+    /** P3.3: send a previously-saved DRAFT. */
+    @Transactional
+    fun sendDraft(id: UUID): EmailResponse {
+        val email = requireEmail(id)
+        if (email.status == EmailStatus.SENT) {
+            throw IllegalStateException("Email $id is already SENT")
+        }
+        val to = email.from?.get("email") ?: throw IllegalStateException("Draft has no recipient")
+        mailSenderService.sendEmail(
+            to,
+            email.subject ?: "",
+            email.body ?: "",
+            email.cc?.mapNotNull { it["email"] },
+            email.bcc?.mapNotNull { it["email"] },
+        )
+        email.status = EmailStatus.SENT
+        // Drafts move to the sent folder once sent.
+        email.folders = listOf("sent")
+        return emailRepository.save(email).toResponse()
+    }
+
+    /** P3.3: forward an existing email to a new recipient. */
+    @Transactional
+    fun forward(
+        id: UUID,
+        to: String,
+        message: String?,
+        cc: List<String>?,
+        bcc: List<String>?,
+    ): EmailResponse {
+        val original = requireEmail(id)
+        val combinedBody =
+            buildString {
+                if (!message.isNullOrBlank()) {
+                    appendLine(message)
+                    appendLine()
+                }
+                appendLine("---------- Forwarded message ----------")
+                appendLine("Subject: ${original.subject.orEmpty()}")
+                appendLine("From: ${original.from?.get("email").orEmpty()}")
+                appendLine()
+                appendLine(original.body.orEmpty())
+            }
+        val subject = "Fwd: ${original.subject.orEmpty()}"
+        val forwarded =
+            emailRepository.save(
+                Email().apply {
+                    this.subject = subject
+                    this.body = combinedBody
+                    this.personId = original.personId
+                    this.leadId = original.leadId
+                    this.parentId = original.id
+                    this.folders = listOf("sent")
+                    this.status = EmailStatus.SENT
+                    this.from = mapOf("email" to to)
+                    if (cc != null) this.cc = cc.map { mapOf("email" to it) }
+                    if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
+                },
+            )
+        mailSenderService.sendEmail(to, subject, combinedBody, cc, bcc)
+        return forwarded.toResponse()
     }
 
     @Transactional
@@ -192,6 +296,7 @@ class EmailService(
                         this.subject = subject
                         this.body = body
                         this.folders = listOf("inbox")
+                        this.status = EmailStatus.SENT
                         this.isRead = false
                     },
                 )
@@ -209,6 +314,7 @@ fun Email.toResponse() =
         subject = subject,
         name = name,
         isRead = isRead,
+        status = status.name,
         folders = folders,
         from = from,
         cc = cc,

@@ -47,7 +47,8 @@ class UserService(
 
     fun findDetailById(id: UUID): UserDetailResponse =
         userRepository
-            .findActiveByIdWithRolesAsList(id).firstOrNull()
+            .findActiveByIdWithRolesAsList(id)
+            .firstOrNull()
             ?.toDetailResponse()
             ?: throw NoSuchElementException("User not found: $id")
 
@@ -181,7 +182,8 @@ class UserService(
     }
 
     override fun resolveViewContextByEmail(email: String): ViewContext {
-        val userId = userRepository.findActiveByEmailWithRolesAsList(email).firstOrNull()?.id ?: return ViewContext(null)
+        val userId =
+            userRepository.findActiveByEmailWithRolesAsList(email).firstOrNull()?.id ?: return ViewContext(null)
         return resolveViewContext(userId)
     }
 

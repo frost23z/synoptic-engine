@@ -31,11 +31,15 @@ class Workflow :
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
-    var conditions: List<Map<String, String>> = emptyList()
+    var conditions: List<Map<String, Any?>> = emptyList()
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
-    var actions: List<Map<String, String>> = emptyList()
+    var actions: List<Map<String, Any?>> = emptyList()
+
+    /** `and` (default) or `or` — how to combine condition entries. */
+    @Column(name = "condition_type", nullable = false)
+    var conditionType: String = "and"
 
     @Column(nullable = false)
     var isActive: Boolean = true

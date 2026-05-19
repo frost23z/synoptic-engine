@@ -1,8 +1,11 @@
 package com.synopticengine.api.sharing.domain
 
+import jakarta.persistence.AttributeConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
+import jakarta.persistence.Converter
 import jakarta.persistence.Entity
+import jakarta.persistence.EntityListeners
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
@@ -12,9 +15,6 @@ import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 import org.springframework.data.annotation.CreatedDate
 import org.springframework.data.jpa.domain.support.AuditingEntityListener
-import jakarta.persistence.AttributeConverter
-import jakarta.persistence.Converter
-import jakarta.persistence.EntityListeners
 import java.time.Instant
 import java.util.UUID
 

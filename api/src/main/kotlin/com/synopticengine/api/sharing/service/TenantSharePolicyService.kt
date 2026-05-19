@@ -136,14 +136,16 @@ class TenantSharePolicyService(
     private fun loadOwnedRelationship(
         relationshipId: UUID,
         actingTenantId: UUID,
-    ) = relationshipRepository.findById(relationshipId).orElseThrow {
-        NoSuchElementException("Relationship not found")
-    }.also {
-        if (it.sourceTenantId != actingTenantId) {
-            // Mutation requires being the source tenant.
-            throw AccessDeniedException("Only the source tenant of a relationship may manage its policies")
+    ) = relationshipRepository
+        .findById(relationshipId)
+        .orElseThrow {
+            NoSuchElementException("Relationship not found")
+        }.also {
+            if (it.sourceTenantId != actingTenantId) {
+                // Mutation requires being the source tenant.
+                throw AccessDeniedException("Only the source tenant of a relationship may manage its policies")
+            }
         }
-    }
 
     private fun loadOwnedPolicy(
         policyId: UUID,
