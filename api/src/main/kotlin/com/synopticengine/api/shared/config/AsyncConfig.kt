@@ -1,5 +1,6 @@
 package com.synopticengine.api.shared.config
 
+import com.synopticengine.api.shared.ActorContext
 import com.synopticengine.api.shared.TenantContext
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -47,11 +48,22 @@ class AsyncConfig {
 class TenantPropagatingTaskDecorator : TaskDecorator {
     override fun decorate(runnable: Runnable): Runnable {
         val tenantId = TenantContext.get()
+        val actorId = ActorContext.get()
         return Runnable {
+            // Both contexts are propagated together so async listeners (workflow engine,
+            // webhook dispatcher) and any cross-tenant write paths see the same actor
+            // identity the publisher was running as.
+            val wrapped: () -> Unit = {
+                if (actorId != null) {
+                    ActorContext.runAs(actorId) { runnable.run() }
+                } else {
+                    runnable.run()
+                }
+            }
             if (tenantId != null) {
-                TenantContext.runAs(tenantId) { runnable.run() }
+                TenantContext.runAs(tenantId) { wrapped() }
             } else {
-                runnable.run()
+                wrapped()
             }
         }
     }
