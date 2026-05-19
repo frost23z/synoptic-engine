@@ -1,5 +1,6 @@
 package com.synopticengine.api.auth.config
 
+import com.synopticengine.api.shared.ActorContext
 import com.synopticengine.api.shared.TenantContext
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -47,12 +48,14 @@ class JwtAuthFilter(
 
             SecurityContextHolder.getContext().authentication = authentication
             TenantContext.set(tenantId)
+            ActorContext.set(userId)
         }
 
         try {
             filterChain.doFilter(request, response)
         } finally {
             TenantContext.clear()
+            ActorContext.clear()
         }
     }
 
