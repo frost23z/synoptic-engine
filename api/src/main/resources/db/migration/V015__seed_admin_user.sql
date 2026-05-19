@@ -1,2 +1,0 @@
--- Admin user is now created by BootstrapService on first boot using the SYNOPTIC_ADMIN_PASSWORD env var.
--- This migration is kept as a placeholder to preserve Flyway version sequence.
