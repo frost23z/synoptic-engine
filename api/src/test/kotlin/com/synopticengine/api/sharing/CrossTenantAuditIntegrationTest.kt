@@ -3,6 +3,7 @@ package com.synopticengine.api.sharing
 import com.synopticengine.api.AbstractIntegrationTest
 import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.repo.LeadRepository
+import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.shared.ActorContext
 import com.synopticengine.api.shared.TenantContext
@@ -22,15 +23,20 @@ import kotlin.test.assertTrue
  *
  * Pre-fix, `CrossTenantAuditService.record` was wired through `SharingApi.recordAudit`
  * but had zero call sites. The Phase 4 fix wires
- * [com.synopticengine.api.sharing.CrossTenantWriteListener] (JPA `@PostUpdate` on
- * Lead/Person/Organization/Product) → [com.synopticengine.api.sharing.events.SharedRecordEditedEvent]
- * → [com.synopticengine.api.sharing.events.CrossTenantAuditEventListener] →
+ * [com.synopticengine.api.sharing.CrossTenantWriteInterceptor] (Hibernate
+ * `onFlushDirty` on every UPDATE) →
+ * [com.synopticengine.api.sharing.events.SharedRecordEditedEvent] →
+ * [com.synopticengine.api.sharing.events.CrossTenantAuditEventListener] →
  * `CrossTenantAuditService.record(..., EDIT)`.
  *
- * The test bypasses the HTTP layer for the cross-tenant update because the
- * service-layer "find own + shared" merge is still on the deferred list (Phase 2.5
- * follow-up). Once that lands, the same assertion holds over a real PUT
- * /api/leads/{id} from the consumer's token.
+ * The test bypasses both the HTTP layer and `LeadService.create` because that
+ * service publishes a `lead.created` event that triggers an async `add_tag`
+ * workflow action — which races with the test's `saveAndFlush` and produces
+ * flaky `OptimisticLockingException`s unrelated to the audit log. Going
+ * straight through the repository for both lead creation and the cross-tenant
+ * edit gives the test a deterministic shape: a single UPDATE, fired in the
+ * consumer's `TenantContext`, that the interceptor sees and turns into one
+ * audit row.
  */
 class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
     @Autowired
@@ -38,6 +44,9 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
 
     @Autowired
     lateinit var leadRepository: LeadRepository
+
+    @Autowired
+    lateinit var stageRepository: StageRepository
 
     @Autowired
     lateinit var auditRepository: CrossTenantAuditRepository
@@ -60,50 +69,19 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
         val consumerUserId =
             UUID.fromString(get("/auth/me", consumerToken).bodyAsMap()!!["id"] as String)
 
-        // Owner creates a lead.
-        val ownerToken = login(ownerEmail, pw)
-        val pipelines = get("/api/pipelines", ownerToken).bodyAsList()!!
-        val defaultPipeline = pipelines.first { it["isDefault"] == true }
-        val pipelineId = UUID.fromString(defaultPipeline["id"] as String)
-        @Suppress("UNCHECKED_CAST")
-        val stageId =
-            UUID.fromString(
-                (defaultPipeline["stages"] as List<Map<String, Any>>).first()["id"] as String,
-            )
-        val leadId =
-            UUID.fromString(
-                post(
-                    "/api/leads",
-                    ownerToken,
-                    mapOf(
-                        "title" to "Cross-tenant audit probe",
-                        "pipelineId" to pipelineId.toString(),
-                        "stageId" to stageId.toString(),
-                    ),
-                ).bodyAsMap()!!["id"] as String,
-            )
+        val leadId = createLeadInTenant(owner.id, "Cross-tenant audit probe")
 
-        // Cross-tenant edit: simulate the consumer modifying the owner's lead
-        // (the path that the service-layer "own + shared" merge will eventually
-        // expose via PUT /api/leads/{id} from the consumer's token).
-        val tx = TransactionTemplate(transactionManager)
-        tx.execute {
+        // Cross-tenant edit: simulate the consumer modifying the owner's lead.
+        TransactionTemplate(transactionManager).execute {
             TenantContext.runAs(owner.id) {
                 ActorContext.runAs(consumerUserId) {
                     val lead =
                         leadRepository.findActiveById(leadId)
                             ?: error("Lead not found in owner tenant scope")
-                    // Switch the runtime tenant to the consumer's: this is the
-                    // boundary the CrossTenantWriteListener uses to decide whether
-                    // the write is cross-tenant. The owning row is loaded in the
-                    // owner's session above; the save below runs as if the consumer
-                    // is the actor.
+                    // Switch the runtime tenant to the consumer's. The interceptor
+                    // uses this to detect cross-tenant writes.
                     TenantContext.runAs(consumer.id) {
                         lead.title = "Edited by consumer"
-                        // saveAndFlush forces the UPDATE + @PostUpdate to fire inside
-                        // the consumer's TenantContext. Plain save() would defer the
-                        // flush to outer-transaction commit, by which point `runAs`
-                        // has already restored the previous TenantContext.
                         leadRepository.saveAndFlush(lead)
                     }
                 }
@@ -132,30 +110,9 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
         val ownerUserId =
             UUID.fromString(get("/auth/me", ownerToken).bodyAsMap()!!["id"] as String)
 
-        val pipelines = get("/api/pipelines", ownerToken).bodyAsList()!!
-        val defaultPipeline = pipelines.first { it["isDefault"] == true }
-        val pipelineId = UUID.fromString(defaultPipeline["id"] as String)
-        @Suppress("UNCHECKED_CAST")
-        val stageId =
-            UUID.fromString(
-                (defaultPipeline["stages"] as List<Map<String, Any>>).first()["id"] as String,
-            )
-        val leadId =
-            UUID.fromString(
-                post(
-                    "/api/leads",
-                    ownerToken,
-                    mapOf(
-                        "title" to "Same-tenant edit",
-                        "pipelineId" to pipelineId.toString(),
-                        "stageId" to stageId.toString(),
-                    ),
-                ).bodyAsMap()!!["id"] as String,
-            )
+        val leadId = createLeadInTenant(owner.id, "Same-tenant audit probe")
 
-        // Same-tenant edit via the repository (bypassing async workflow races on PUT).
-        val tx = TransactionTemplate(transactionManager)
-        tx.execute {
+        TransactionTemplate(transactionManager).execute {
             TenantContext.runAs(owner.id) {
                 ActorContext.runAs(ownerUserId) {
                     val lead =
@@ -173,4 +130,35 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
             "Same-tenant edit should not append to cross_tenant_audit (got ${rows.size} row(s))",
         )
     }
+
+    /**
+     * Create a Lead directly through the repository, skipping `LeadService.create`
+     * (and the `lead.created` event that triggers an async workflow). The seed
+     * pipeline/stage in the freshly-provisioned tenant is picked up by
+     * convention; any non-deleted stage in that tenant works.
+     */
+    private fun createLeadInTenant(
+        tenantId: UUID,
+        title: String,
+    ): UUID =
+        TransactionTemplate(transactionManager).execute {
+            TenantContext.runAs(tenantId) {
+                // The seed-tenant admin is the user-of-record for these test rows;
+                // ActorContext is set so `AuditableEntity.createdBy` is populated.
+                ActorContext.runAs(tenantId) {
+                    val stage =
+                        stageRepository.findAll().firstOrNull { it.deletedAt == null && it.tenantId == tenantId }
+                            ?: error("No active stage found in tenant $tenantId")
+                    val saved =
+                        leadRepository.saveAndFlush(
+                            Lead().apply {
+                                this.title = title
+                                this.pipelineId = stage.pipeline.id!!
+                                this.stageId = stage.id!!
+                            },
+                        )
+                    saved.id!!
+                }
+            }
+        } ?: error("createLeadInTenant returned null")
 }
