@@ -134,7 +134,15 @@ internal class TenantProvisioningService(
         bootstrapPort.upsertRole(
             name = "VIEWER",
             description = "Read-only access",
-            permissionNames = allPermissionNames.filter { it.endsWith(".view") && !it.startsWith("imports") }.toSet(),
+            // Includes per-folder mail.* permissions (mail.inbox, mail.sent, …) so VIEWER
+            // can land on any mail folder. These don't end in `.view` so they need
+            // explicit allow-listing.
+            permissionNames =
+                allPermissionNames
+                    .filter { key ->
+                        (key.endsWith(".view") && !key.startsWith("imports")) ||
+                            (key.startsWith("mail.") && key != "mail.edit")
+                    }.toSet(),
         )
     }
 

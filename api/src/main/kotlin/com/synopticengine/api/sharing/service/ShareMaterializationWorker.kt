@@ -137,11 +137,13 @@ class ShareMaterializationWorker(
         // the worker is dispatched as part of the policy-creation transaction.
         @Suppress("UNCHECKED_CAST")
         val ids =
-            em.createNativeQuery(
-                "SELECT id FROM $table WHERE tenant_id = :tenant AND deleted_at IS NULL",
-            ).setParameter("tenant", ownerTenantId)
+            em
+                .createNativeQuery(
+                    "SELECT id FROM $table WHERE tenant_id = :tenant AND deleted_at IS NULL",
+                ).setParameter("tenant", ownerTenantId)
                 .resultList as List<Any>
-        ids.asSequence()
+        ids
+            .asSequence()
             .map { (it as java.util.UUID) }
             .filter { matchesFilter(policy.filterJson, it) }
             .forEach { resourceId ->
@@ -155,7 +157,9 @@ class ShareMaterializationWorker(
                     sourceId = policyId,
                 )
             }
-        log.info("Policy $policyId materialized ${ids.size} ${resourceType.literal} row(s) for consumer $consumerTenantId")
+        log.info(
+            "Policy $policyId materialized ${ids.size} ${resourceType.literal} row(s) for consumer $consumerTenantId",
+        )
     }
 
     private fun unmaterializePolicy(policyId: UUID) {

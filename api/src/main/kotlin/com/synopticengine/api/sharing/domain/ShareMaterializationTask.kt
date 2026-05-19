@@ -1,8 +1,8 @@
 package com.synopticengine.api.sharing.domain
 
 import jakarta.persistence.Column
-import jakarta.persistence.EntityListeners
 import jakarta.persistence.Entity
+import jakarta.persistence.EntityListeners
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue

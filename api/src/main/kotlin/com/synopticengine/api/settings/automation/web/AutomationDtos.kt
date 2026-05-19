@@ -11,8 +11,9 @@ data class WorkflowResponse(
     val name: String,
     val description: String?,
     val eventName: String,
-    val conditions: List<Map<String, String>>,
-    val actions: List<Map<String, String>>,
+    val conditions: List<Map<String, Any?>>,
+    val actions: List<Map<String, Any?>>,
+    val conditionType: String,
     val isActive: Boolean,
     val createdAt: Instant?,
     val updatedAt: Instant?,
@@ -22,8 +23,10 @@ data class CreateWorkflowRequest(
     @field:NotBlank val name: String,
     val description: String? = null,
     @field:NotBlank val eventName: String,
-    val conditions: List<Map<String, String>> = emptyList(),
-    val actions: List<Map<String, String>> = emptyList(),
+    val conditions: List<Map<String, Any?>> = emptyList(),
+    val actions: List<Map<String, Any?>> = emptyList(),
+    /** `and` (default) or `or`. */
+    val conditionType: String = "and",
     val isActive: Boolean = true,
 )
 
@@ -31,9 +34,23 @@ data class UpdateWorkflowRequest(
     @field:NotBlank val name: String,
     val description: String? = null,
     @field:NotBlank val eventName: String,
-    val conditions: List<Map<String, String>> = emptyList(),
-    val actions: List<Map<String, String>> = emptyList(),
+    val conditions: List<Map<String, Any?>> = emptyList(),
+    val actions: List<Map<String, Any?>> = emptyList(),
+    val conditionType: String = "and",
     val isActive: Boolean = true,
+)
+
+data class WorkflowActionRunResponse(
+    val id: UUID,
+    val workflowId: UUID,
+    val eventName: String,
+    val entityType: String,
+    val entityId: UUID,
+    val actionType: String,
+    val status: String,
+    val errorMessage: String?,
+    val payload: Map<String, Any?>?,
+    val createdAt: Instant?,
 )
 
 // ── Webhook DTOs ──────────────────────────────────────────────────────────────

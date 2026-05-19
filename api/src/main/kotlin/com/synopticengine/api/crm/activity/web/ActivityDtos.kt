@@ -107,3 +107,18 @@ data class ActivityFileResponse(
     val contentType: String?,
     val createdAt: java.time.Instant?,
 )
+
+/** P3.6 — POST /api/activities/check-overlap body. */
+data class CheckOverlapRequest(
+    @field:NotNull val scheduleFrom: Instant,
+    @field:NotNull val scheduleTo: Instant,
+    val userIds: List<UUID> = emptyList(),
+    val personIds: List<UUID> = emptyList(),
+    /** Pass when editing an existing meeting so it doesn't overlap with itself. */
+    val excludeActivityId: UUID? = null,
+)
+
+data class CheckOverlapResponse(
+    val hasOverlap: Boolean,
+    val overlaps: List<ActivityResponse>,
+)

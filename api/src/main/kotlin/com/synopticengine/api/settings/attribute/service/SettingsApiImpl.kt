@@ -3,8 +3,13 @@ package com.synopticengine.api.settings.attribute.service
 import com.synopticengine.api.settings.AttributeSummary
 import com.synopticengine.api.settings.EmailTemplateSummary
 import com.synopticengine.api.settings.SettingsApi
+import com.synopticengine.api.settings.WebFormFieldSummary
+import com.synopticengine.api.settings.WebFormSummary
+import com.synopticengine.api.settings.WebhookSummary
 import com.synopticengine.api.settings.attribute.repo.AttributeRepository
+import com.synopticengine.api.settings.automation.repo.WebhookRepository
 import com.synopticengine.api.settings.emailtemplate.repo.EmailTemplateRepository
+import com.synopticengine.api.settings.webform.repo.WebFormRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -14,6 +19,8 @@ import java.util.UUID
 class SettingsApiImpl(
     private val attributeRepository: AttributeRepository,
     private val emailTemplateRepository: EmailTemplateRepository,
+    private val webhookRepository: WebhookRepository,
+    private val webFormRepository: WebFormRepository,
 ) : SettingsApi {
     override fun findAttributesByEntityType(entityType: String): List<AttributeSummary> =
         attributeRepository.findAllByEntityType(entityType).map {
@@ -29,6 +36,30 @@ class SettingsApiImpl(
 
     override fun findEmailTemplateById(id: UUID): EmailTemplateSummary? =
         emailTemplateRepository.findById(id).orElse(null)?.let {
-            EmailTemplateSummary(id = it.id!!, name = it.name, subject = it.subject)
+            EmailTemplateSummary(id = it.id!!, name = it.name, subject = it.subject, content = it.content)
+        }
+
+    override fun findWebhookById(id: UUID): WebhookSummary? =
+        webhookRepository.findById(id).orElse(null)?.let {
+            WebhookSummary(id = it.id!!, name = it.name, payloadUrl = it.payloadUrl, isActive = it.isActive)
+        }
+
+    override fun findWebFormById(id: UUID): WebFormSummary? =
+        webFormRepository.findByIdWithFields(id)?.let { form ->
+            WebFormSummary(
+                id = form.id!!,
+                tenantId = form.tenantId,
+                title = form.title,
+                isActive = form.isActive,
+                isDeleted = form.deletedAt != null,
+                fields =
+                    form.fields.map { f ->
+                        WebFormFieldSummary(
+                            attributeId = f.attributeId,
+                            sortOrder = f.sortOrder,
+                            isRequired = f.isRequired,
+                        )
+                    },
+            )
         }
 }

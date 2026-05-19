@@ -197,6 +197,29 @@ class ActivityController(
         @PathVariable userId: UUID,
     ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.removeUserParticipant(id, userId))
 
+    @GetMapping("/calendar")
+    @PreAuthorize("hasAuthority('activities.view')")
+    fun calendar(
+        @RequestParam start: java.time.Instant,
+        @RequestParam end: java.time.Instant,
+    ): ResponseEntity<List<ActivityResponse>> = ResponseEntity.ok(activityService.calendar(start, end))
+
+    @PostMapping("/check-overlap")
+    @PreAuthorize("hasAuthority('activities.view')")
+    fun checkOverlap(
+        @Valid @RequestBody request: CheckOverlapRequest,
+    ): ResponseEntity<CheckOverlapResponse> {
+        val overlaps =
+            activityService.checkOverlap(
+                start = request.scheduleFrom,
+                end = request.scheduleTo,
+                userIds = request.userIds,
+                personIds = request.personIds,
+                excludeActivityId = request.excludeActivityId,
+            )
+        return ResponseEntity.ok(CheckOverlapResponse(hasOverlap = overlaps.isNotEmpty(), overlaps = overlaps))
+    }
+
     @PostMapping("/{id}/file", consumes = ["multipart/form-data"])
     @PreAuthorize("hasAuthority('activities.edit')")
     fun uploadFile(

@@ -1,6 +1,9 @@
 package com.synopticengine.api.settings.webform.web
 
+import com.synopticengine.api.settings.webform.service.WebFormRateLimiter
 import com.synopticengine.api.settings.webform.service.WebFormService
+import com.synopticengine.api.shared.webform.WebFormSubmissionService
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -59,10 +62,16 @@ class WebFormController(
     }
 }
 
+/**
+ * Phase 3 / P3.5 — public, unauthenticated endpoint for web form rendering and
+ * submission. Allow-listed in [com.synopticengine.api.auth.config.SecurityConfig].
+ */
 @RestController
 @RequestMapping("/web-forms")
 class PublicWebFormController(
     private val webFormService: WebFormService,
+    private val submissionService: WebFormSubmissionService,
+    private val rateLimiter: WebFormRateLimiter,
 ) {
     @GetMapping("/{id}")
     fun getPublicForm(
@@ -73,9 +82,36 @@ class PublicWebFormController(
     fun submit(
         @PathVariable id: UUID,
         @RequestBody request: WebFormSubmitRequest,
+        servletRequest: HttpServletRequest,
     ): ResponseEntity<WebFormSubmitResponse> {
-        // Validate the form exists and is active
-        webFormService.findPublicById(id)
-        return ResponseEntity.ok(WebFormSubmitResponse(success = true, message = "Form submitted successfully"))
+        val ip = clientIp(servletRequest)
+        if (!rateLimiter.tryAcquire(ip)) {
+            return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(WebFormSubmitResponse(success = false, message = "Rate limit exceeded for $ip"))
+        }
+        val payload =
+            com.synopticengine.api.shared.webform
+                .WebFormSubmitPayload(values = request.values)
+        val result = submissionService.submit(id, payload)
+        return ResponseEntity.ok(
+            WebFormSubmitResponse(
+                success = result.success,
+                message = result.message,
+                personId = result.personId,
+                leadId = result.leadId,
+            ),
+        )
+    }
+
+    /**
+     * Honour `X-Forwarded-For` when present (load balancer in front) but never
+     * trust its tail past the first hop — only the left-most entry is the
+     * original client. Falls back to the socket address otherwise.
+     */
+    private fun clientIp(req: HttpServletRequest): String {
+        val xff = req.getHeader("X-Forwarded-For")
+        if (!xff.isNullOrBlank()) return xff.split(",").first().trim()
+        return req.remoteAddr ?: "unknown"
     }
 }

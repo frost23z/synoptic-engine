@@ -50,4 +50,6 @@ data class WebFormSubmitRequest(
 data class WebFormSubmitResponse(
     val success: Boolean,
     val message: String,
+    val personId: UUID? = null,
+    val leadId: UUID? = null,
 )

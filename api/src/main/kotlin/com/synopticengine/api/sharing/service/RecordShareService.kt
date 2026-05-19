@@ -191,8 +191,11 @@ class RecordShareService(
         val actualOwner =
             when (resourceType) {
                 ResourceType.LEADS.literal -> crmApi.findLeadOwnerTenant(resourceId)
+
                 ResourceType.PERSONS.literal -> crmApi.findPersonOwnerTenant(resourceId)
+
                 ResourceType.ORGANIZATIONS.literal -> crmApi.findOrganizationOwnerTenant(resourceId)
+
                 // Other resource types: ownership check deferred; trust the caller.
                 else -> ownerTenantId
             }

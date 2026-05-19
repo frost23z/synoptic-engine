@@ -37,16 +37,26 @@ object CascadeRules {
         leadId: java.util.UUID? = null,
     ): List<CascadeTarget> =
         when (parentType) {
-            ResourceType.LEADS ->
+            ResourceType.LEADS -> {
                 buildList {
                     if (personId != null) add(CascadeTarget(ResourceType.PERSONS, personId, AccessLevel.READ))
-                    if (organizationId != null) add(CascadeTarget(ResourceType.ORGANIZATIONS, organizationId, AccessLevel.READ))
+                    if (organizationId !=
+                        null
+                    ) {
+                        add(CascadeTarget(ResourceType.ORGANIZATIONS, organizationId, AccessLevel.READ))
+                    }
                 }
-            ResourceType.QUOTES ->
+            }
+
+            ResourceType.QUOTES -> {
                 buildList {
                     if (leadId != null) add(CascadeTarget(ResourceType.LEADS, leadId, AccessLevel.READ))
                     if (personId != null) add(CascadeTarget(ResourceType.PERSONS, personId, AccessLevel.READ))
                 }
-            else -> emptyList()
+            }
+
+            else -> {
+                emptyList()
+            }
         }
 }
