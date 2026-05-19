@@ -1,2 +1,0 @@
--- Permission and role data is now seeded by BootstrapService on startup.
--- This migration is kept as a placeholder to preserve Flyway version sequence.

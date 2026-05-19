@@ -15,7 +15,7 @@ import kotlin.test.assertNull
 
 /**
  * Phase 4 P0-1: the application must run `SET LOCAL app.current_tenant = '<uuid>'`
- * inside every transaction so the RLS policies in `V040__rls_per_tenant.sql`
+ * inside every transaction so the RLS policies in `V007__sharing_and_rls.sql`
  * actually resolve. Pre-fix, the GUC was never set and every policy fell
  * through the `app_current_tenant() IS NULL OR …` bypass clause.
  *
