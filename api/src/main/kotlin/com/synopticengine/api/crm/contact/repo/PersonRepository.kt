@@ -29,6 +29,22 @@ interface PersonRepository : JpaRepository<Person, UUID> {
         pageable: Pageable,
     ): Page<Person>
 
+    @Query(
+        """
+        SELECT p FROM Person p
+        WHERE p.deletedAt IS NULL
+        AND p.createdBy IN :createdByIds
+        AND (LOWER(p.firstName) LIKE LOWER(CONCAT('%', :q, '%'))
+          OR LOWER(p.lastName)  LIKE LOWER(CONCAT('%', :q, '%'))
+          OR LOWER(p.email)     LIKE LOWER(CONCAT('%', :q, '%')))
+    """,
+    )
+    fun searchScopedByCreatedBy(
+        q: String,
+        createdByIds: Collection<UUID>,
+        pageable: Pageable,
+    ): Page<Person>
+
     fun findAllByOrganizationIdAndDeletedAtIsNull(
         organizationId: UUID,
         pageable: Pageable,

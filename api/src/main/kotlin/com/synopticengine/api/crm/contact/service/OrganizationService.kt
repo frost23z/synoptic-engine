@@ -31,8 +31,14 @@ class OrganizationService(
     fun search(
         q: String,
         pageable: Pageable,
-    ): PageResponse<OrganizationResponse> =
-        PageResponse.of(organizationRepository.search(q, pageable)) { it.toResponse() }
+    ): PageResponse<OrganizationResponse> {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        return if (scopeIds == null) {
+            PageResponse.of(organizationRepository.search(q, pageable)) { it.toResponse() }
+        } else {
+            PageResponse.of(organizationRepository.searchScopedByCreatedBy(q, scopeIds, pageable)) { it.toResponse() }
+        }
+    }
 
     @Transactional
     fun create(
