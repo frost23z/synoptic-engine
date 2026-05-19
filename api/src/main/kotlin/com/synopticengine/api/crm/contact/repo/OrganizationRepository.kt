@@ -29,6 +29,22 @@ interface OrganizationRepository : JpaRepository<Organization, UUID> {
         SELECT o FROM Organization o
         WHERE o.deletedAt IS NULL
         AND o.createdBy IN :createdByIds
+        AND (LOWER(o.name)    LIKE LOWER(CONCAT('%', :q, '%'))
+          OR LOWER(o.email)   LIKE LOWER(CONCAT('%', :q, '%'))
+          OR LOWER(o.phone)   LIKE LOWER(CONCAT('%', :q, '%')))
+    """,
+    )
+    fun searchScopedByCreatedBy(
+        q: String,
+        createdByIds: Collection<UUID>,
+        pageable: Pageable,
+    ): Page<Organization>
+
+    @Query(
+        """
+        SELECT o FROM Organization o
+        WHERE o.deletedAt IS NULL
+        AND o.createdBy IN :createdByIds
     """,
     )
     fun findAllScopedByCreatedBy(
