@@ -69,6 +69,12 @@ data class LeadCsvRow(
     val stageId: UUID,
 )
 
+/** Minimum fields needed to apply [CascadeRules] when a lead is shared. */
+data class LeadCascadeInfo(
+    val personId: UUID?,
+    val organizationId: UUID?,
+)
+
 interface CrmApi {
     fun findPersonById(id: UUID): PersonSummary?
 
@@ -115,6 +121,16 @@ interface CrmApi {
     fun findTagsByIds(ids: Collection<UUID>): List<TagDto>
 
     fun tagExists(id: UUID): Boolean
+
+    /** For cascade resolution. Returns null if the lead doesn't exist or isn't in the current tenant. */
+    fun findLeadCascadeInfo(leadId: UUID): LeadCascadeInfo?
+
+    /** Owner of a given record — needed by sharing.service.RecordShareService for FK + cascade. */
+    fun findLeadOwnerTenant(leadId: UUID): UUID?
+
+    fun findPersonOwnerTenant(personId: UUID): UUID?
+
+    fun findOrganizationOwnerTenant(organizationId: UUID): UUID?
 }
 
 data class StageStats(
