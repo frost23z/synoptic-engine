@@ -6,6 +6,9 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
+import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 interface QuoteRepository : JpaRepository<Quote, UUID> {
@@ -41,4 +44,74 @@ interface QuoteRepository : JpaRepository<Quote, UUID> {
         scopeIds: Collection<UUID>,
         pageable: Pageable,
     ): Page<Quote>
+
+    @Query(
+        """
+        SELECT q FROM Quote q
+        WHERE q.deletedAt IS NULL
+          AND q.expiredAt IS NOT NULL
+          AND q.expiredAt < :today
+    """,
+    )
+    fun findExpired(
+        today: LocalDate,
+        pageable: Pageable,
+    ): Page<Quote>
+
+    @Query(
+        """
+        SELECT q FROM Quote q
+        WHERE q.deletedAt IS NULL
+          AND q.expiredAt IS NOT NULL
+          AND q.expiredAt < :today
+          AND q.userId IN :scopeIds
+    """,
+    )
+    fun findExpiredScoped(
+        today: LocalDate,
+        scopeIds: Collection<UUID>,
+        pageable: Pageable,
+    ): Page<Quote>
+
+    @Query(
+        """
+        SELECT q FROM Quote q
+        WHERE q.deletedAt IS NULL
+          AND LOWER(q.title) LIKE LOWER(CONCAT('%', :q, '%'))
+    """,
+    )
+    fun search(
+        q: String,
+        pageable: Pageable,
+    ): Page<Quote>
+
+    @Query(
+        """
+        SELECT q FROM Quote q
+        WHERE q.deletedAt IS NULL
+          AND LOWER(q.title) LIKE LOWER(CONCAT('%', :q, '%'))
+          AND q.userId IN :scopeIds
+    """,
+    )
+    fun searchScoped(
+        q: String,
+        scopeIds: Collection<UUID>,
+        pageable: Pageable,
+    ): Page<Quote>
+
+    @Query(
+        value = """
+            SELECT COUNT(*) FROM quotes
+            WHERE deleted_at IS NULL
+              AND created_at >= :start AND created_at < :end
+              AND (:hasScope = false OR user_id IN (:scopeIds))
+        """,
+        nativeQuery = true,
+    )
+    fun countCreatedInRangeNative(
+        @Param("start") start: Instant,
+        @Param("end") end: Instant,
+        @Param("hasScope") hasScope: Boolean,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): Long
 }

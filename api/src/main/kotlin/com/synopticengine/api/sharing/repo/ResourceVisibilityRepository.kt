@@ -35,7 +35,9 @@ interface ResourceVisibilityRepository : JpaRepository<ResourceVisibility, UUID>
     ): Int
 
     @Modifying
-    @Query("DELETE FROM ResourceVisibility v WHERE v.ownerTenantId = :ownerTenantId AND v.resourceType = :resourceType AND v.resourceId = :resourceId")
+    @Query(
+        "DELETE FROM ResourceVisibility v WHERE v.ownerTenantId = :ownerTenantId AND v.resourceType = :resourceType AND v.resourceId = :resourceId",
+    )
     fun deleteAllByOwnerResource(
         @Param("ownerTenantId") ownerTenantId: UUID,
         @Param("resourceType") resourceType: String,

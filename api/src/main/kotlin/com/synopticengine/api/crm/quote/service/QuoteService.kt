@@ -1,5 +1,6 @@
 package com.synopticengine.api.crm.quote.service
 
+import com.synopticengine.api.crm.lead.domain.LeadProduct
 import com.synopticengine.api.crm.lead.repo.LeadProductRepository
 import com.synopticengine.api.crm.quote.domain.Quote
 import com.synopticengine.api.crm.quote.domain.QuoteItem
@@ -96,6 +97,7 @@ class QuoteService(
             )
         }
         val saved = quoteRepository.save(quote)
+        syncLeadProducts(saved)
         eventPublisher.publishEvent(DomainEvent("quote.created", "Quote", saved.id!!, mapOf("leadId" to leadId)))
         return saved.toResponse()
     }
@@ -131,7 +133,60 @@ class QuoteService(
                 },
             )
         }
-        return quoteRepository.save(quote).toResponse()
+        val saved = quoteRepository.save(quote)
+        syncLeadProducts(saved)
+        return saved.toResponse()
+    }
+
+    /**
+     * P3.4 / `02 § 2.3`: mirror quote items onto `lead_products` for the linked
+     * lead. Quote-side deletes do **not** cascade to `lead_products` — a product
+     * may be referenced from multiple quotes, and Krayin's behaviour is to leave
+     * the lead-level association intact.
+     */
+    private fun syncLeadProducts(quote: Quote) {
+        quote.items.forEach { item ->
+            val productId = item.productId ?: return@forEach
+            val existing = leadProductRepository.findByLeadIdAndProductId(quote.leadId, productId)
+            if (existing == null) {
+                leadProductRepository.save(
+                    LeadProduct().apply {
+                        this.leadId = quote.leadId
+                        this.productId = productId
+                        this.quantity = item.quantity
+                        this.unitPrice = item.unitPrice
+                    },
+                )
+            } else {
+                existing.quantity = item.quantity
+                existing.unitPrice = item.unitPrice
+                leadProductRepository.save(existing)
+            }
+        }
+    }
+
+    /** P3.4 — `?expiredOnly=true` filter. */
+    fun listExpired(pageable: Pageable): PageResponse<QuoteResponse> {
+        val today = LocalDate.now()
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        return if (scopeIds == null) {
+            PageResponse.of(quoteRepository.findExpired(today, pageable)) { it.toResponse() }
+        } else {
+            PageResponse.of(quoteRepository.findExpiredScoped(today, scopeIds, pageable)) { it.toResponse() }
+        }
+    }
+
+    /** P3.4 — `/api/quotes/search?q=…`. */
+    fun search(
+        q: String,
+        pageable: Pageable,
+    ): PageResponse<QuoteResponse> {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        return if (scopeIds == null) {
+            PageResponse.of(quoteRepository.search(q, pageable)) { it.toResponse() }
+        } else {
+            PageResponse.of(quoteRepository.searchScoped(q, scopeIds, pageable)) { it.toResponse() }
+        }
     }
 
     @Transactional

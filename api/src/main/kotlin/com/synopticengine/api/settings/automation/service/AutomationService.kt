@@ -2,10 +2,15 @@ package com.synopticengine.api.settings.automation.service
 
 import com.synopticengine.api.settings.automation.domain.Webhook
 import com.synopticengine.api.settings.automation.domain.Workflow
+import com.synopticengine.api.settings.automation.domain.WorkflowActionRun
 import com.synopticengine.api.settings.automation.repo.WebhookRepository
+import com.synopticengine.api.settings.automation.repo.WorkflowActionRunRepository
 import com.synopticengine.api.settings.automation.repo.WorkflowRepository
 import com.synopticengine.api.settings.automation.web.WebhookResponse
+import com.synopticengine.api.settings.automation.web.WorkflowActionRunResponse
 import com.synopticengine.api.settings.automation.web.WorkflowResponse
+import com.synopticengine.api.shared.web.PageResponse
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -15,6 +20,7 @@ import java.util.UUID
 class AutomationService(
     private val workflowRepository: WorkflowRepository,
     private val webhookRepository: WebhookRepository,
+    private val actionRunRepository: WorkflowActionRunRepository,
 ) {
     // ── Workflows ─────────────────────────────────────────────────────────
 
@@ -28,9 +34,10 @@ class AutomationService(
         name: String,
         description: String?,
         eventName: String,
-        conditions: List<Map<String, String>>,
-        actions: List<Map<String, String>>,
+        conditions: List<Map<String, Any?>>,
+        actions: List<Map<String, Any?>>,
         isActive: Boolean,
+        conditionType: String = "and",
     ): WorkflowResponse =
         workflowRepository
             .save(
@@ -40,6 +47,7 @@ class AutomationService(
                     this.eventName = eventName
                     this.conditions = conditions
                     this.actions = actions
+                    this.conditionType = conditionType.lowercase()
                     this.isActive = isActive
                 },
             ).toResponse()
@@ -50,9 +58,10 @@ class AutomationService(
         name: String,
         description: String?,
         eventName: String,
-        conditions: List<Map<String, String>>,
-        actions: List<Map<String, String>>,
+        conditions: List<Map<String, Any?>>,
+        actions: List<Map<String, Any?>>,
         isActive: Boolean,
+        conditionType: String = "and",
     ): WorkflowResponse {
         val workflow = workflowRepository.findById(id).orElseThrow { NoSuchElementException("Workflow not found: $id") }
         workflow.name = name
@@ -60,6 +69,7 @@ class AutomationService(
         workflow.eventName = eventName
         workflow.conditions = conditions
         workflow.actions = actions
+        workflow.conditionType = conditionType.lowercase()
         workflow.isActive = isActive
         return workflowRepository.save(workflow).toResponse()
     }
@@ -68,6 +78,16 @@ class AutomationService(
     fun deleteWorkflow(id: UUID) {
         if (!workflowRepository.existsById(id)) throw NoSuchElementException("Workflow not found: $id")
         workflowRepository.deleteById(id)
+    }
+
+    fun listRuns(
+        workflowId: UUID,
+        pageable: Pageable,
+    ): PageResponse<WorkflowActionRunResponse> {
+        if (!workflowRepository.existsById(workflowId)) throw NoSuchElementException("Workflow not found: $workflowId")
+        return PageResponse.of(
+            actionRunRepository.findAllByWorkflowIdOrderByCreatedAtDesc(workflowId, pageable),
+        ) { it.toResponse() }
     }
 
     // ── Webhooks ──────────────────────────────────────────────────────────
@@ -125,6 +145,7 @@ fun Workflow.toResponse() =
         eventName = eventName,
         conditions = conditions,
         actions = actions,
+        conditionType = conditionType,
         isActive = isActive,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -139,4 +160,18 @@ fun Webhook.toResponse() =
         isActive = isActive,
         createdAt = createdAt,
         updatedAt = updatedAt,
+    )
+
+fun WorkflowActionRun.toResponse() =
+    WorkflowActionRunResponse(
+        id = id!!,
+        workflowId = workflowId,
+        eventName = eventName,
+        entityType = entityType,
+        entityId = entityId,
+        actionType = actionType,
+        status = status.name,
+        errorMessage = errorMessage,
+        payload = payload,
+        createdAt = createdAt,
     )

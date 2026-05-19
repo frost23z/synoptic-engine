@@ -241,13 +241,16 @@ class CrmApiImpl(
     override fun findLeadCascadeInfo(leadId: UUID): LeadCascadeInfo? =
         leadRepository.findActiveById(leadId)?.let { LeadCascadeInfo(it.personId, it.organizationId) }
 
-    override fun findLeadOwnerTenant(leadId: UUID): UUID? =
-        leadRepository.findActiveById(leadId)?.tenantId
+    override fun findLeadOwnerTenant(leadId: UUID): UUID? = leadRepository.findActiveById(leadId)?.tenantId
 
     override fun findPersonOwnerTenant(personId: UUID): UUID? = personRepository.findActiveById(personId)?.tenantId
 
     override fun findOrganizationOwnerTenant(organizationId: UUID): UUID? =
-        organizationRepository.findById(organizationId).orElse(null)?.takeIf { it.deletedAt == null }?.tenantId
+        organizationRepository
+            .findById(organizationId)
+            .orElse(null)
+            ?.takeIf { it.deletedAt == null }
+            ?.tenantId
 
     override fun filterActivitiesByWarehouseId(
         warehouseId: UUID,

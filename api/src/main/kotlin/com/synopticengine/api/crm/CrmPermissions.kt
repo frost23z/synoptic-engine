@@ -34,6 +34,12 @@ object CrmPermissions {
     const val MAIL = "mail"
     const val MAIL_VIEW = "mail.view"
     const val MAIL_EDIT = "mail.edit"
+    const val MAIL_INBOX = "mail.inbox"
+    const val MAIL_SENT = "mail.sent"
+    const val MAIL_DRAFTS = "mail.drafts"
+    const val MAIL_TRASH = "mail.trash"
+    const val MAIL_SPAM = "mail.spam"
+    const val MAIL_OUTBOX = "mail.outbox"
 
     const val PIPELINES = "pipelines"
     const val PIPELINES_VIEW = "pipelines.view"
