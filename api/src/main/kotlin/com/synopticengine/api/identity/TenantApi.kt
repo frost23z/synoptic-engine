@@ -26,6 +26,12 @@ interface TenantApi {
         adminEmail: String? = null,
         adminPassword: String? = null,
     )
+
+    /** Lightweight existence check used by cross-module callers (e.g. sharing). */
+    fun exists(tenantId: UUID): Boolean
+
+    /** Summary lookup; null if the tenant doesn't exist. */
+    fun findSummary(tenantId: UUID): TenantSummary?
 }
 
 data class TenantSummary(

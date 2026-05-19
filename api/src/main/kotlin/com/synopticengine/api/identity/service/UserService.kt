@@ -11,6 +11,7 @@ import com.synopticengine.api.identity.repo.PermissionRepository
 import com.synopticengine.api.identity.repo.RoleRepository
 import com.synopticengine.api.identity.repo.UserRepository
 import com.synopticengine.api.identity.web.UserDetailResponse
+import com.synopticengine.api.shared.config.TenantSession
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -25,6 +26,7 @@ class UserService(
     private val groupRepository: GroupRepository,
     private val permissionRepository: PermissionRepository,
     private val passwordEncoder: PasswordEncoder,
+    private val tenantSession: TenantSession,
 ) : IdentityApi {
     override fun findById(id: UUID): UserSummary? =
         userRepository
@@ -38,14 +40,14 @@ class UserService(
     override fun existsById(id: UUID): Boolean = userRepository.existsById(id)
 
     override fun findCredentialsByEmail(email: String): UserCredentials? =
-        userRepository.findActiveByEmailWithRoles(email)?.toCredentials()
+        userRepository.findActiveByEmailWithRolesAsList(email).firstOrNull()?.toCredentials()
 
     override fun findCredentialsById(id: UUID): UserCredentials? =
-        userRepository.findActiveByIdWithRoles(id)?.toCredentials()
+        userRepository.findActiveByIdWithRolesAsList(id).firstOrNull()?.toCredentials()
 
     fun findDetailById(id: UUID): UserDetailResponse =
         userRepository
-            .findActiveByIdWithRoles(id)
+            .findActiveByIdWithRolesAsList(id).firstOrNull()
             ?.toDetailResponse()
             ?: throw NoSuchElementException("User not found: $id")
 
@@ -62,6 +64,12 @@ class UserService(
         groupIds: Set<UUID> = emptySet(),
         viewPermission: ViewPermission = ViewPermission.GLOBAL,
     ): UserDetailResponse {
+        // Ensure subsequent role/group/email lookups stay inside the current tenant,
+        // even on code paths that don't go through TenantFilterInterceptor (programmatic
+        // provisioning, scheduled jobs, tests). Otherwise a role name like "ADMIN"
+        // matches every tenant's ADMIN row and the new user gets multi-tenant role
+        // membership — see analysis/07-verification-findings.md P0-2.
+        tenantSession.applyFilter()
         if (userRepository.existsByEmail(email)) throw IllegalStateException("Email already in use: $email")
         val roles = roleRepository.findAllByNameIn(roleNames)
         if (roles.isEmpty()) throw IllegalArgumentException("No valid roles found: $roleNames")
@@ -173,7 +181,7 @@ class UserService(
     }
 
     override fun resolveViewContextByEmail(email: String): ViewContext {
-        val userId = userRepository.findActiveByEmailWithRoles(email)?.id ?: return ViewContext(null)
+        val userId = userRepository.findActiveByEmailWithRolesAsList(email).firstOrNull()?.id ?: return ViewContext(null)
         return resolveViewContext(userId)
     }
 

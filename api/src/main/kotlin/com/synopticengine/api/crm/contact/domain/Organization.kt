@@ -13,6 +13,7 @@ import java.time.Instant
 @Entity
 @Table(name = "organizations")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
+// Cross-tenant visibility: see Lead.kt — handled at service layer.
 @SQLDelete(sql = "UPDATE organizations SET deleted_at = NOW() WHERE id = ? AND version = ?")
 @SQLRestriction("deleted_at IS NULL")
 class Organization :
