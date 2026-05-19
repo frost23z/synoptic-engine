@@ -17,6 +17,7 @@ data class EmailResponse(
     val subject: String?,
     val name: String?,
     val isRead: Boolean,
+    val status: String,
     val folders: List<String>,
     val from: Map<String, String>?,
     val cc: List<Map<String, String>>?,
@@ -41,6 +42,17 @@ data class ComposeEmailRequest(
     val leadId: UUID? = null,
     val parentId: UUID? = null,
     val folders: List<String> = listOf("sent"),
+    /** P3.3: when true, the email is saved as DRAFT (and not actually sent). */
+    val isDraft: Boolean = false,
+    /** P3.7: pre-uploaded attachment ids to associate with this email. */
+    val attachmentIds: List<UUID> = emptyList(),
+)
+
+data class ForwardEmailRequest(
+    @field:NotBlank val to: String,
+    val message: String? = null,
+    val cc: List<String>? = null,
+    val bcc: List<String>? = null,
 )
 
 data class MoveFolderRequest(

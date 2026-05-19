@@ -5,6 +5,8 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
+import java.time.Instant
 import java.util.UUID
 
 interface PersonRepository : JpaRepository<Person, UUID> {
@@ -43,4 +45,17 @@ interface PersonRepository : JpaRepository<Person, UUID> {
         createdByIds: Collection<UUID>,
         pageable: Pageable,
     ): Page<Person>
+
+    @Query(
+        value = """
+            SELECT COUNT(*) FROM persons
+            WHERE deleted_at IS NULL
+              AND created_at >= :start AND created_at < :end
+        """,
+        nativeQuery = true,
+    )
+    fun countCreatedInRangeNative(
+        @Param("start") start: Instant,
+        @Param("end") end: Instant,
+    ): Long
 }

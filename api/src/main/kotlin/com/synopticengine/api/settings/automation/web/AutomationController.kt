@@ -45,6 +45,7 @@ class WorkflowController(
                     request.conditions,
                     request.actions,
                     request.isActive,
+                    request.conditionType,
                 ),
             )
 
@@ -63,6 +64,7 @@ class WorkflowController(
                 request.conditions,
                 request.actions,
                 request.isActive,
+                request.conditionType,
             ),
         )
 
@@ -74,6 +76,21 @@ class WorkflowController(
         automationService.deleteWorkflow(id)
         return ResponseEntity.noContent().build()
     }
+
+    @GetMapping("/{id}/runs")
+    @PreAuthorize("hasAuthority('automations.view')")
+    fun listRuns(
+        @PathVariable id: UUID,
+        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") page: Int,
+        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<com.synopticengine.api.shared.web.PageResponse<WorkflowActionRunResponse>> =
+        ResponseEntity.ok(
+            automationService.listRuns(
+                id,
+                org.springframework.data.domain.PageRequest
+                    .of(page, size),
+            ),
+        )
 }
 
 @RestController

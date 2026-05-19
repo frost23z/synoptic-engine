@@ -38,9 +38,25 @@ class QuoteController(
         @RequestParam(defaultValue = "20") size: Int,
         @RequestParam leadId: UUID?,
         @RequestParam status: QuoteStatus?,
+        @RequestParam(defaultValue = "false") expiredOnly: Boolean,
     ): ResponseEntity<PageResponse<QuoteResponse>> {
         val pageable = PageRequest.of(page, size, Sort.by("createdAt").descending())
-        return ResponseEntity.ok(quoteService.filter(leadId, status, pageable))
+        return if (expiredOnly) {
+            ResponseEntity.ok(quoteService.listExpired(pageable))
+        } else {
+            ResponseEntity.ok(quoteService.filter(leadId, status, pageable))
+        }
+    }
+
+    @GetMapping("/search")
+    @PreAuthorize("hasAuthority('quotes.view')")
+    fun search(
+        @RequestParam q: String,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<PageResponse<QuoteResponse>> {
+        val pageable = PageRequest.of(page, size, Sort.by("createdAt").descending())
+        return ResponseEntity.ok(quoteService.search(q, pageable))
     }
 
     @GetMapping("/{id}")

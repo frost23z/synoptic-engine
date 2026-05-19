@@ -9,7 +9,9 @@ package com.synopticengine.api.sharing.domain
  * `resource_visibility.resource_type` / `tenant_share_policies.resource_type` /
  * `record_shares.resource_type`. The enum lives in code only.
  */
-enum class ResourceType(val literal: String) {
+enum class ResourceType(
+    val literal: String,
+) {
     LEADS("leads"),
     PERSONS("contacts.persons"),
     ORGANIZATIONS("contacts.organizations"),

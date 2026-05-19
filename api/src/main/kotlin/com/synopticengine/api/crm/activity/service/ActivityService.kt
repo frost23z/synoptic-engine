@@ -295,6 +295,44 @@ class ActivityService(
         return Triple(bytes, file.contentType ?: "application/octet-stream", file.name)
     }
 
+    /** P3.6 — calendar view, activities whose [scheduleFrom, scheduleTo) intersects [start, end). */
+    fun calendar(
+        start: Instant,
+        end: Instant,
+    ): List<ActivityResponse> {
+        if (end.isBefore(start)) {
+            throw IllegalArgumentException("end must be on or after start")
+        }
+        return activityRepository.findCalendarRange(start, end).map { it.toResponseWithParticipants() }
+    }
+
+    /**
+     * P3.6 — meeting overlap check. Given a proposed window plus participant
+     * sets, return every existing MEETING that overlaps. Callers may pass
+     * [excludeActivityId] when validating an update so a meeting doesn't
+     * overlap with itself.
+     */
+    fun checkOverlap(
+        start: Instant,
+        end: Instant,
+        userIds: List<UUID>,
+        personIds: List<UUID>,
+        excludeActivityId: UUID?,
+    ): List<ActivityResponse> {
+        if (end.isBefore(start)) {
+            throw IllegalArgumentException("end must be on or after start")
+        }
+        if (userIds.isEmpty() && personIds.isEmpty()) return emptyList()
+        return activityRepository
+            .findOverlappingMeetings(
+                start,
+                end,
+                userIds.toTypedArray(),
+                personIds.toTypedArray(),
+                excludeActivityId,
+            ).map { it.toResponseWithParticipants() }
+    }
+
     private fun requireActivity(id: UUID): Activity =
         activityRepository.findByIdAndDeletedAtIsNull(id) ?: throw NoSuchElementException("Activity not found: $id")
 
