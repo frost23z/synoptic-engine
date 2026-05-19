@@ -28,6 +28,8 @@ extra["springModulithVersion"] = "2.0.6"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework:spring-aop")
+    implementation("org.aspectj:aspectjweaver")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-rest")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
