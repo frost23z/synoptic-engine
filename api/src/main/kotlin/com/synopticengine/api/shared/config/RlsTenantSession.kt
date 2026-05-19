@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component
  * Runs `SET LOCAL app.current_tenant = '<tenantId>'` as the first statement of
  * every Spring `@Transactional` method, when `TenantContext` is populated.
  *
- * This is the runtime half of `V040__rls_per_tenant.sql`: the policies reference
+ * This is the runtime half of `V007__sharing_and_rls.sql`: the policies reference
  * `app_current_tenant()` (a stable function reading
  * `current_setting('app.current_tenant', true)`). Without the GUC being set,
  * the first clause of every policy (`app_current_tenant() IS NULL OR …`)
