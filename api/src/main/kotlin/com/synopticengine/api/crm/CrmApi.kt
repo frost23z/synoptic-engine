@@ -98,11 +98,16 @@ interface CrmApi {
         stageId: UUID,
     ): LeadCsvRow
 
-    fun exportPersonsCsv(): List<PersonCsvRow>
+    /**
+     * Streams export rows in fixed-size pages, invoking [consume] for each row.
+     * Lets callers (CSV writers) emit rows to the wire without holding the full
+     * tenant in heap — critical for tenants with millions of rows.
+     */
+    fun streamPersonsCsv(consume: (PersonCsvRow) -> Unit)
 
-    fun exportOrganizationsCsv(): List<OrganizationCsvRow>
+    fun streamOrganizationsCsv(consume: (OrganizationCsvRow) -> Unit)
 
-    fun exportLeadsCsv(): List<LeadCsvRow>
+    fun streamLeadsCsv(consume: (LeadCsvRow) -> Unit)
 
     fun getDashboardLeadStats(): DashboardLeadStats
 
@@ -131,6 +136,10 @@ interface CrmApi {
     fun findPersonOwnerTenant(personId: UUID): UUID?
 
     fun findOrganizationOwnerTenant(organizationId: UUID): UUID?
+
+    fun findQuoteOwnerTenant(quoteId: UUID): UUID?
+
+    fun findActivityOwnerTenant(activityId: UUID): UUID?
 }
 
 data class StageStats(

@@ -64,4 +64,11 @@ class CrossTenantAuditService(
         actorTenantId: UUID,
         pageable: Pageable,
     ): Page<CrossTenantAudit> = auditRepository.findAllByActorTenantIdOrderByAtDesc(actorTenantId, pageable)
+
+    /** Every action other tenants have taken against this tenant's records, across all resources. */
+    @Transactional(readOnly = true)
+    fun byOwner(
+        ownerTenantId: UUID,
+        pageable: Pageable,
+    ): Page<CrossTenantAudit> = auditRepository.findAllByOwnerTenantIdOrderByAtDesc(ownerTenantId, pageable)
 }

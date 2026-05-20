@@ -78,3 +78,16 @@ data class UpdateWebhookRequest(
     val events: List<String> = emptyList(),
     val isActive: Boolean = true,
 )
+
+data class WebhookDeliveryRunResponse(
+    val id: UUID,
+    val webhookId: UUID,
+    val eventName: String,
+    val entityType: String,
+    val entityId: UUID,
+    val status: String,
+    val responseCode: Int?,
+    val responseBody: String?,
+    val errorMessage: String?,
+    val createdAt: Instant?,
+)

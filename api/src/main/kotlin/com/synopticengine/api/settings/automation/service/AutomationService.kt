@@ -1,11 +1,14 @@
 package com.synopticengine.api.settings.automation.service
 
 import com.synopticengine.api.settings.automation.domain.Webhook
+import com.synopticengine.api.settings.automation.domain.WebhookDeliveryRun
 import com.synopticengine.api.settings.automation.domain.Workflow
 import com.synopticengine.api.settings.automation.domain.WorkflowActionRun
+import com.synopticengine.api.settings.automation.repo.WebhookDeliveryRunRepository
 import com.synopticengine.api.settings.automation.repo.WebhookRepository
 import com.synopticengine.api.settings.automation.repo.WorkflowActionRunRepository
 import com.synopticengine.api.settings.automation.repo.WorkflowRepository
+import com.synopticengine.api.settings.automation.web.WebhookDeliveryRunResponse
 import com.synopticengine.api.settings.automation.web.WebhookResponse
 import com.synopticengine.api.settings.automation.web.WorkflowActionRunResponse
 import com.synopticengine.api.settings.automation.web.WorkflowResponse
@@ -21,6 +24,7 @@ class AutomationService(
     private val workflowRepository: WorkflowRepository,
     private val webhookRepository: WebhookRepository,
     private val actionRunRepository: WorkflowActionRunRepository,
+    private val webhookDeliveryRunRepository: WebhookDeliveryRunRepository,
 ) {
     // ── Workflows ─────────────────────────────────────────────────────────
 
@@ -135,6 +139,18 @@ class AutomationService(
         if (!webhookRepository.existsById(id)) throw NoSuchElementException("Webhook not found: $id")
         webhookRepository.deleteById(id)
     }
+
+    fun findDeliveriesFor(
+        webhookId: UUID,
+        pageable: Pageable,
+    ): PageResponse<WebhookDeliveryRunResponse> {
+        if (!webhookRepository.existsById(webhookId)) {
+            throw NoSuchElementException("Webhook not found: $webhookId")
+        }
+        return PageResponse.of(
+            webhookDeliveryRunRepository.findAllByWebhookIdOrderByCreatedAtDesc(webhookId, pageable),
+        ) { it.toResponse() }
+    }
 }
 
 fun Workflow.toResponse() =
@@ -173,5 +189,19 @@ fun WorkflowActionRun.toResponse() =
         status = status.name,
         errorMessage = errorMessage,
         payload = payload,
+        createdAt = createdAt,
+    )
+
+fun WebhookDeliveryRun.toResponse() =
+    WebhookDeliveryRunResponse(
+        id = id!!,
+        webhookId = webhookId,
+        eventName = eventName,
+        entityType = entityType,
+        entityId = entityId,
+        status = status.name,
+        responseCode = responseCode,
+        responseBody = responseBody,
+        errorMessage = errorMessage,
         createdAt = createdAt,
     )

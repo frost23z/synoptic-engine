@@ -2,16 +2,26 @@ package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
 import org.junit.jupiter.api.Test
+import org.springframework.http.MediaType
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import kotlin.test.assertEquals
 
+/**
+ * The inbound-parse endpoint is public (no JWT) but signed: every request must include
+ * `X-Synoptic-Signature` = `hex(HMAC_SHA256(secret, body))`. The shared secret is
+ * configured via `synoptic.inbound-mail.webhook-secret` — `src/test/resources/application.yaml`
+ * sets it to `test-inbound-mail-secret` for this suite.
+ */
 class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
+    private val testSecret = "test-inbound-mail-secret"
+
     @Test
-    fun `POST mail inbound-parse creates email without auth`() {
-        val result =
-            post(
-                "/api/mail/inbound-parse",
-                null,
+    fun `POST mail inbound-parse creates email when signed correctly`() {
+        val body =
+            objectMapper.writeValueAsBytes(
                 mapOf(
                     "from" to "sender@example.com",
                     "to" to "inbox@synoptic.dev",
@@ -19,7 +29,51 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                     "body" to "Hello",
                 ),
             )
-        assertEquals(201, result.status(), result.response.contentAsString)
+        val result =
+            mockMvc
+                .perform(
+                    MockMvcRequestBuilders
+                        .post("/api/mail/inbound-parse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Synoptic-Signature", sign(testSecret, body))
+                        .content(body),
+                ).andReturn()
+        assertEquals(201, result.response.status, result.response.contentAsString)
+    }
+
+    @Test
+    fun `POST mail inbound-parse rejects requests without a signature`() {
+        val body =
+            objectMapper.writeValueAsBytes(
+                mapOf("from" to "x@y.z", "to" to "a@b.c", "subject" to "s", "body" to "b"),
+            )
+        val result =
+            mockMvc
+                .perform(
+                    MockMvcRequestBuilders
+                        .post("/api/mail/inbound-parse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body),
+                ).andReturn()
+        assertEquals(403, result.response.status)
+    }
+
+    @Test
+    fun `POST mail inbound-parse rejects requests with a bogus signature`() {
+        val body =
+            objectMapper.writeValueAsBytes(
+                mapOf("from" to "x@y.z", "to" to "a@b.c", "subject" to "s", "body" to "b"),
+            )
+        val result =
+            mockMvc
+                .perform(
+                    MockMvcRequestBuilders
+                        .post("/api/mail/inbound-parse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Synoptic-Signature", "deadbeef")
+                        .content(body),
+                ).andReturn()
+        assertEquals(403, result.response.status)
     }
 
     @Test
@@ -27,5 +81,14 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
         val token = adminToken()
         val result = get("/api/mail/attachments/${UUID.randomUUID()}/download", token)
         assertEquals(404, result.status())
+    }
+
+    private fun sign(
+        secret: String,
+        body: ByteArray,
+    ): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return mac.doFinal(body).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 }

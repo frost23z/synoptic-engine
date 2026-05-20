@@ -24,6 +24,7 @@ import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.domain.LeadStatus
 import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.lead.repo.StageRepository
+import com.synopticengine.api.crm.quote.repo.QuoteRepository
 import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import org.springframework.data.domain.PageRequest
@@ -44,6 +45,7 @@ class CrmApiImpl(
     private val stageRepository: StageRepository,
     private val activityRepository: ActivityRepository,
     private val activityParticipantRepository: ActivityParticipantRepository,
+    private val quoteRepository: QuoteRepository,
     private val tagRepository: TagRepository,
     private val objectMapper: ObjectMapper,
     private val scopeResolver: ScopeResolver,
@@ -129,69 +131,6 @@ class CrmApiImpl(
         )
     }
 
-    override fun exportPersonsCsv(): List<PersonCsvRow> {
-        val scopeIds = scopeResolver.userIdsForCurrentUser()
-        val pageable = PageRequest.of(0, Int.MAX_VALUE)
-        val rows =
-            if (scopeIds == null) {
-                personRepository.findAllByDeletedAtIsNull(pageable).content
-            } else {
-                personRepository.findAllScopedByCreatedBy(scopeIds, pageable).content
-            }
-        return rows.map {
-            PersonCsvRow(
-                id = it.id!!,
-                firstName = it.firstName,
-                lastName = it.lastName,
-                email = it.email,
-                phone = it.phone,
-                jobTitle = it.jobTitle,
-            )
-        }
-    }
-
-    override fun exportOrganizationsCsv(): List<OrganizationCsvRow> {
-        val scopeIds = scopeResolver.userIdsForCurrentUser()
-        val pageable = PageRequest.of(0, Int.MAX_VALUE)
-        val rows =
-            if (scopeIds == null) {
-                organizationRepository.findAllByDeletedAtIsNull(pageable).content
-            } else {
-                organizationRepository.findAllScopedByCreatedBy(scopeIds, pageable).content
-            }
-        return rows.map {
-            OrganizationCsvRow(
-                id = it.id!!,
-                name = it.name,
-                email = it.email,
-                phone = it.phone,
-                website = it.website,
-                address = it.address,
-            )
-        }
-    }
-
-    override fun exportLeadsCsv(): List<LeadCsvRow> {
-        val scopeIds = scopeResolver.userIdsForCurrentUser()
-        val pageable = PageRequest.of(0, Int.MAX_VALUE)
-        val rows =
-            if (scopeIds == null) {
-                leadRepository.findAllByDeletedAtIsNull(pageable).content
-            } else {
-                leadRepository.findAllScoped(scopeIds, pageable).content
-            }
-        return rows.map {
-            LeadCsvRow(
-                id = it.id!!,
-                title = it.title,
-                status = it.status.value,
-                amount = it.amount,
-                pipelineId = it.pipelineId,
-                stageId = it.stageId,
-            )
-        }
-    }
-
     override fun getDashboardLeadStats(): DashboardLeadStats {
         val totalLeads = leadRepository.countByDeletedAtIsNull()
         val openLeads = leadRepository.countByStatusAndDeletedAtIsNull(LeadStatus.OPEN)
@@ -271,6 +210,101 @@ class CrmApiImpl(
             .orElse(null)
             ?.takeIf { it.deletedAt == null }
             ?.tenantId
+
+    override fun findQuoteOwnerTenant(quoteId: UUID): UUID? = quoteRepository.findActiveById(quoteId)?.tenantId
+
+    override fun findActivityOwnerTenant(activityId: UUID): UUID? =
+        activityRepository.findByIdAndDeletedAtIsNull(activityId)?.tenantId
+
+    override fun streamPersonsCsv(consume: (PersonCsvRow) -> Unit) {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        forEachPage(
+            loadPage = { pageable ->
+                if (scopeIds == null) {
+                    personRepository.findAllByDeletedAtIsNull(pageable)
+                } else {
+                    personRepository.findAllScopedByCreatedBy(scopeIds, pageable)
+                }
+            },
+            process = { person ->
+                consume(
+                    PersonCsvRow(
+                        id = person.id!!,
+                        firstName = person.firstName,
+                        lastName = person.lastName,
+                        email = person.email,
+                        phone = person.phone,
+                        jobTitle = person.jobTitle,
+                    ),
+                )
+            },
+        )
+    }
+
+    override fun streamOrganizationsCsv(consume: (OrganizationCsvRow) -> Unit) {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        forEachPage(
+            loadPage = { pageable ->
+                if (scopeIds == null) {
+                    organizationRepository.findAllByDeletedAtIsNull(pageable)
+                } else {
+                    organizationRepository.findAllScopedByCreatedBy(scopeIds, pageable)
+                }
+            },
+            process = { org ->
+                consume(
+                    OrganizationCsvRow(
+                        id = org.id!!,
+                        name = org.name,
+                        email = org.email,
+                        phone = org.phone,
+                        website = org.website,
+                        address = org.address,
+                    ),
+                )
+            },
+        )
+    }
+
+    override fun streamLeadsCsv(consume: (LeadCsvRow) -> Unit) {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        forEachPage(
+            loadPage = { pageable ->
+                if (scopeIds == null) {
+                    leadRepository.findAllByDeletedAtIsNull(pageable)
+                } else {
+                    leadRepository.findAllScoped(scopeIds, pageable)
+                }
+            },
+            process = { lead ->
+                consume(
+                    LeadCsvRow(
+                        id = lead.id!!,
+                        title = lead.title,
+                        status = lead.status.value,
+                        amount = lead.amount,
+                        pipelineId = lead.pipelineId,
+                        stageId = lead.stageId,
+                    ),
+                )
+            },
+        )
+    }
+
+    private inline fun <T : Any> forEachPage(
+        chunkSize: Int = 1000,
+        loadPage: (org.springframework.data.domain.Pageable) -> org.springframework.data.domain.Page<T>,
+        process: (T) -> Unit,
+    ) {
+        var page = 0
+        while (true) {
+            val pageable = PageRequest.of(page, chunkSize)
+            val result = loadPage(pageable)
+            result.content.forEach(process)
+            if (!result.hasNext()) break
+            page++
+        }
+    }
 
     override fun filterActivitiesByWarehouseId(
         warehouseId: UUID,

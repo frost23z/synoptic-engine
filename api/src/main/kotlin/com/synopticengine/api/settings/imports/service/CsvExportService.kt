@@ -5,75 +5,70 @@ import com.synopticengine.api.inventory.InventoryApi
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVPrinter
 import org.springframework.stereotype.Service
-import java.io.StringWriter
+import java.io.OutputStream
+import java.io.OutputStreamWriter
+import java.nio.charset.StandardCharsets
 
+/**
+ * CSV exporters that stream rows directly to a caller-supplied [OutputStream], paginating
+ * the underlying DB scan so the full tenant never lands in heap at once. For backwards
+ * compatibility the `exportXxx(): String` flavour is kept for callers that genuinely
+ * want the whole result in memory — but every controller has been migrated to streaming.
+ */
 @Service
 class CsvExportService(
     private val crmApi: CrmApi,
     private val inventoryApi: InventoryApi,
 ) {
-    fun exportPersons(): String {
-        val writer = StringWriter()
-        CSVPrinter(
-            writer,
-            CSVFormat.DEFAULT
-                .builder()
-                .setHeader("id", "firstName", "lastName", "email", "phone", "jobTitle")
-                .build(),
-        ).use { printer ->
-            crmApi.exportPersonsCsv().forEach { p ->
+    fun streamPersons(out: OutputStream) {
+        writeCsv(out, listOf("id", "firstName", "lastName", "email", "phone", "jobTitle")) { printer ->
+            crmApi.streamPersonsCsv { p ->
                 printer.printRecord(p.id, p.firstName, p.lastName, p.email ?: "", p.phone ?: "", p.jobTitle ?: "")
             }
         }
-        return writer.toString()
     }
 
-    fun exportOrganizations(): String {
-        val writer = StringWriter()
-        CSVPrinter(
-            writer,
-            CSVFormat.DEFAULT
-                .builder()
-                .setHeader("id", "name", "email", "phone", "website", "address")
-                .build(),
-        ).use { printer ->
-            crmApi.exportOrganizationsCsv().forEach { o ->
+    fun streamOrganizations(out: OutputStream) {
+        writeCsv(out, listOf("id", "name", "email", "phone", "website", "address")) { printer ->
+            crmApi.streamOrganizationsCsv { o ->
                 printer.printRecord(o.id, o.name, o.email ?: "", o.phone ?: "", o.website ?: "", o.address ?: "")
             }
         }
-        return writer.toString()
     }
 
-    fun exportLeads(): String {
-        val writer = StringWriter()
-        CSVPrinter(
-            writer,
-            CSVFormat.DEFAULT
-                .builder()
-                .setHeader("id", "title", "status", "amount", "pipelineId", "stageId")
-                .build(),
-        ).use { printer ->
-            crmApi.exportLeadsCsv().forEach { l ->
+    fun streamLeads(out: OutputStream) {
+        writeCsv(out, listOf("id", "title", "status", "amount", "pipelineId", "stageId")) { printer ->
+            crmApi.streamLeadsCsv { l ->
                 printer.printRecord(l.id, l.title, l.status, l.amount ?: "", l.pipelineId, l.stageId)
             }
         }
-        return writer.toString()
     }
 
-    fun exportProducts(): String {
-        val writer = StringWriter()
+    fun streamProducts(out: OutputStream) {
+        writeCsv(out, listOf("id", "name", "sku", "price", "description")) { printer ->
+            inventoryApi.streamProductsCsv { p ->
+                printer.printRecord(p.id, p.name, p.sku ?: "", p.price, p.description ?: "")
+            }
+        }
+    }
+
+    private inline fun writeCsv(
+        out: OutputStream,
+        headers: List<String>,
+        block: (CSVPrinter) -> Unit,
+    ) {
+        val writer = OutputStreamWriter(out, StandardCharsets.UTF_8)
         CSVPrinter(
             writer,
             CSVFormat.DEFAULT
                 .builder()
-                .setHeader("id", "name", "sku", "price", "description")
+                .setHeader(*headers.toTypedArray())
                 .build(),
         ).use { printer ->
-            inventoryApi.exportProductsCsv().forEach { p ->
-                printer.printRecord(p.id, p.name, p.sku ?: "", p.price, p.description ?: "")
-            }
+            block(printer)
+            printer.flush()
         }
-        return writer.toString()
+        writer.flush()
     }
 
     fun sampleCsv(entityType: String): String =

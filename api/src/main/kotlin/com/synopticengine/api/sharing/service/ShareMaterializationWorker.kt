@@ -202,11 +202,17 @@ class ShareMaterializationWorker(
     /**
      * Placeholder for policy filter_jsonb evaluation. Sprint 2b ships with "match all".
      * Sprint 2c adds a JSON-DSL evaluator (operator+attribute+value AST).
+     *
+     * `TenantSharePolicyService` rejects non-null filterJson at create/update time, so this
+     * function is only ever called with `filterJson = null` against fresh policies. If a
+     * legacy row from an earlier build still has a filter, we materialize as if the filter
+     * matched everything (the docstring's "match all" intent) rather than the previous
+     * "match nothing" behaviour, which silently broke filtered policies.
      */
     private fun matchesFilter(
-        filterJson: String?,
+        @Suppress("UNUSED_PARAMETER") filterJson: String?,
         @Suppress("UNUSED_PARAMETER") resourceId: java.util.UUID,
-    ): Boolean = filterJson == null
+    ): Boolean = true
 
     @Transactional
     fun markFailed(
