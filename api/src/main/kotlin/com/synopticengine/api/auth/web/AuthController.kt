@@ -1,6 +1,6 @@
 package com.synopticengine.api.auth.web
 
-import com.synopticengine.api.auth.config.UserPrincipal
+import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.auth.service.AuthService
 import com.synopticengine.api.identity.IdentityApi
 import jakarta.validation.Valid
