@@ -1,6 +1,6 @@
 package com.synopticengine.api.crm.datagrid.web
 
-import com.synopticengine.api.auth.config.UserPrincipal
+import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.crm.datagrid.service.DataGridFilterService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
