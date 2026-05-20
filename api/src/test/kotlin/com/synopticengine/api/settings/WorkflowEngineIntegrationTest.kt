@@ -5,6 +5,7 @@ import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.settings.automation.domain.WorkflowActionRunStatus
 import com.synopticengine.api.settings.automation.repo.WorkflowActionRunRepository
 import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.support.factories.LeadFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -26,9 +27,9 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
 
     @Autowired lateinit var tagRepository: TagRepository
 
+    @Autowired lateinit var leadFactory: LeadFactory
+
     private lateinit var adminToken: String
-    private val defaultPipelineId = "00000000-0000-0000-0000-000000000010"
-    private val defaultStageId = "00000000-0000-0000-0000-000000000011"
 
     @BeforeEach
     fun setup() {
@@ -55,18 +56,7 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
         val workflowId = wfBody["id"] as String
 
         // 2) Create a lead — should fire lead.created.
-        val leadResp =
-            post(
-                "/api/leads",
-                adminToken,
-                mapOf(
-                    "title" to "WF test lead",
-                    "pipelineId" to defaultPipelineId,
-                    "stageId" to defaultStageId,
-                ),
-            )
-        assertEquals(201, leadResp.status())
-        val leadId = leadResp.bodyAsMap()!!["id"] as String
+        val leadId = leadFactory.id(adminToken, title = "WF test lead")
 
         // Wait for the async listener to settle. The engine runs on Spring's
         // default async executor; in test it lands the run row within ms.
@@ -82,7 +72,7 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
                 actionRunRepository
                     .findAllByEntityTypeAndEntityIdOrderByCreatedAtDesc(
                         entityType = "Lead",
-                        entityId = UUID.fromString(leadId),
+                        entityId = leadId,
                         pageable = PageRequest.of(0, 5),
                     ).content
                     .firstOrNull { it.workflowId == UUID.fromString(workflowId) }
@@ -112,20 +102,7 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
         val workflowId = UUID.fromString(wfBody["id"] as String)
 
         // Lead is created OPEN — condition (status=won) should fail.
-        val leadId =
-            UUID.fromString(
-                (
-                    post(
-                        "/api/leads",
-                        adminToken,
-                        mapOf(
-                            "title" to "Conditional lead",
-                            "pipelineId" to defaultPipelineId,
-                            "stageId" to defaultStageId,
-                        ),
-                    ).bodyAsMap()!!["id"] as String
-                ),
-            )
+        val leadId = leadFactory.id(adminToken, title = "Conditional lead")
 
         waitForRun(workflowId)
 
@@ -158,20 +135,7 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
             ).bodyAsMap()!!
         val workflowId = UUID.fromString(wfBody["id"] as String)
 
-        val leadId =
-            UUID.fromString(
-                (
-                    post(
-                        "/api/leads",
-                        adminToken,
-                        mapOf(
-                            "title" to "Bogus action lead",
-                            "pipelineId" to defaultPipelineId,
-                            "stageId" to defaultStageId,
-                        ),
-                    ).bodyAsMap()!!["id"] as String
-                ),
-            )
+        val leadId = leadFactory.id(adminToken, title = "Bogus action lead")
 
         waitForRun(workflowId)
 
@@ -203,11 +167,7 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
                 ),
             ).bodyAsMap()!!["id"] as String
 
-        post(
-            "/api/leads",
-            adminToken,
-            mapOf("title" to "Runs lead", "pipelineId" to defaultPipelineId, "stageId" to defaultStageId),
-        )
+        leadFactory.create(adminToken, title = "Runs lead")
         waitForRun(UUID.fromString(wfId))
 
         val result = get("/api/settings/workflows/$wfId/runs", adminToken)

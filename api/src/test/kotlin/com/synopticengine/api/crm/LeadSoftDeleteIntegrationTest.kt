@@ -5,6 +5,7 @@ import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.config.TenantSession
+import com.synopticengine.api.support.factories.LeadFactory
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.PageRequest
@@ -26,6 +27,9 @@ class LeadSoftDeleteIntegrationTest : AbstractIntegrationTest() {
 
     @Autowired
     lateinit var tenantSession: TenantSession
+
+    @Autowired
+    lateinit var leadFactory: LeadFactory
 
     @Test
     @Transactional
@@ -71,30 +75,13 @@ class LeadSoftDeleteIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `service delete and repository delete leave the same DB state`() {
+    fun `service-layer delete is also a soft delete`() {
         // The service path (existing behavior) and the repository path (new safety net)
-        // must converge on the same soft-deleted state, so existing tests that hit the
-        // service keep passing and any future repository.delete usage stays safe.
+        // must converge on the same soft-deleted state.
         val token = adminToken()
-        val unique = UUID.randomUUID().toString().take(6)
-        val defaultPipelineId = "00000000-0000-0000-0000-000000000010"
-        val defaultStageId = "00000000-0000-0000-0000-000000000011"
+        val id = leadFactory.id(token, title = "ServicePath-${UUID.randomUUID().toString().take(6)}")
 
-        val createdViaApi =
-            post(
-                "/api/leads",
-                token,
-                mapOf(
-                    "title" to "ServicePath-$unique",
-                    "pipelineId" to defaultPipelineId,
-                    "stageId" to defaultStageId,
-                ),
-            )
-        assertEquals(201, createdViaApi.status())
-        val apiId = createdViaApi.bodyAsMap()!!["id"] as String
-
-        // DELETE through the controller -> service -> repo.save with deletedAt = now.
-        assertEquals(204, delete("/api/leads/$apiId", token).status())
-        assertEquals(404, get("/api/leads/$apiId", token).status())
+        assertEquals(204, delete("/api/leads/$id", token).status())
+        assertEquals(404, get("/api/leads/$id", token).status())
     }
 }

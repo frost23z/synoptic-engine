@@ -1,6 +1,9 @@
 package com.synopticengine.api
 
 import com.synopticengine.api.identity.TenantApi
+import com.synopticengine.api.support.factories.LeadFactory
+import com.synopticengine.api.support.factories.PipelineResolver
+import com.synopticengine.api.support.factories.TenantProvisioner
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
@@ -15,87 +18,51 @@ import kotlin.test.assertTrue
  * sharing is meaningless (you'd be giving access you can't take back).
  */
 class MultiTenantIsolationIntegrationTest : AbstractIntegrationTest() {
-    @Autowired
-    lateinit var tenantApi: TenantApi
+    @Autowired private lateinit var tenantApi: TenantApi
+
+    @Autowired private lateinit var tenantProvisioner: TenantProvisioner
+
+    @Autowired private lateinit var leadFactory: LeadFactory
+
+    @Autowired private lateinit var pipelineResolver: PipelineResolver
 
     @Test
     fun `two provisioned tenants are isolated end-to-end`() {
-        val slugA = "isolation-a-${UUID.randomUUID().toString().take(6)}"
-        val slugB = "isolation-b-${UUID.randomUUID().toString().take(6)}"
-        val adminAEmail = "admin-a-${UUID.randomUUID()}@test.com"
-        val adminBEmail = "admin-b-${UUID.randomUUID()}@test.com"
-        val password = "Password123!"
-
-        val tenantA = tenantApi.provision("Tenant A", slugA, adminAEmail, password)
-        val tenantB = tenantApi.provision("Tenant B", slugB, adminBEmail, password)
-        assertNotEquals(tenantA.id, tenantB.id)
-
-        val tokenA = login(adminAEmail, password)
-        val tokenB = login(adminBEmail, password)
+        val a = tenantProvisioner.provision("isolation-a")
+        val b = tenantProvisioner.provision("isolation-b")
+        assertNotEquals(a.tenantId, b.tenantId)
 
         // Each tenant has its own default pipeline.
-        val (pipelineIdA, stageIdA) = defaultPipelineAndStage(tokenA)
-        val (pipelineIdB, _) = defaultPipelineAndStage(tokenB)
-        assertNotEquals(pipelineIdA, pipelineIdB, "Each tenant must have its own pipeline ids")
+        val pipelineA = pipelineResolver.defaultPipelineAndStage(a.token)
+        val pipelineB = pipelineResolver.defaultPipelineAndStage(b.token)
+        assertNotEquals(pipelineA.pipelineId, pipelineB.pipelineId, "Each tenant must have its own pipeline ids")
 
         // Admin A creates a lead. It must be invisible to admin B.
-        val createResult =
-            post(
-                "/api/leads",
-                tokenA,
-                mapOf(
-                    "title" to "Tenant A's lead",
-                    "amount" to 1000,
-                    "pipelineId" to pipelineIdA,
-                    "stageId" to stageIdA,
-                ),
-            )
-        assertEquals(
-            201,
-            createResult.status(),
-            "Expected 201 but got ${createResult.status()}: ${createResult.response.contentAsString}",
-        )
-        val leadId = createResult.bodyAsMap()!!["id"] as String
+        val leadMap = leadFactory.create(a.token, title = "Tenant A's lead", amount = 1000)
+        val leadId = leadMap["id"] as String
         assertNotNull(leadId)
 
-        // Tenant A sees their lead.
-        val aListResult = get("/api/leads", tokenA)
-        assertEquals(200, aListResult.status())
-        val aList = aListResult.bodyAsMap()!!
-
         @Suppress("UNCHECKED_CAST")
-        val aContent = aList["content"] as List<Map<String, Any>>
+        val aContent = get("/api/leads", a.token).bodyAsMap()!!["content"] as List<Map<String, Any>>
         assertTrue(aContent.any { it["id"] == leadId }, "Tenant A should see its own lead")
 
-        // Tenant B does not see Tenant A's lead.
-        val bListResult = get("/api/leads", tokenB)
-        assertEquals(200, bListResult.status())
-        val bList = bListResult.bodyAsMap()!!
-
         @Suppress("UNCHECKED_CAST")
-        val bContent = bList["content"] as List<Map<String, Any>>
+        val bContent = get("/api/leads", b.token).bodyAsMap()!!["content"] as List<Map<String, Any>>
         assertTrue(bContent.none { it["id"] == leadId }, "Tenant B must not see Tenant A's lead")
 
-        // Tenant B cannot fetch the lead by id either.
-        val bGetResult = get("/api/leads/$leadId", tokenB)
+        val bGet = get("/api/leads/$leadId", b.token)
         assertTrue(
-            bGetResult.status() == 404 || bGetResult.status() == 403,
-            "Expected 404/403 fetching another tenant's lead, got ${bGetResult.status()}: ${bGetResult.response.contentAsString}",
+            bGet.status() == 404 || bGet.status() == 403,
+            "Expected 404/403 fetching another tenant's lead, got ${bGet.status()}",
         )
     }
 
     @Test
     fun `admin role created in a new tenant authorises endpoints via ALL bypass`() {
-        val slug = "wildcard-${UUID.randomUUID().toString().take(6)}"
-        val adminEmail = "admin-wild-${UUID.randomUUID()}@test.com"
-        val password = "Password123!"
-
-        tenantApi.provision("Wildcard tenant", slug, adminEmail, password)
-        val token = login(adminEmail, password)
-
+        val tenant = tenantProvisioner.provision("wildcard")
         // `tenants.view` is a permission added late; only ALL roles get it implicitly.
         // The provisioned ADMIN should reach the tenants list without 403.
-        val result = get("/api/tenants", token)
+        val result = get("/api/tenants", tenant.token)
         assertEquals(
             200,
             result.status(),
@@ -112,21 +79,6 @@ class MultiTenantIsolationIntegrationTest : AbstractIntegrationTest() {
                 tenantApi.provision("Twice", slug, "two-${UUID.randomUUID()}@test.com", "Password123!")
             }
         assertTrue(ex.message!!.contains("already exists"))
-    }
-
-    private fun defaultPipelineAndStage(token: String): Pair<String, String> {
-        val pipelines =
-            get("/api/pipelines", token).bodyAsList()
-                ?: error("Expected pipelines list to be available")
-        val defaultPipeline =
-            pipelines.firstOrNull { it["isDefault"] == true }
-                ?: error("No default pipeline found via API")
-        val pipelineId = defaultPipeline["id"] as String
-
-        @Suppress("UNCHECKED_CAST")
-        val stages = defaultPipeline["stages"] as List<Map<String, Any>>
-        val firstStageId = stages.first()["id"] as String
-        return pipelineId to firstStageId
     }
 
     private inline fun <reified T : Throwable> assertThrows(noinline block: () -> Unit): T {

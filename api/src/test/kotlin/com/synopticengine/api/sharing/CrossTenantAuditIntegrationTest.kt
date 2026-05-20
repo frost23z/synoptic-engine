@@ -4,11 +4,11 @@ import com.synopticengine.api.AbstractIntegrationTest
 import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.lead.repo.StageRepository
-import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.shared.ActorContext
 import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.sharing.domain.CrossTenantAction
 import com.synopticengine.api.sharing.repo.CrossTenantAuditRepository
+import com.synopticengine.api.support.factories.TenantProvisioner
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.PlatformTransactionManager
@@ -39,48 +39,34 @@ import kotlin.test.assertTrue
  * audit row.
  */
 class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
-    @Autowired
-    lateinit var tenantApi: TenantApi
+    @Autowired private lateinit var tenantProvisioner: TenantProvisioner
 
-    @Autowired
-    lateinit var leadRepository: LeadRepository
+    @Autowired private lateinit var leadRepository: LeadRepository
 
-    @Autowired
-    lateinit var stageRepository: StageRepository
+    @Autowired private lateinit var stageRepository: StageRepository
 
-    @Autowired
-    lateinit var auditRepository: CrossTenantAuditRepository
+    @Autowired private lateinit var auditRepository: CrossTenantAuditRepository
 
-    @Autowired
-    lateinit var transactionManager: PlatformTransactionManager
+    @Autowired private lateinit var transactionManager: PlatformTransactionManager
 
     @Test
     fun `cross-tenant edit of a shared lead writes an EDIT row to cross_tenant_audit`() {
-        val ownerSlug = "audit-owner-${UUID.randomUUID().toString().take(6)}"
-        val consumerSlug = "audit-consumer-${UUID.randomUUID().toString().take(6)}"
-        val ownerEmail = "audit-owner-${UUID.randomUUID()}@test.com"
-        val consumerEmail = "audit-consumer-${UUID.randomUUID()}@test.com"
-        val pw = "Password123!"
-        val owner = tenantApi.provision("AuditOwner", ownerSlug, ownerEmail, pw)
-        val consumer = tenantApi.provision("AuditConsumer", consumerSlug, consumerEmail, pw)
+        val owner = tenantProvisioner.provision("audit-owner")
+        val consumer = tenantProvisioner.provision("audit-consumer")
 
-        // Find the consumer-side admin user id so the audit row's actorUserId is real.
-        val consumerToken = login(consumerEmail, pw)
-        val consumerUserId =
-            UUID.fromString(get("/auth/me", consumerToken).bodyAsMap()!!["id"] as String)
+        val consumerUserId = UUID.fromString(get("/auth/me", consumer.token).bodyAsMap()!!["id"] as String)
+        val leadId = createLeadInTenant(owner.tenantId, "Cross-tenant audit probe")
 
-        val leadId = createLeadInTenant(owner.id, "Cross-tenant audit probe")
-
-        // Cross-tenant edit: simulate the consumer modifying the owner's lead.
+        // Cross-tenant edit: the consumer modifies the owner's lead.
         TransactionTemplate(transactionManager).execute {
-            TenantContext.runAs(owner.id) {
+            TenantContext.runAs(owner.tenantId) {
                 ActorContext.runAs(consumerUserId) {
                     val lead =
                         leadRepository.findActiveById(leadId)
                             ?: error("Lead not found in owner tenant scope")
                     // Switch the runtime tenant to the consumer's. The interceptor
                     // uses this to detect cross-tenant writes.
-                    TenantContext.runAs(consumer.id) {
+                    TenantContext.runAs(consumer.tenantId) {
                         lead.title = "Edited by consumer"
                         leadRepository.saveAndFlush(lead)
                     }
@@ -92,8 +78,8 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
         assertEquals(1, rows.size, "Expected exactly one audit row for the cross-tenant edit, got ${rows.size}")
         val row = rows.first()
         assertEquals(CrossTenantAction.EDIT, row.action)
-        assertEquals(owner.id, row.ownerTenantId)
-        assertEquals(consumer.id, row.actorTenantId)
+        assertEquals(owner.tenantId, row.ownerTenantId)
+        assertEquals(consumer.tenantId, row.actorTenantId)
         assertEquals(consumerUserId, row.actorUserId)
         assertEquals("leads", row.resourceType)
         assertEquals(leadId, row.resourceId)
@@ -102,18 +88,12 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `same-tenant edit on a shareable entity does not write to cross_tenant_audit`() {
-        val ownerSlug = "audit-same-${UUID.randomUUID().toString().take(6)}"
-        val ownerEmail = "audit-same-${UUID.randomUUID()}@test.com"
-        val pw = "Password123!"
-        val owner = tenantApi.provision("AuditSame", ownerSlug, ownerEmail, pw)
-        val ownerToken = login(ownerEmail, pw)
-        val ownerUserId =
-            UUID.fromString(get("/auth/me", ownerToken).bodyAsMap()!!["id"] as String)
-
-        val leadId = createLeadInTenant(owner.id, "Same-tenant audit probe")
+        val owner = tenantProvisioner.provision("audit-same")
+        val ownerUserId = UUID.fromString(get("/auth/me", owner.token).bodyAsMap()!!["id"] as String)
+        val leadId = createLeadInTenant(owner.tenantId, "Same-tenant audit probe")
 
         TransactionTemplate(transactionManager).execute {
-            TenantContext.runAs(owner.id) {
+            TenantContext.runAs(owner.tenantId) {
                 ActorContext.runAs(ownerUserId) {
                     val lead =
                         leadRepository.findActiveById(leadId)
@@ -125,10 +105,7 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
         }
 
         val rows = auditRepository.findAll().filter { it.resourceId == leadId }
-        assertTrue(
-            rows.isEmpty(),
-            "Same-tenant edit should not append to cross_tenant_audit (got ${rows.size} row(s))",
-        )
+        assertTrue(rows.isEmpty(), "Same-tenant edit should not append to cross_tenant_audit (got ${rows.size} row(s))")
     }
 
     /**
@@ -143,8 +120,6 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
     ): UUID =
         TransactionTemplate(transactionManager).execute {
             TenantContext.runAs(tenantId) {
-                // The seed-tenant admin is the user-of-record for these test rows;
-                // ActorContext is set so `AuditableEntity.createdBy` is populated.
                 ActorContext.runAs(tenantId) {
                     val stage =
                         stageRepository.findAll().firstOrNull { it.deletedAt == null && it.tenantId == tenantId }

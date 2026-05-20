@@ -1,14 +1,21 @@
 package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.PersonFactory
+import com.synopticengine.api.support.factories.TagFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class PersonIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var personFactory: PersonFactory
+
+    @Autowired private lateinit var tagFactory: TagFactory
+
     private lateinit var adminToken: String
     private lateinit var salespersonToken: String
 
@@ -84,20 +91,15 @@ class PersonIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `attach and detach tag on person`() {
-        val personId = post("/api/contacts/persons", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val tagId =
-            post(
-                "/api/tags",
-                adminToken,
-                mapOf("name" to "TAG-${UUID.randomUUID().toString().take(8)}"),
-            ).bodyAsMap()!!["id"] as String
+        val personId = personFactory.id(adminToken)
+        val tagId = tagFactory.id(adminToken)
 
-        val attached = post("/api/contacts/persons/$personId/tags", adminToken, mapOf("tagId" to tagId))
+        val attached = post("/api/contacts/persons/$personId/tags", adminToken, mapOf("tagId" to tagId.toString()))
         assertEquals(200, attached.status())
         @Suppress("UNCHECKED_CAST")
         val tags = attached.bodyAsMap()!!["tags"] as List<Map<String, Any>>
         assertEquals(1, tags.size)
-        assertEquals(tagId, tags.first()["id"])
+        assertEquals(tagId.toString(), tags.first()["id"])
 
         val detached = delete("/api/contacts/persons/$personId/tags/$tagId", adminToken)
         assertEquals(200, detached.status())
@@ -108,7 +110,7 @@ class PersonIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `search persons returns paginated results`() {
         val unique = "JANE${UUID.randomUUID().toString().take(6)}"
-        post("/api/contacts/persons", adminToken, mapOf("firstName" to unique, "lastName" to "Test"))
+        personFactory.create(adminToken, firstName = unique, lastName = "Test")
         val result = get("/api/contacts/persons/search?q=$unique", adminToken)
         assertEquals(200, result.status())
         val content = result.bodyAsMap()!!["content"] as List<*>
