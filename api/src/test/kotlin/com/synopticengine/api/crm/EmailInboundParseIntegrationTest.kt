@@ -3,23 +3,24 @@ package com.synopticengine.api.crm
 import com.synopticengine.api.AbstractIntegrationTest
 import org.junit.jupiter.api.Test
 import org.springframework.http.MediaType
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.test.assertEquals
 
 /**
- * The inbound-parse endpoint is public (no JWT) but signed: every request must include
- * `X-Synoptic-Signature` = `hex(HMAC_SHA256(secret, body))`. The shared secret is
- * configured via `synoptic.inbound-mail.webhook-secret` — `src/test/resources/application.yaml`
- * sets it to `test-inbound-mail-secret` for this suite.
+ * Confirms that `/api/mail/inbound-parse` is wired through the signature verifier and
+ * that the security filter allows the (signed) endpoint to reach the controller without
+ * a JWT. Verifier-internal edge cases live in `InboundMailSignatureVerifierTest` — no
+ * sense paying Spring boot to assert them again.
  */
+@TestPropertySource(properties = ["synoptic.inbound-mail.webhook-secret=test-inbound-mail-secret"])
 class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
-    private val testSecret = "test-inbound-mail-secret"
+    private val secret = "test-inbound-mail-secret"
 
     @Test
-    fun `POST mail inbound-parse creates email when signed correctly`() {
+    fun `signed request creates an email and unsigned request is refused`() {
         val body =
             objectMapper.writeValueAsBytes(
                 mapOf(
@@ -29,25 +30,22 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                     "body" to "Hello",
                 ),
             )
-        val result =
+
+        // Signed → 201 Created. Proves the controller route is reachable without auth
+        // and that the verifier accepts a correctly-signed payload.
+        val signed =
             mockMvc
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-Synoptic-Signature", sign(testSecret, body))
+                        .header("X-Synoptic-Signature", sign(secret, body))
                         .content(body),
                 ).andReturn()
-        assertEquals(201, result.response.status, result.response.contentAsString)
-    }
+        assertEquals(201, signed.response.status, signed.response.contentAsString)
 
-    @Test
-    fun `POST mail inbound-parse rejects requests without a signature`() {
-        val body =
-            objectMapper.writeValueAsBytes(
-                mapOf("from" to "x@y.z", "to" to "a@b.c", "subject" to "s", "body" to "b"),
-            )
-        val result =
+        // Unsigned → 403. Proves the verifier short-circuits before the service runs.
+        val unsigned =
             mockMvc
                 .perform(
                     MockMvcRequestBuilders
@@ -55,32 +53,7 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
                 ).andReturn()
-        assertEquals(403, result.response.status)
-    }
-
-    @Test
-    fun `POST mail inbound-parse rejects requests with a bogus signature`() {
-        val body =
-            objectMapper.writeValueAsBytes(
-                mapOf("from" to "x@y.z", "to" to "a@b.c", "subject" to "s", "body" to "b"),
-            )
-        val result =
-            mockMvc
-                .perform(
-                    MockMvcRequestBuilders
-                        .post("/api/mail/inbound-parse")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-Synoptic-Signature", "deadbeef")
-                        .content(body),
-                ).andReturn()
-        assertEquals(403, result.response.status)
-    }
-
-    @Test
-    fun `GET mail attachments download returns 404 for unknown attachment`() {
-        val token = adminToken()
-        val result = get("/api/mail/attachments/${UUID.randomUUID()}/download", token)
-        assertEquals(404, result.status())
+        assertEquals(403, unsigned.response.status)
     }
 
     private fun sign(

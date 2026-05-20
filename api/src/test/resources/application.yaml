@@ -1,3 +1,0 @@
-synoptic:
-    inbound-mail:
-        webhook-secret: test-inbound-mail-secret
