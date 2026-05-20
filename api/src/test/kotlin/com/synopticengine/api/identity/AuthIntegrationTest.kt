@@ -1,11 +1,8 @@
 package com.synopticengine.api.identity
 
 import com.synopticengine.api.AbstractIntegrationTest
-import com.synopticengine.api.shared.TenantContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.http.MediaType
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -18,15 +15,7 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
     @BeforeEach
     fun setup() {
         email = "auth-test-${UUID.randomUUID()}@test.com"
-        TenantContext.runAs(TenantContext.SEED_TENANT_ID) {
-            userService.create(
-                email = email,
-                password = password,
-                firstName = "Auth",
-                lastName = "User",
-                roleNames = setOf("ADMIN"),
-            )
-        }
+        auth.provision(roleNames = setOf("ADMIN"), email = email, firstName = "Auth", lastName = "User")
     }
 
     // ── Login ─────────────────────────────────────────────────────────────
@@ -34,7 +23,6 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `login with valid credentials returns tokens`() {
         val result = post("/auth/login", null, mapOf("email" to email, "password" to password))
-
         assertEquals(200, result.status())
         val body = result.bodyAsMap()!!
         assertNotNull(body["accessToken"])
@@ -45,37 +33,35 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `login with wrong password returns 400`() {
-        val result = post("/auth/login", null, mapOf("email" to email, "password" to "wrongpassword"))
-        assertEquals(400, result.status())
+        assertEquals(400, post("/auth/login", null, mapOf("email" to email, "password" to "wrong")).status())
     }
 
     @Test
     fun `login with unknown email returns 400`() {
-        val result = post("/auth/login", null, mapOf("email" to "nobody@nowhere.com", "password" to password))
-        assertEquals(400, result.status())
+        assertEquals(
+            400,
+            post("/auth/login", null, mapOf("email" to "nobody@nowhere.com", "password" to password)).status(),
+        )
     }
 
     @Test
     fun `login with missing email returns 400`() {
-        val result = post("/auth/login", null, mapOf("password" to password))
-        assertEquals(400, result.status())
+        assertEquals(400, post("/auth/login", null, mapOf("password" to password)).status())
     }
 
     @Test
     fun `login with invalid email format returns 422`() {
-        val result = post("/auth/login", null, mapOf("email" to "not-an-email", "password" to password))
-        assertEquals(422, result.status())
+        assertEquals(422, post("/auth/login", null, mapOf("email" to "not-an-email", "password" to password)).status())
     }
 
     // ── Refresh ───────────────────────────────────────────────────────────
 
     @Test
     fun `refresh with valid refresh token returns new access token`() {
-        val loginBody = post("/auth/login", null, mapOf("email" to email, "password" to password)).bodyAsMap()!!
-        val refreshToken = loginBody["refreshToken"] as String
-
+        val refreshToken =
+            post("/auth/login", null, mapOf("email" to email, "password" to password))
+                .bodyAsMap()!!["refreshToken"] as String
         val result = post("/auth/refresh", null, mapOf("refreshToken" to refreshToken))
-
         assertEquals(200, result.status())
         assertNotNull(result.bodyAsMap()!!["accessToken"])
     }
@@ -83,57 +69,41 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `refresh with access token returns 400`() {
         val accessToken = login(email, password)
-        val result = post("/auth/refresh", null, mapOf("refreshToken" to accessToken))
-        assertEquals(400, result.status())
+        assertEquals(400, post("/auth/refresh", null, mapOf("refreshToken" to accessToken)).status())
     }
 
     @Test
     fun `refresh with garbage token returns 400`() {
-        val result = post("/auth/refresh", null, mapOf("refreshToken" to "not.a.valid.token"))
-        assertEquals(400, result.status())
+        assertEquals(400, post("/auth/refresh", null, mapOf("refreshToken" to "not.a.valid.token")).status())
     }
 
     @Test
     fun `refresh with missing field returns 400`() {
-        val result = post("/auth/refresh", null, mapOf<String, String>())
-        assertEquals(400, result.status())
+        assertEquals(400, post("/auth/refresh", null, mapOf<String, String>()).status())
     }
 
     // ── GET /me ───────────────────────────────────────────────────────────
 
     @Test
-    fun `GET me with valid token returns current user`() {
+    fun `GET me with valid token returns current user and authorities`() {
         val token = login(email, password)
         val result = get("/auth/me", token)
-
         assertEquals(200, result.status())
         val body = result.bodyAsMap()!!
         assertEquals(email, body["email"])
         assertNotNull(body["id"])
         @Suppress("UNCHECKED_CAST")
-        val authorities = body["authorities"] as List<*>
-        assertTrue(authorities.isNotEmpty())
+        assertTrue((body["authorities"] as List<*>).isNotEmpty())
     }
 
     @Test
     fun `GET me without token returns 401`() {
-        val result = get("/auth/me", null)
-        assertEquals(401, result.status())
+        assertEquals(401, get("/auth/me", null).status())
     }
 
-    // ── Public endpoint availability ──────────────────────────────────────
-
     @Test
-    fun `login endpoint is accessible without auth`() {
-        // Should not return 401 — it may return 422 or 400 for bad input, never 401
-        val result =
-            mockMvc
-                .perform(
-                    MockMvcRequestBuilders
-                        .post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"),
-                ).andReturn()
-        assertTrue(result.status() != 401)
+    fun `login endpoint does not reject empty body with 401 (would mask validation)`() {
+        // Should return 400/422 for bad input, never 401 — the endpoint must be auth-free.
+        assertTrue(post("/auth/login", null, mapOf<String, String>()).status() != 401)
     }
 }

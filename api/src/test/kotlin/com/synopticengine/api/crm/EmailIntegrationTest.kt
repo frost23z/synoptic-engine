@@ -1,14 +1,18 @@
 package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.LeadFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class EmailIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var leadFactory: LeadFactory
+
     private lateinit var adminToken: String
     private lateinit var viewerToken: String
 
@@ -32,14 +36,14 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `compose email as VIEWER returns 403`() {
-        assertEquals(403, post("/api/mail", viewerToken, validComposeRequest()).status())
+        assertEquals(403, post("/api/mail", viewerToken, composeRequest()).status())
     }
 
     // ── Email CRUD ────────────────────────────────────────────────────────
 
     @Test
-    fun `compose email returns 201`() {
-        val result = post("/api/mail", adminToken, validComposeRequest())
+    fun `compose email returns 201 with sent folder and isRead false`() {
+        val result = post("/api/mail", adminToken, composeRequest())
         assertEquals(201, result.status())
         val body = result.bodyAsMap()!!
         assertNotNull(body["id"])
@@ -55,7 +59,7 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `get email by id returns detail`() {
-        val id = post("/api/mail", adminToken, validComposeRequest()).bodyAsMap()!!["id"] as String
+        val id = composeAndGetId()
         val result = get("/api/mail/$id", adminToken)
         assertEquals(200, result.status())
         assertEquals(id, result.bodyAsMap()!!["id"])
@@ -68,15 +72,15 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `list mail by folder returns filtered results`() {
-        post("/api/mail", adminToken, validComposeRequest())
+        composeAndGetId()
         val result = get("/api/mail?folder=sent", adminToken)
         assertEquals(200, result.status())
         assertNotNull(result.bodyAsMap()!!["content"])
     }
 
     @Test
-    fun `mark email as read returns updated isRead`() {
-        val id = post("/api/mail", adminToken, validComposeRequest()).bodyAsMap()!!["id"] as String
+    fun `mark email as read returns isRead true`() {
+        val id = composeAndGetId()
         assertEquals(false, get("/api/mail/$id", adminToken).bodyAsMap()!!["isRead"])
 
         val result = patch("/api/mail/$id/read", adminToken, mapOf("isRead" to true))
@@ -86,7 +90,7 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `move email folder returns updated folders`() {
-        val id = post("/api/mail", adminToken, validComposeRequest()).bodyAsMap()!!["id"] as String
+        val id = composeAndGetId()
         val result = patch("/api/mail/$id/folder", adminToken, mapOf("folder" to "trash"))
         assertEquals(200, result.status())
         assertTrue((result.bodyAsMap()!!["folders"] as List<*>).contains("trash"))
@@ -94,7 +98,7 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `delete email returns 204 and is unfindable`() {
-        val id = post("/api/mail", adminToken, validComposeRequest()).bodyAsMap()!!["id"] as String
+        val id = composeAndGetId()
         assertEquals(204, delete("/api/mail/$id", adminToken).status())
         assertEquals(404, get("/api/mail/$id", adminToken).status())
     }
@@ -102,39 +106,20 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
     // ── Lead email pivot ──────────────────────────────────────────────────
 
     @Test
-    fun `attach email to lead returns lead with emails`() {
-        val emailId = post("/api/mail", adminToken, validComposeRequest()).bodyAsMap()!!["id"] as String
-        val leadId = createLead()
+    fun `attach detach and list emails on lead`() {
+        val emailId = composeAndGetId()
+        val leadId = leadFactory.id(adminToken)
 
-        val result = post("/api/leads/$leadId/emails", adminToken, mapOf("emailId" to emailId))
-        assertEquals(200, result.status())
-    }
+        val attach = post("/api/leads/$leadId/emails", adminToken, mapOf("emailId" to emailId))
+        assertEquals(200, attach.status())
+        assertEquals(1, get("/api/leads/$leadId/emails", adminToken).bodyAsList()!!.size)
 
-    @Test
-    fun `list lead emails returns attached emails`() {
-        val emailId = post("/api/mail", adminToken, validComposeRequest()).bodyAsMap()!!["id"] as String
-        val leadId = createLead()
-        post("/api/leads/$leadId/emails", adminToken, mapOf("emailId" to emailId))
-
-        val result = get("/api/leads/$leadId/emails", adminToken)
-        assertEquals(200, result.status())
-        assertEquals(1, result.bodyAsList()!!.size)
-    }
-
-    @Test
-    fun `detach email from lead removes it`() {
-        val emailId = post("/api/mail", adminToken, validComposeRequest()).bodyAsMap()!!["id"] as String
-        val leadId = createLead()
-        post("/api/leads/$leadId/emails", adminToken, mapOf("emailId" to emailId))
-
-        val result = delete("/api/leads/$leadId/emails/$emailId", adminToken)
-        assertEquals(200, result.status())
+        val detach = delete("/api/leads/$leadId/emails/$emailId", adminToken)
+        assertEquals(200, detach.status())
         assertEquals(0, get("/api/leads/$leadId/emails", adminToken).bodyAsList()!!.size)
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private fun validComposeRequest() =
+    private fun composeRequest() =
         mapOf(
             "to" to "recipient@example.com",
             "subject" to "Test Subject",
@@ -142,14 +127,6 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
             "folders" to listOf("sent"),
         )
 
-    private fun createLead(): String =
-        post(
-            "/api/leads",
-            adminToken,
-            mapOf(
-                "title" to "Lead ${UUID.randomUUID().toString().take(6)}",
-                "pipelineId" to "00000000-0000-0000-0000-000000000010",
-                "stageId" to "00000000-0000-0000-0000-000000000011",
-            ),
-        ).bodyAsMap()!!["id"] as String
+    private fun composeAndGetId(): String =
+        post("/api/mail", adminToken, composeRequest()).bodyAsMap()!!["id"] as String
 }

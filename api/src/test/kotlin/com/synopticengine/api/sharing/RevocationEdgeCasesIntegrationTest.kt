@@ -1,11 +1,12 @@
 package com.synopticengine.api.sharing
 
 import com.synopticengine.api.AbstractIntegrationTest
-import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.sharing.domain.AccessLevel
 import com.synopticengine.api.sharing.domain.ResourceType
 import com.synopticengine.api.sharing.repo.RecordShareRepository
 import com.synopticengine.api.sharing.repo.ResourceVisibilityRepository
+import com.synopticengine.api.support.factories.LeadFactory
+import com.synopticengine.api.support.factories.TenantProvisioner
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import java.time.Instant
@@ -13,7 +14,6 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -23,194 +23,124 @@ import kotlin.test.assertTrue
  * than the API-layer "find own + shared" surface, which is the Sprint 2b-followup.
  */
 class RevocationEdgeCasesIntegrationTest : AbstractIntegrationTest() {
-    @Autowired
-    lateinit var tenantApi: TenantApi
+    @Autowired private lateinit var visibilityRepository: ResourceVisibilityRepository
 
-    @Autowired
-    lateinit var visibilityRepository: ResourceVisibilityRepository
+    @Autowired private lateinit var recordShareRepository: RecordShareRepository
 
-    @Autowired
-    lateinit var recordShareRepository: RecordShareRepository
+    @Autowired private lateinit var tenantProvisioner: TenantProvisioner
+
+    @Autowired private lateinit var leadFactory: LeadFactory
 
     @Test
-    fun `revoking the same share twice is a no-op the second time`() {
-        val (ownerId, ownerToken) = provision("twiceOwner")
-        val (consumerId, _) = provision("twiceConsumer")
-        val (pipelineId, stageId) = defaultPipelineAndStage(ownerToken)
+    fun `revoking the same share twice returns 404 on second attempt`() {
+        val owner = tenantProvisioner.provision("twiceOwner")
+        val consumer = tenantProvisioner.provision("twiceConsumer")
+        val leadId = leadFactory.id(owner.token, title = "Lead")
+        val shareId = createShare(owner.token, consumer.tenantId, leadId, "READ")
 
-        val leadId = createLead(ownerToken, "Lead", pipelineId, stageId)
-        val shareId =
-            (
-                post(
-                    "/api/records/share",
-                    ownerToken,
-                    mapOf(
-                        "consumerTenantId" to consumerId.toString(),
-                        "resourceType" to "leads",
-                        "resourceId" to leadId,
-                        "accessLevel" to "READ",
-                    ),
-                ).bodyAsMap()!!["id"] as String
-            )
-
-        val first = delete("/api/records/share/$shareId", ownerToken)
+        val first = delete("/api/records/share/$shareId", owner.token)
         assertEquals(200, first.status())
-        val firstRevokedAt = first.bodyAsMap()!!["revokedAt"]
-        assertNotNull(firstRevokedAt)
+        assertNotNull(first.bodyAsMap()!!["revokedAt"])
 
-        // Second delete returns 404 because the @SQLRestriction filter hides the
-        // already-revoked row from the active-row repository query. That's the
-        // user-visible "share is gone" behavior; the underlying audit row remains.
-        val second = delete("/api/records/share/$shareId", ownerToken)
-        assertEquals(404, second.status())
+        // @SQLRestriction filters the revoked row from the active-row repository query.
+        assertEquals(404, delete("/api/records/share/$shareId", owner.token).status())
 
-        assertEquals(
-            AccessLevel.NONE,
-            visibilityFor(consumerId, ResourceType.LEADS, UUID.fromString(leadId)),
-        )
-        assertNotNull(ownerId)
+        assertEquals(AccessLevel.NONE, visibilityFor(consumer.tenantId, ResourceType.LEADS, leadId))
     }
 
     @Test
     fun `expired share never shows up as effective access`() {
-        val (_, ownerToken) = provision("expOwner")
-        val (consumerId, _) = provision("expConsumer")
-        val (pipelineId, stageId) = defaultPipelineAndStage(ownerToken)
+        val owner = tenantProvisioner.provision("expOwner")
+        val consumer = tenantProvisioner.provision("expConsumer")
+        val leadId = leadFactory.id(owner.token, title = "Expiring share")
 
-        val leadId = createLead(ownerToken, "Expiring share", pipelineId, stageId)
-        val pastTimestamp = Instant.now().minusSeconds(60).toString()
         val resp =
             post(
                 "/api/records/share",
-                ownerToken,
+                owner.token,
                 mapOf(
-                    "consumerTenantId" to consumerId.toString(),
+                    "consumerTenantId" to consumer.tenantId.toString(),
                     "resourceType" to "leads",
-                    "resourceId" to leadId,
+                    "resourceId" to leadId.toString(),
                     "accessLevel" to "READ",
-                    "expiresAt" to pastTimestamp,
+                    "expiresAt" to Instant.now().minusSeconds(60).toString(),
                 ),
             )
         assertEquals(201, resp.status(), resp.response.contentAsString)
 
-        // ResourceVisibilityService.effectiveAccess filters by expires_at; record_shares
+        // ResourceVisibilityService.effectiveAccess filters by expires_at; the record
         // can still hold the row for audit, but visibility is dead.
-        assertEquals(
-            AccessLevel.NONE,
-            visibilityFor(consumerId, ResourceType.LEADS, UUID.fromString(leadId)),
-        )
+        assertEquals(AccessLevel.NONE, visibilityFor(consumer.tenantId, ResourceType.LEADS, leadId))
     }
 
     @Test
-    fun `revoking a relationship removes visibility from policies but leaves record_shares intact`() {
-        val (parentId, parentToken) = provision("relParent")
-        val (childId, childToken) = provision("relChild")
-        val (pipelineId, stageId) = defaultPipelineAndStage(parentToken)
+    fun `revoking a relationship removes policy visibility but leaves record_shares intact`() {
+        val parent = tenantProvisioner.provision("relParent")
+        val child = tenantProvisioner.provision("relChild")
+        val leadId = leadFactory.id(parent.token, title = "Hybrid lead")
 
-        val leadId = createLead(parentToken, "Hybrid lead", pipelineId, stageId)
-
-        // Set up a relationship-level READ policy on leads.
+        // Relationship-level READ policy on leads.
         val relId =
-            (
-                post(
-                    "/api/relationships",
-                    parentToken,
-                    mapOf("targetTenantId" to childId.toString(), "type" to "PARENT_CHILD"),
-                ).bodyAsMap()!!["id"] as String
-            )
-        patch("/api/relationships/$relId/accept", childToken)
+            post(
+                "/api/relationships",
+                parent.token,
+                mapOf("targetTenantId" to child.tenantId.toString(), "type" to "PARENT_CHILD"),
+            ).bodyAsMap()!!["id"] as String
+        patch("/api/relationships/$relId/accept", child.token)
         post(
             "/api/relationships/$relId/policies",
-            parentToken,
+            parent.token,
             mapOf("resourceType" to "leads", "accessLevel" to "READ"),
         )
 
-        // ALSO grant a record-level share at WRITE on the same lead.
-        val shareResp =
-            post(
-                "/api/records/share",
-                parentToken,
-                mapOf(
-                    "consumerTenantId" to childId.toString(),
-                    "resourceType" to "leads",
-                    "resourceId" to leadId,
-                    "accessLevel" to "WRITE",
-                ),
-            )
-        assertEquals(201, shareResp.status())
+        // ALSO grant a record-level WRITE share on the same lead.
+        createShare(parent.token, child.tenantId, leadId, "WRITE")
 
         // Effective access is max(READ, WRITE) = WRITE.
-        assertEquals(
-            AccessLevel.WRITE,
-            visibilityFor(childId, ResourceType.LEADS, UUID.fromString(leadId)),
-        )
+        assertEquals(AccessLevel.WRITE, visibilityFor(child.tenantId, ResourceType.LEADS, leadId))
 
-        // Revoke the RELATIONSHIP. Policy-sourced visibility goes away. Record-share
-        // visibility remains — sharing rights survive the relationship lifecycle.
-        patch("/api/relationships/$relId/revoke", parentToken)
+        // Revoke the RELATIONSHIP — policy visibility goes away, record-share remains.
+        patch("/api/relationships/$relId/revoke", parent.token)
 
-        // Now effective access should be just the record share's WRITE.
-        assertEquals(
-            AccessLevel.WRITE,
-            visibilityFor(childId, ResourceType.LEADS, UUID.fromString(leadId)),
-        )
-
-        // The record_shares row is still there.
+        assertEquals(AccessLevel.WRITE, visibilityFor(child.tenantId, ResourceType.LEADS, leadId))
         val activeShares =
             recordShareRepository.findAllByOwnerTenantIdAndResourceTypeAndResourceId(
-                parentId,
+                parent.tenantId,
                 ResourceType.LEADS.literal,
-                UUID.fromString(leadId),
+                leadId,
             )
         assertTrue(activeShares.any { it.revokedAt == null })
     }
 
     @Test
     fun `consumer can revoke their own incoming share (opt-out)`() {
-        val (ownerId, ownerToken) = provision("optOwner")
-        val (consumerId, consumerToken) = provision("optConsumer")
-        val (pipelineId, stageId) = defaultPipelineAndStage(ownerToken)
+        val owner = tenantProvisioner.provision("optOwner")
+        val consumer = tenantProvisioner.provision("optConsumer")
+        val leadId = leadFactory.id(owner.token, title = "Opt-out")
+        val shareId = createShare(owner.token, consumer.tenantId, leadId, "READ")
 
-        val leadId = createLead(ownerToken, "Opt-out", pipelineId, stageId)
-        val shareId =
-            (
-                post(
-                    "/api/records/share",
-                    ownerToken,
-                    mapOf(
-                        "consumerTenantId" to consumerId.toString(),
-                        "resourceType" to "leads",
-                        "resourceId" to leadId,
-                        "accessLevel" to "READ",
-                    ),
-                ).bodyAsMap()!!["id"] as String
-            )
-
-        // Consumer revokes — drops their own visibility.
-        val revoke = delete("/api/records/share/$shareId", consumerToken)
+        val revoke = delete("/api/records/share/$shareId", consumer.token)
         assertEquals(200, revoke.status())
 
-        assertEquals(
-            AccessLevel.NONE,
-            visibilityFor(consumerId, ResourceType.LEADS, UUID.fromString(leadId)),
-        )
-
-        // Listing on the owner side no longer shows the share.
-        val list = get("/api/records/leads/$leadId/shares", ownerToken).bodyAsList()!!
-        assertFalse(list.any { it["id"] == shareId })
-        assertNull(ownerId.takeIf { it == ownerId.let { _ -> null } }) // silence unused
+        assertEquals(AccessLevel.NONE, visibilityFor(consumer.tenantId, ResourceType.LEADS, leadId))
+        assertFalse(get("/api/records/leads/$leadId/shares", owner.token).bodyAsList()!!.any { it["id"] == shareId })
     }
 
-    private fun createLead(
-        token: String,
-        title: String,
-        pipelineId: String,
-        stageId: String,
+    private fun createShare(
+        ownerToken: String,
+        consumerTenantId: UUID,
+        leadId: UUID,
+        accessLevel: String,
     ): String =
         post(
-            "/api/leads",
-            token,
-            mapOf("title" to title, "amount" to 1_000, "pipelineId" to pipelineId, "stageId" to stageId),
+            "/api/records/share",
+            ownerToken,
+            mapOf(
+                "consumerTenantId" to consumerTenantId.toString(),
+                "resourceType" to "leads",
+                "resourceId" to leadId.toString(),
+                "accessLevel" to accessLevel,
+            ),
         ).bodyAsMap()!!["id"] as String
 
     private fun visibilityFor(
@@ -227,27 +157,5 @@ class RevocationEdgeCasesIntegrationTest : AbstractIntegrationTest() {
                 ).filter { it.expiresAt == null || it.expiresAt!! > Instant.now() }
         if (rows.isEmpty()) return AccessLevel.NONE
         return rows.map { it.accessLevel }.reduce(AccessLevel::max)
-    }
-
-    private fun provision(prefix: String): Pair<UUID, String> {
-        val slug = "$prefix-${UUID.randomUUID().toString().take(6)}"
-        val adminEmail = "$prefix-${UUID.randomUUID()}@test.com"
-        val password = "Password123!"
-        val summary = tenantApi.provision(prefix.replaceFirstChar { it.titlecase() }, slug, adminEmail, password)
-        return summary.id to login(adminEmail, password)
-    }
-
-    private fun defaultPipelineAndStage(token: String): Pair<String, String> {
-        val pipelines =
-            get("/api/pipelines", token).bodyAsList()
-                ?: error("Expected pipelines list available")
-        val defaultPipeline =
-            pipelines.firstOrNull { it["isDefault"] == true }
-                ?: error("No default pipeline found")
-        val pipelineId = defaultPipeline["id"] as String
-
-        @Suppress("UNCHECKED_CAST")
-        val stages = defaultPipeline["stages"] as List<Map<String, Any>>
-        return pipelineId to (stages.first()["id"] as String)
     }
 }

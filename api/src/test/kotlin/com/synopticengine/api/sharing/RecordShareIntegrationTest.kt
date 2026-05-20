@@ -1,10 +1,13 @@
 package com.synopticengine.api.sharing
 
 import com.synopticengine.api.AbstractIntegrationTest
-import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.sharing.domain.AccessLevel
 import com.synopticengine.api.sharing.domain.ResourceType
 import com.synopticengine.api.sharing.repo.ResourceVisibilityRepository
+import com.synopticengine.api.support.factories.LeadFactory
+import com.synopticengine.api.support.factories.OrganizationFactory
+import com.synopticengine.api.support.factories.PersonFactory
+import com.synopticengine.api.support.factories.TenantProvisioner
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
@@ -19,58 +22,40 @@ import kotlin.test.assertTrue
  * person/organization per `CascadeRules`.
  */
 class RecordShareIntegrationTest : AbstractIntegrationTest() {
-    @Autowired
-    lateinit var tenantApi: TenantApi
+    @Autowired private lateinit var visibilityRepository: ResourceVisibilityRepository
 
-    @Autowired
-    lateinit var visibilityRepository: ResourceVisibilityRepository
+    @Autowired private lateinit var tenantProvisioner: TenantProvisioner
+
+    @Autowired private lateinit var personFactory: PersonFactory
+
+    @Autowired private lateinit var organizationFactory: OrganizationFactory
+
+    @Autowired private lateinit var leadFactory: LeadFactory
 
     @Test
     fun `share a lead with a partner — direct visibility plus cascade to person and organization`() {
-        val (ownerId, ownerToken) = provision("owner")
-        val (consumerId, _) = provision("consumer")
-        val (pipelineId, stageId) = defaultPipelineAndStage(ownerToken)
+        val owner = tenantProvisioner.provision("owner")
+        val consumer = tenantProvisioner.provision("consumer")
 
-        // Set up a person + organization in the owner's tenant, link them to a lead.
-        val personId =
-            UUID.fromString(
-                post(
-                    "/api/contacts/persons",
-                    ownerToken,
-                    mapOf("firstName" to "Alice", "lastName" to "Smith"),
-                ).bodyAsMap()!!["id"] as String,
-            )
-        val organizationId =
-            UUID.fromString(
-                post(
-                    "/api/contacts/organizations",
-                    ownerToken,
-                    mapOf("name" to "Acme Inc"),
-                ).bodyAsMap()!!["id"] as String,
-            )
+        val personId = personFactory.id(owner.token, firstName = "Alice", lastName = "Smith")
+        val organizationId = organizationFactory.id(owner.token, name = "Acme Inc")
         val leadId =
             UUID.fromString(
-                post(
-                    "/api/leads",
-                    ownerToken,
-                    mapOf(
-                        "title" to "Acme — ad hoc share",
-                        "amount" to 25_000,
-                        "pipelineId" to pipelineId,
-                        "stageId" to stageId,
-                        "personId" to personId.toString(),
-                        "organizationId" to organizationId.toString(),
-                    ),
-                ).bodyAsMap()!!["id"] as String,
+                leadFactory.create(
+                    owner.token,
+                    title = "Acme — ad hoc share",
+                    personId = personId,
+                    organizationId = organizationId,
+                    amount = 25_000,
+                )["id"] as String,
             )
 
-        // Share the lead with the consumer at WRITE level.
         val shareResp =
             post(
                 "/api/records/share",
-                ownerToken,
+                owner.token,
                 mapOf(
-                    "consumerTenantId" to consumerId.toString(),
+                    "consumerTenantId" to consumer.tenantId.toString(),
                     "resourceType" to "leads",
                     "resourceId" to leadId.toString(),
                     "accessLevel" to "WRITE",
@@ -79,119 +64,86 @@ class RecordShareIntegrationTest : AbstractIntegrationTest() {
         assertEquals(201, shareResp.status(), shareResp.response.contentAsString)
         val shareId = UUID.fromString(shareResp.bodyAsMap()!!["id"] as String)
 
-        // Direct visibility for the lead.
-        assertEquals(AccessLevel.WRITE, visibilityFor(consumerId, ResourceType.LEADS, leadId))
-        // Cascade visibility for the person + organization (default READ).
-        assertEquals(AccessLevel.READ, visibilityFor(consumerId, ResourceType.PERSONS, personId))
-        assertEquals(AccessLevel.READ, visibilityFor(consumerId, ResourceType.ORGANIZATIONS, organizationId))
+        // Direct visibility for the lead, cascade for the person + organization.
+        assertEquals(AccessLevel.WRITE, visibilityFor(consumer.tenantId, ResourceType.LEADS, leadId))
+        assertEquals(AccessLevel.READ, visibilityFor(consumer.tenantId, ResourceType.PERSONS, personId))
+        assertEquals(AccessLevel.READ, visibilityFor(consumer.tenantId, ResourceType.ORGANIZATIONS, organizationId))
 
-        // List shares: shows up.
-        val list = get("/api/records/leads/$leadId/shares", ownerToken).bodyAsList()!!
+        val list = get("/api/records/leads/$leadId/shares", owner.token).bodyAsList()!!
         assertTrue(list.any { it["id"] == shareId.toString() })
 
         // Revoke: every visibility row attached to this share disappears.
-        val revoked = delete("/api/records/share/$shareId", ownerToken)
+        val revoked = delete("/api/records/share/$shareId", owner.token)
         assertEquals(200, revoked.status())
         assertNotNull(revoked.bodyAsMap()!!["revokedAt"])
 
-        assertEquals(AccessLevel.NONE, visibilityFor(consumerId, ResourceType.LEADS, leadId))
-        assertEquals(AccessLevel.NONE, visibilityFor(consumerId, ResourceType.PERSONS, personId))
-        assertEquals(AccessLevel.NONE, visibilityFor(consumerId, ResourceType.ORGANIZATIONS, organizationId))
-
-        val listAfterRevoke = get("/api/records/leads/$leadId/shares", ownerToken).bodyAsList()!!
-        assertFalse(listAfterRevoke.any { it["id"] == shareId.toString() })
+        assertEquals(AccessLevel.NONE, visibilityFor(consumer.tenantId, ResourceType.LEADS, leadId))
+        assertEquals(AccessLevel.NONE, visibilityFor(consumer.tenantId, ResourceType.PERSONS, personId))
+        assertEquals(AccessLevel.NONE, visibilityFor(consumer.tenantId, ResourceType.ORGANIZATIONS, organizationId))
+        assertFalse(
+            get("/api/records/leads/$leadId/shares", owner.token).bodyAsList()!!.any {
+                it["id"] ==
+                    shareId.toString()
+            },
+        )
     }
 
     @Test
     fun `cannot share a lead that isn't owned by your tenant`() {
-        val (_, ownerToken) = provision("attA")
-        val (otherId, otherToken) = provision("attB")
-        val (otherPipeline, otherStage) = defaultPipelineAndStage(otherToken)
+        val attempting = tenantProvisioner.provision("attA")
+        val other = tenantProvisioner.provision("attB")
 
         // Lead lives in the OTHER tenant.
-        val leadId =
-            UUID.fromString(
-                post(
-                    "/api/leads",
-                    otherToken,
-                    mapOf(
-                        "title" to "Their lead",
-                        "amount" to 1_000,
-                        "pipelineId" to otherPipeline,
-                        "stageId" to otherStage,
-                    ),
-                ).bodyAsMap()!!["id"] as String,
-            )
+        val leadId = leadFactory.id(other.token, title = "Their lead")
 
         val attempt =
             post(
                 "/api/records/share",
-                ownerToken,
+                attempting.token,
                 mapOf(
-                    "consumerTenantId" to otherId.toString(),
+                    "consumerTenantId" to other.tenantId.toString(),
                     "resourceType" to "leads",
                     "resourceId" to leadId.toString(),
                     "accessLevel" to "READ",
                 ),
             )
-        // Owner tenant doesn't own the lead → 404 (we deliberately don't leak existence
-        // through 403 — the lead is invisible to the acting tenant via Hibernate filter).
+        // We deliberately don't leak existence through 403 — the lead is invisible
+        // to the acting tenant via Hibernate filter, so 404 is also valid.
         assertTrue(attempt.status() == 404 || attempt.status() == 403, "Got ${attempt.status()}")
     }
 
     @Test
-    fun `re-sharing the same record upgrades the access level instead of duplicating`() {
-        val (ownerId, ownerToken) = provision("dupOwner")
-        val (consumerId, _) = provision("dupConsumer")
-        val (pipelineId, stageId) = defaultPipelineAndStage(ownerToken)
+    fun `re-sharing the same record upgrades access level instead of duplicating`() {
+        val owner = tenantProvisioner.provision("dupOwner")
+        val consumer = tenantProvisioner.provision("dupConsumer")
+        val leadId = leadFactory.id(owner.token, title = "Dup lead")
 
-        val leadId =
-            UUID.fromString(
-                post(
-                    "/api/leads",
-                    ownerToken,
-                    mapOf(
-                        "title" to "Dup lead",
-                        "amount" to 1_000,
-                        "pipelineId" to pipelineId,
-                        "stageId" to stageId,
-                    ),
-                ).bodyAsMap()!!["id"] as String,
-            )
-
-        // Share READ first.
-        val first =
+        val firstId =
             post(
                 "/api/records/share",
-                ownerToken,
+                owner.token,
                 mapOf(
-                    "consumerTenantId" to consumerId.toString(),
+                    "consumerTenantId" to consumer.tenantId.toString(),
                     "resourceType" to "leads",
                     "resourceId" to leadId.toString(),
                     "accessLevel" to "READ",
                 ),
-            )
-        assertEquals(201, first.status())
-        val firstId = first.bodyAsMap()!!["id"]
+            ).bodyAsMap()!!["id"]
 
-        // Share again at WRITE — same row id returned, level upgraded.
-        val second =
+        val secondId =
             post(
                 "/api/records/share",
-                ownerToken,
+                owner.token,
                 mapOf(
-                    "consumerTenantId" to consumerId.toString(),
+                    "consumerTenantId" to consumer.tenantId.toString(),
                     "resourceType" to "leads",
                     "resourceId" to leadId.toString(),
                     "accessLevel" to "WRITE",
                 ),
-            )
-        assertEquals(201, second.status())
-        val secondId = second.bodyAsMap()!!["id"]
-        assertEquals(firstId, secondId, "Re-sharing the same record should update the existing row, not insert another")
+            ).bodyAsMap()!!["id"]
 
-        assertEquals(AccessLevel.WRITE, visibilityFor(consumerId, ResourceType.LEADS, leadId))
-        assertNotNull(ownerId) // silence the unused
+        assertEquals(firstId, secondId, "Re-sharing the same record should update the existing row, not insert another")
+        assertEquals(AccessLevel.WRITE, visibilityFor(consumer.tenantId, ResourceType.LEADS, leadId))
     }
 
     private fun visibilityFor(
@@ -207,27 +159,5 @@ class RecordShareIntegrationTest : AbstractIntegrationTest() {
             )
         if (rows.isEmpty()) return AccessLevel.NONE
         return rows.map { it.accessLevel }.reduce(AccessLevel::max)
-    }
-
-    private fun provision(prefix: String): Pair<UUID, String> {
-        val slug = "$prefix-${UUID.randomUUID().toString().take(6)}"
-        val adminEmail = "$prefix-${UUID.randomUUID()}@test.com"
-        val password = "Password123!"
-        val summary = tenantApi.provision(prefix.replaceFirstChar { it.titlecase() }, slug, adminEmail, password)
-        return summary.id to login(adminEmail, password)
-    }
-
-    private fun defaultPipelineAndStage(token: String): Pair<String, String> {
-        val pipelines =
-            get("/api/pipelines", token).bodyAsList()
-                ?: error("Expected pipelines list available")
-        val defaultPipeline =
-            pipelines.firstOrNull { it["isDefault"] == true }
-                ?: error("No default pipeline found")
-        val pipelineId = defaultPipeline["id"] as String
-
-        @Suppress("UNCHECKED_CAST")
-        val stages = defaultPipeline["stages"] as List<Map<String, Any>>
-        return pipelineId to (stages.first()["id"] as String)
     }
 }

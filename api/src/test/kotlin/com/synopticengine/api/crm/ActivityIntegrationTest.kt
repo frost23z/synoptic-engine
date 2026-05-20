@@ -1,18 +1,19 @@
 package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.ActivityFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.http.MediaType
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+import org.springframework.beans.factory.annotation.Autowired
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ActivityIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var activityFactory: ActivityFactory
+
     private lateinit var adminToken: String
     private lateinit var viewerToken: String
 
@@ -36,22 +37,20 @@ class ActivityIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `create activity as VIEWER returns 403`() {
-        assertEquals(403, post("/api/activities", viewerToken, validCreateRequest()).status())
+        assertEquals(403, post("/api/activities", viewerToken, mapOf("title" to "x", "type" to "NOTE")).status())
     }
 
     @Test
     fun `delete activity as VIEWER returns 403`() {
-        val id = post("/api/activities", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = activityFactory.id(adminToken)
         assertEquals(403, delete("/api/activities/$id", viewerToken).status())
     }
 
     // ── CRUD ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `create activity returns 201 with correct fields`() {
-        val result = post("/api/activities", adminToken, validCreateRequest())
-        assertEquals(201, result.status())
-        val body = result.bodyAsMap()!!
+    fun `create activity returns 201 with type CALL and schedule populated`() {
+        val body = activityFactory.create(adminToken, comment = "Discuss Q3 targets")
         assertNotNull(body["id"])
         assertEquals("CALL", body["type"])
         assertEquals(false, body["isDone"])
@@ -61,22 +60,22 @@ class ActivityIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `create activity with blank title returns 422`() {
-        val request = validCreateRequest().toMutableMap().also { it["title"] = "  " }
+        val request = mapOf("title" to "  ", "type" to "CALL", "scheduleFrom" to Instant.now().toString())
         assertEquals(422, post("/api/activities", adminToken, request).status())
     }
 
     @Test
-    fun `create activity without scheduleFrom returns 400`() {
+    fun `create CALL activity without scheduleFrom returns 400`() {
         val request = mapOf("title" to "Test", "type" to "CALL", "scheduleTo" to Instant.now().toString())
         assertEquals(400, post("/api/activities", adminToken, request).status())
     }
 
     @Test
     fun `get activity by id returns full detail`() {
-        val id = post("/api/activities", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = activityFactory.id(adminToken)
         val result = get("/api/activities/$id", adminToken)
         assertEquals(200, result.status())
-        assertEquals(id, result.bodyAsMap()!!["id"])
+        assertEquals(id.toString(), result.bodyAsMap()!!["id"])
     }
 
     @Test
@@ -85,24 +84,28 @@ class ActivityIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `update activity returns 200`() {
-        val id = post("/api/activities", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+    fun `update activity returns 200 with updated fields`() {
+        val id = activityFactory.id(adminToken)
+        val now = Instant.now()
         val update =
-            validCreateRequest().toMutableMap().also {
-                it["title"] = "Updated Call"
-                it["type"] = "MEETING"
-                it["isDone"] = true
-            }
+            mapOf(
+                "title" to "Updated Call",
+                "type" to "MEETING",
+                "isDone" to true,
+                "scheduleFrom" to now.toString(),
+                "scheduleTo" to now.plusSeconds(3600).toString(),
+            )
         val result = put("/api/activities/$id", adminToken, update)
         assertEquals(200, result.status())
-        assertEquals("Updated Call", result.bodyAsMap()!!["title"])
-        assertEquals("MEETING", result.bodyAsMap()!!["type"])
-        assertEquals(true, result.bodyAsMap()!!["isDone"])
+        val body = result.bodyAsMap()!!
+        assertEquals("Updated Call", body["title"])
+        assertEquals("MEETING", body["type"])
+        assertEquals(true, body["isDone"])
     }
 
     @Test
-    fun `toggle done flips isDone`() {
-        val id = post("/api/activities", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+    fun `toggle done flips isDone back and forth`() {
+        val id = activityFactory.id(adminToken)
         assertEquals(false, get("/api/activities/$id", adminToken).bodyAsMap()!!["isDone"])
 
         val toggled = patch("/api/activities/$id/done", adminToken)
@@ -115,7 +118,7 @@ class ActivityIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `delete activity returns 204 and is unfindable`() {
-        val id = post("/api/activities", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = activityFactory.id(adminToken)
         assertEquals(204, delete("/api/activities/$id", adminToken).status())
         assertEquals(404, get("/api/activities/$id", adminToken).status())
     }
@@ -123,8 +126,8 @@ class ActivityIntegrationTest : AbstractIntegrationTest() {
     // ── Filtering ─────────────────────────────────────────────────────────
 
     @Test
-    fun `filter activities by type`() {
-        post("/api/activities", adminToken, validCreateRequest()) // type CALL
+    fun `filter activities by type returns only matching type`() {
+        activityFactory.create(adminToken, type = "CALL")
         val result = get("/api/activities?type=CALL", adminToken)
         assertEquals(200, result.status())
         @Suppress("UNCHECKED_CAST")
@@ -133,38 +136,14 @@ class ActivityIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `filter activities by isDone`() {
-        val id = post("/api/activities", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        patch("/api/activities/$id/done", adminToken) // mark done
+    fun `filter activities by isDone returns only done`() {
+        val id = activityFactory.id(adminToken)
+        patch("/api/activities/$id/done", adminToken)
 
         val result = get("/api/activities?isDone=true", adminToken)
         assertEquals(200, result.status())
         @Suppress("UNCHECKED_CAST")
         val items = (result.bodyAsMap()!!["content"] as List<Map<String, Any>>)
         assertTrue(items.all { it["isDone"] == true })
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private fun patch(
-        path: String,
-        token: String?,
-    ) = mockMvc
-        .perform(
-            MockMvcRequestBuilders
-                .patch(path)
-                .contentType(MediaType.APPLICATION_JSON)
-                .also { if (token != null) it.header("Authorization", "Bearer $token") },
-        ).andReturn()
-
-    private fun validCreateRequest(): Map<String, Any> {
-        val now = Instant.now()
-        return mapOf(
-            "title" to "Follow up call ${UUID.randomUUID().toString().take(6)}",
-            "type" to "CALL",
-            "scheduleFrom" to now.toString(),
-            "scheduleTo" to now.plus(1, ChronoUnit.HOURS).toString(),
-            "comment" to "Discuss Q3 targets",
-        )
     }
 }

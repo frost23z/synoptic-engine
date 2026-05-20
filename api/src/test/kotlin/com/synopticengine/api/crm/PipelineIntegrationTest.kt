@@ -33,7 +33,7 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `seeded default pipeline has 6 stages`() {
+    fun `seeded default pipeline has 6 stages including won and lost`() {
         val pipelines = get("/api/pipelines", adminToken).bodyAsList()!!
         val defaultPipeline = pipelines.first { it["isDefault"] == true }
 
@@ -46,7 +46,7 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `create pipeline returns 201`() {
+    fun `create pipeline returns 201 with isDefault false`() {
         val name = "Test Pipeline ${UUID.randomUUID().toString().take(8)}"
         val result = post("/api/pipelines", adminToken, mapOf("name" to name, "rottenDays" to 14))
         assertEquals(201, result.status())
@@ -58,8 +58,7 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `get pipeline by id includes stages`() {
-        val pipelines = get("/api/pipelines", adminToken).bodyAsList()!!
-        val id = pipelines.first()["id"] as String
+        val id = get("/api/pipelines", adminToken).bodyAsList()!!.first()["id"] as String
         val result = get("/api/pipelines/$id", adminToken)
         assertEquals(200, result.status())
         assertNotNull(result.bodyAsMap()!!["stages"])
@@ -72,8 +71,7 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `update pipeline returns 200`() {
-        val name = "UPD Pipeline ${UUID.randomUUID().toString().take(8)}"
-        val id = post("/api/pipelines", adminToken, mapOf("name" to name)).bodyAsMap()!!["id"] as String
+        val id = createPipeline()
         val result =
             put(
                 "/api/pipelines/$id",
@@ -86,32 +84,21 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `delete non-default pipeline returns 204`() {
-        val id =
-            post(
-                "/api/pipelines",
-                adminToken,
-                mapOf("name" to "DEL-${UUID.randomUUID().toString().take(8)}"),
-            ).bodyAsMap()!!["id"] as String
+        val id = createPipeline()
         assertEquals(204, delete("/api/pipelines/$id", adminToken).status())
         assertEquals(404, get("/api/pipelines/$id", adminToken).status())
     }
 
     @Test
     fun `delete default pipeline returns 409`() {
-        val pipelines = get("/api/pipelines", adminToken).bodyAsList()!!
-        val defaultId = (pipelines.first { it["isDefault"] == true })["id"] as String
+        val defaultId =
+            get("/api/pipelines", adminToken).bodyAsList()!!.first { it["isDefault"] == true }["id"] as String
         assertEquals(409, delete("/api/pipelines/$defaultId", adminToken).status())
     }
 
     @Test
-    fun `add stage to pipeline returns 201`() {
-        val pipelineId =
-            post(
-                "/api/pipelines",
-                adminToken,
-                mapOf("name" to "STGD-${UUID.randomUUID().toString().take(8)}"),
-            ).bodyAsMap()!!["id"] as String
-
+    fun `add stage to pipeline returns 201 with parent pipelineId`() {
+        val pipelineId = createPipeline()
         val result =
             post(
                 "/api/pipelines/$pipelineId/stages",
@@ -126,19 +113,8 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `update stage returns 200`() {
-        val pipelineId =
-            post(
-                "/api/pipelines",
-                adminToken,
-                mapOf("name" to "UPS-${UUID.randomUUID().toString().take(8)}"),
-            ).bodyAsMap()!!["id"] as String
-        val stageId =
-            post(
-                "/api/pipelines/$pipelineId/stages",
-                adminToken,
-                mapOf("name" to "Stage A", "sortOrder" to 1, "probability" to 10),
-            ).bodyAsMap()!!["id"] as String
-
+        val pipelineId = createPipeline()
+        val stageId = createStage(pipelineId, name = "Stage A", sortOrder = 1, probability = 10)
         val result =
             put(
                 "/api/pipelines/$pipelineId/stages/$stageId",
@@ -150,27 +126,31 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `delete stage returns 204`() {
-        val pipelineId =
-            post(
-                "/api/pipelines",
-                adminToken,
-                mapOf("name" to "DS-${UUID.randomUUID().toString().take(8)}"),
-            ).bodyAsMap()!!["id"] as String
-        // Need a sibling stage — the service refuses to delete the only stage in a pipeline
-        // since any leads on it would have nowhere to move.
+    fun `delete stage returns 204 (when pipeline has a sibling stage)`() {
+        // The service refuses to delete the only stage in a pipeline since any leads on it
+        // would have nowhere to move — so we create a sibling first.
+        val pipelineId = createPipeline()
+        createStage(pipelineId, name = "Keeper", sortOrder = 1, probability = 50)
+        val stageId = createStage(pipelineId, name = "To Delete", sortOrder = 2, probability = 0)
+        assertEquals(204, delete("/api/pipelines/$pipelineId/stages/$stageId", adminToken).status())
+    }
+
+    private fun createPipeline(): String =
+        post(
+            "/api/pipelines",
+            adminToken,
+            mapOf("name" to "P-${UUID.randomUUID().toString().take(8)}"),
+        ).bodyAsMap()!!["id"] as String
+
+    private fun createStage(
+        pipelineId: String,
+        name: String,
+        sortOrder: Int,
+        probability: Int,
+    ): String =
         post(
             "/api/pipelines/$pipelineId/stages",
             adminToken,
-            mapOf("name" to "Keeper", "sortOrder" to 1, "probability" to 50),
-        )
-        val stageId =
-            post(
-                "/api/pipelines/$pipelineId/stages",
-                adminToken,
-                mapOf("name" to "To Delete", "sortOrder" to 2, "probability" to 0),
-            ).bodyAsMap()!!["id"] as String
-
-        assertEquals(204, delete("/api/pipelines/$pipelineId/stages/$stageId", adminToken).status())
-    }
+            mapOf("name" to name, "sortOrder" to sortOrder, "probability" to probability),
+        ).bodyAsMap()!!["id"] as String
 }

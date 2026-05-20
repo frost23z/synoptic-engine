@@ -1,11 +1,18 @@
 package com.synopticengine.api.support
 
+import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.identity.service.UserService
 import com.synopticengine.api.support.factories.ActivityFactory
+import com.synopticengine.api.support.factories.AttributeFactory
 import com.synopticengine.api.support.factories.LeadFactory
 import com.synopticengine.api.support.factories.OrganizationFactory
 import com.synopticengine.api.support.factories.PersonFactory
+import com.synopticengine.api.support.factories.PipelineResolver
+import com.synopticengine.api.support.factories.ProductFactory
+import com.synopticengine.api.support.factories.QuoteFactory
 import com.synopticengine.api.support.factories.TagFactory
+import com.synopticengine.api.support.factories.TenantProvisioner
+import com.synopticengine.api.support.factories.WarehouseFactory
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.test.web.servlet.MockMvc
@@ -47,4 +54,28 @@ class TestSupportConfig {
         testHttp: TestHttp,
         personFactory: PersonFactory,
     ): LeadFactory = LeadFactory(testHttp, personFactory)
+
+    @Bean
+    fun productFactory(testHttp: TestHttp): ProductFactory = ProductFactory(testHttp)
+
+    @Bean
+    fun warehouseFactory(testHttp: TestHttp): WarehouseFactory = WarehouseFactory(testHttp)
+
+    @Bean
+    fun quoteFactory(
+        testHttp: TestHttp,
+        leadFactory: LeadFactory,
+    ): QuoteFactory = QuoteFactory(testHttp, leadFactory)
+
+    @Bean
+    fun attributeFactory(testHttp: TestHttp): AttributeFactory = AttributeFactory(testHttp)
+
+    @Bean
+    fun pipelineResolver(testHttp: TestHttp): PipelineResolver = PipelineResolver(testHttp)
+
+    @Bean
+    fun tenantProvisioner(
+        tenantApi: TenantApi,
+        testAuth: TestAuth,
+    ): TenantProvisioner = TenantProvisioner(tenantApi, testAuth)
 }

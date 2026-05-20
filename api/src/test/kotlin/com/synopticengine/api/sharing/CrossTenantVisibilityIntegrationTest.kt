@@ -1,16 +1,16 @@
 package com.synopticengine.api.sharing
 
 import com.synopticengine.api.AbstractIntegrationTest
-import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.sharing.domain.AccessLevel
 import com.synopticengine.api.sharing.domain.ResourceType
 import com.synopticengine.api.sharing.repo.ResourceVisibilityRepository
+import com.synopticengine.api.support.factories.LeadFactory
+import com.synopticengine.api.support.factories.ProductFactory
+import com.synopticengine.api.support.factories.TenantProvisioner
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Phase 2 / Sprint 2b acceptance: per the task brief, each relationship type yields
@@ -26,185 +26,137 @@ import kotlin.test.assertTrue
  *   - SUPPLIER_CLIENT supplier → client READ on products: client gets visibility; revoke clears.
  */
 class CrossTenantVisibilityIntegrationTest : AbstractIntegrationTest() {
-    @Autowired
-    lateinit var tenantApi: TenantApi
+    @Autowired private lateinit var visibilityRepository: ResourceVisibilityRepository
 
-    @Autowired
-    lateinit var visibilityRepository: ResourceVisibilityRepository
+    @Autowired private lateinit var tenantProvisioner: TenantProvisioner
+
+    @Autowired private lateinit var leadFactory: LeadFactory
+
+    @Autowired private lateinit var productFactory: ProductFactory
 
     @Test
     fun `PARENT_CHILD READ policy on leads materializes visibility for the child only`() {
-        val (parentId, parentToken) = provision("parent")
-        val (childId, childToken) = provision("child")
-        val (parentPipeline, parentStage) = defaultPipelineAndStage(parentToken)
-        val (childPipeline, childStage) = defaultPipelineAndStage(childToken)
-
-        val parentLeadId = createLead(parentToken, "Acme deal", parentPipeline, parentStage)
-        val childLeadId = createLead(childToken, "Subsidiary deal", childPipeline, childStage)
+        val parent = tenantProvisioner.provision("parent")
+        val child = tenantProvisioner.provision("child")
+        val parentLeadId = leadFactory.id(parent.token, title = "Acme deal")
+        val childLeadId = leadFactory.id(child.token, title = "Subsidiary deal")
 
         val relId =
-            (
-                post(
-                    "/api/relationships",
-                    parentToken,
-                    mapOf("targetTenantId" to childId.toString(), "type" to "PARENT_CHILD"),
-                ).bodyAsMap()!!["id"] as String
-            )
-        patch("/api/relationships/$relId/accept", childToken)
+            post(
+                "/api/relationships",
+                parent.token,
+                mapOf("targetTenantId" to child.tenantId.toString(), "type" to "PARENT_CHILD"),
+            ).bodyAsMap()!!["id"] as String
+        patch("/api/relationships/$relId/accept", child.token)
 
-        // Pre-policy: child has no visibility rows for the parent's lead.
-        assertEquals(
-            AccessLevel.NONE,
-            visibilityFor(childId, ResourceType.LEADS, UUID.fromString(parentLeadId)),
-        )
+        // Pre-policy: child has no visibility for the parent's lead.
+        assertEquals(AccessLevel.NONE, visibilityFor(child.tenantId, ResourceType.LEADS, parentLeadId))
 
-        // Source publishes READ policy on leads.
         post(
             "/api/relationships/$relId/policies",
-            parentToken,
+            parent.token,
             mapOf("resourceType" to "leads", "accessLevel" to "READ"),
         )
 
-        // After materialization, child has READ on parent's lead.
-        assertEquals(
-            AccessLevel.READ,
-            visibilityFor(childId, ResourceType.LEADS, UUID.fromString(parentLeadId)),
-        )
-        // Parent does NOT have visibility for the child's lead (one-way edge).
-        assertEquals(
-            AccessLevel.NONE,
-            visibilityFor(parentId, ResourceType.LEADS, UUID.fromString(childLeadId)),
-        )
+        // After materialization: child gets READ on parent's lead, parent does NOT see child's lead.
+        assertEquals(AccessLevel.READ, visibilityFor(child.tenantId, ResourceType.LEADS, parentLeadId))
+        assertEquals(AccessLevel.NONE, visibilityFor(parent.tenantId, ResourceType.LEADS, childLeadId))
 
         // Revoke the relationship → child loses visibility.
-        patch("/api/relationships/$relId/revoke", parentToken)
-        assertEquals(
-            AccessLevel.NONE,
-            visibilityFor(childId, ResourceType.LEADS, UUID.fromString(parentLeadId)),
-        )
+        patch("/api/relationships/$relId/revoke", parent.token)
+        assertEquals(AccessLevel.NONE, visibilityFor(child.tenantId, ResourceType.LEADS, parentLeadId))
     }
 
     @Test
     fun `PARTNER — each direction's policy creates its own visibility rows`() {
-        val (aId, tokenA) = provision("partA")
-        val (bId, tokenB) = provision("partB")
-        val (pipelineA, stageA) = defaultPipelineAndStage(tokenA)
-        val (pipelineB, stageB) = defaultPipelineAndStage(tokenB)
-
-        val leadA = UUID.fromString(createLead(tokenA, "A lead", pipelineA, stageA))
-        val leadB = UUID.fromString(createLead(tokenB, "B lead", pipelineB, stageB))
+        val a = tenantProvisioner.provision("partA")
+        val b = tenantProvisioner.provision("partB")
+        val leadA = leadFactory.id(a.token, title = "A lead")
+        val leadB = leadFactory.id(b.token, title = "B lead")
 
         // A → B PARTNER edge; B accepts; A grants READ.
         val ab =
-            (
-                post(
-                    "/api/relationships",
-                    tokenA,
-                    mapOf("targetTenantId" to bId.toString(), "type" to "PARTNER"),
-                ).bodyAsMap()!!["id"] as String
-            )
-        patch("/api/relationships/$ab/accept", tokenB)
-        post(
-            "/api/relationships/$ab/policies",
-            tokenA,
-            mapOf("resourceType" to "leads", "accessLevel" to "READ"),
-        )
+            post(
+                "/api/relationships",
+                a.token,
+                mapOf("targetTenantId" to b.tenantId.toString(), "type" to "PARTNER"),
+            ).bodyAsMap()!!["id"] as String
+        patch("/api/relationships/$ab/accept", b.token)
+        post("/api/relationships/$ab/policies", a.token, mapOf("resourceType" to "leads", "accessLevel" to "READ"))
 
-        assertEquals(AccessLevel.READ, visibilityFor(bId, ResourceType.LEADS, leadA))
-        assertEquals(AccessLevel.NONE, visibilityFor(aId, ResourceType.LEADS, leadB))
+        assertEquals(AccessLevel.READ, visibilityFor(b.tenantId, ResourceType.LEADS, leadA))
+        assertEquals(AccessLevel.NONE, visibilityFor(a.tenantId, ResourceType.LEADS, leadB))
 
         // Reverse edge: B → A, A accepts, B grants WRITE.
         val ba =
-            (
-                post(
-                    "/api/relationships",
-                    tokenB,
-                    mapOf("targetTenantId" to aId.toString(), "type" to "PARTNER"),
-                ).bodyAsMap()!!["id"] as String
-            )
-        patch("/api/relationships/$ba/accept", tokenA)
-        post(
-            "/api/relationships/$ba/policies",
-            tokenB,
-            mapOf("resourceType" to "leads", "accessLevel" to "WRITE"),
-        )
+            post(
+                "/api/relationships",
+                b.token,
+                mapOf("targetTenantId" to a.tenantId.toString(), "type" to "PARTNER"),
+            ).bodyAsMap()!!["id"] as String
+        patch("/api/relationships/$ba/accept", a.token)
+        post("/api/relationships/$ba/policies", b.token, mapOf("resourceType" to "leads", "accessLevel" to "WRITE"))
 
-        assertEquals(AccessLevel.WRITE, visibilityFor(aId, ResourceType.LEADS, leadB))
+        assertEquals(AccessLevel.WRITE, visibilityFor(a.tenantId, ResourceType.LEADS, leadB))
 
         // B revokes their direction → A loses visibility of B's lead; B still sees A's.
-        patch("/api/relationships/$ba/revoke", tokenB)
-        assertEquals(AccessLevel.NONE, visibilityFor(aId, ResourceType.LEADS, leadB))
-        assertEquals(AccessLevel.READ, visibilityFor(bId, ResourceType.LEADS, leadA))
+        patch("/api/relationships/$ba/revoke", b.token)
+        assertEquals(AccessLevel.NONE, visibilityFor(a.tenantId, ResourceType.LEADS, leadB))
+        assertEquals(AccessLevel.READ, visibilityFor(b.tenantId, ResourceType.LEADS, leadA))
     }
 
     @Test
     fun `SUPPLIER_CLIENT — supplier sharing products is one-way`() {
-        val (supplierId, supplierToken) = provision("supp")
-        val (clientId, clientToken) = provision("client")
-
-        val productId =
-            UUID.fromString(
-                post(
-                    "/api/products",
-                    supplierToken,
-                    mapOf("name" to "Catalog item", "sku" to "SKU-${UUID.randomUUID().toString().take(6)}"),
-                ).bodyAsMap()!!["id"] as String,
-            )
+        val supplier = tenantProvisioner.provision("supp")
+        val client = tenantProvisioner.provision("client")
+        val productId = productFactory.id(supplier.token, name = "Catalog item")
 
         val relId =
-            (
-                post(
-                    "/api/relationships",
-                    supplierToken,
-                    mapOf("targetTenantId" to clientId.toString(), "type" to "SUPPLIER_CLIENT"),
-                ).bodyAsMap()!!["id"] as String
-            )
-        patch("/api/relationships/$relId/accept", clientToken)
+            post(
+                "/api/relationships",
+                supplier.token,
+                mapOf("targetTenantId" to client.tenantId.toString(), "type" to "SUPPLIER_CLIENT"),
+            ).bodyAsMap()!!["id"] as String
+        patch("/api/relationships/$relId/accept", client.token)
         post(
             "/api/relationships/$relId/policies",
-            supplierToken,
+            supplier.token,
             mapOf("resourceType" to "products", "accessLevel" to "READ"),
         )
 
-        assertEquals(AccessLevel.READ, visibilityFor(clientId, ResourceType.PRODUCTS, productId))
+        assertEquals(AccessLevel.READ, visibilityFor(client.tenantId, ResourceType.PRODUCTS, productId))
         // Reverse direction: supplier does NOT get visibility of client products.
-        assertEquals(AccessLevel.NONE, visibilityFor(supplierId, ResourceType.PRODUCTS, productId))
+        assertEquals(AccessLevel.NONE, visibilityFor(supplier.tenantId, ResourceType.PRODUCTS, productId))
 
-        patch("/api/relationships/$relId/revoke", supplierToken)
-        assertEquals(AccessLevel.NONE, visibilityFor(clientId, ResourceType.PRODUCTS, productId))
+        patch("/api/relationships/$relId/revoke", supplier.token)
+        assertEquals(AccessLevel.NONE, visibilityFor(client.tenantId, ResourceType.PRODUCTS, productId))
     }
 
     @Test
     fun `policy on PENDING relationship does not leak visibility until accepted`() {
-        val (parentId, parentToken) = provision("late")
-        val (childId, childToken) = provision("late-child")
-        val (parentPipeline, parentStage) = defaultPipelineAndStage(parentToken)
+        val parent = tenantProvisioner.provision("late")
+        val child = tenantProvisioner.provision("late-child")
+        val leadId = leadFactory.id(parent.token, title = "Pending share")
 
-        val leadId = UUID.fromString(createLead(parentToken, "Pending share", parentPipeline, parentStage))
-
-        // Initiate, but DON'T accept yet.
+        // Initiate but don't accept yet — Sprint 2a allows policy data on PENDING relationships.
         val relId =
-            (
-                post(
-                    "/api/relationships",
-                    parentToken,
-                    mapOf("targetTenantId" to childId.toString(), "type" to "PARENT_CHILD"),
-                ).bodyAsMap()!!["id"] as String
-            )
-        // Create policy on PENDING relationship — Sprint 2a allows this (data only).
+            post(
+                "/api/relationships",
+                parent.token,
+                mapOf("targetTenantId" to child.tenantId.toString(), "type" to "PARENT_CHILD"),
+            ).bodyAsMap()!!["id"] as String
         post(
             "/api/relationships/$relId/policies",
-            parentToken,
+            parent.token,
             mapOf("resourceType" to "leads", "accessLevel" to "READ"),
         )
 
-        // Visibility must NOT materialize because relationship isn't active yet.
-        assertEquals(AccessLevel.NONE, visibilityFor(childId, ResourceType.LEADS, leadId))
+        // Visibility must NOT materialize because the relationship isn't active yet.
+        assertEquals(AccessLevel.NONE, visibilityFor(child.tenantId, ResourceType.LEADS, leadId))
 
         // Accept → visibility materializes.
-        patch("/api/relationships/$relId/accept", childToken)
-        assertEquals(AccessLevel.READ, visibilityFor(childId, ResourceType.LEADS, leadId))
-        assertNotNull(parentId) // silence the unused warning
+        patch("/api/relationships/$relId/accept", child.token)
+        assertEquals(AccessLevel.READ, visibilityFor(child.tenantId, ResourceType.LEADS, leadId))
     }
 
     private fun visibilityFor(
@@ -220,43 +172,5 @@ class CrossTenantVisibilityIntegrationTest : AbstractIntegrationTest() {
             )
         if (rows.isEmpty()) return AccessLevel.NONE
         return rows.map { it.accessLevel }.reduce(AccessLevel::max)
-    }
-
-    private fun createLead(
-        token: String,
-        title: String,
-        pipelineId: String,
-        stageId: String,
-    ): String {
-        val resp =
-            post(
-                "/api/leads",
-                token,
-                mapOf("title" to title, "amount" to 1_000, "pipelineId" to pipelineId, "stageId" to stageId),
-            )
-        assertEquals(201, resp.status(), "createLead $title failed: ${resp.response.contentAsString}")
-        return resp.bodyAsMap()!!["id"] as String
-    }
-
-    private fun provision(prefix: String): Pair<UUID, String> {
-        val slug = "$prefix-${UUID.randomUUID().toString().take(6)}"
-        val adminEmail = "$prefix-${UUID.randomUUID()}@test.com"
-        val password = "Password123!"
-        val summary = tenantApi.provision(prefix.replaceFirstChar { it.titlecase() }, slug, adminEmail, password)
-        return summary.id to login(adminEmail, password)
-    }
-
-    private fun defaultPipelineAndStage(token: String): Pair<String, String> {
-        val pipelines =
-            get("/api/pipelines", token).bodyAsList()
-                ?: error("Expected pipelines list available")
-        val defaultPipeline =
-            pipelines.firstOrNull { it["isDefault"] == true }
-                ?: error("No default pipeline found")
-        val pipelineId = defaultPipeline["id"] as String
-
-        @Suppress("UNCHECKED_CAST")
-        val stages = defaultPipeline["stages"] as List<Map<String, Any>>
-        return pipelineId to (stages.first()["id"] as String)
     }
 }

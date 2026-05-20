@@ -4,13 +4,13 @@ import com.synopticengine.api.support.TestHttp
 import java.util.UUID
 
 /**
- * Creates leads via the public API. By default we synthesise a person first
- * (leads need at least a person or organisation reference) — callers can pass
- * `personId`/`organizationId` explicitly to share contacts across leads.
+ * Creates leads via the public API. `pipelineId`/`stageId` default to the
+ * seeded defaults server-side (see `CreateLeadRequest`), so most tests only
+ * need to pass a title.
  */
 class LeadFactory(
     private val http: TestHttp,
-    private val personFactory: PersonFactory,
+    @Suppress("unused") private val personFactory: PersonFactory,
 ) {
     fun create(
         token: String,
@@ -21,25 +21,28 @@ class LeadFactory(
         stageId: String? = null,
         leadSourceId: String? = null,
         leadTypeId: String? = null,
-        expectedValue: Number? = null,
+        amount: Number? = null,
     ): Map<String, Any> {
-        val resolvedPersonId =
-            personId
-                ?: if (organizationId == null) personFactory.id(token) else null
-
         val body =
             buildMap<String, Any?> {
                 put("title", title)
-                if (resolvedPersonId != null) put("personId", resolvedPersonId.toString())
+                if (personId != null) put("personId", personId.toString())
                 if (organizationId != null) put("organizationId", organizationId.toString())
                 if (pipelineId != null) put("pipelineId", pipelineId)
                 if (stageId != null) put("stageId", stageId)
                 if (leadSourceId != null) put("leadSourceId", leadSourceId)
                 if (leadTypeId != null) put("leadTypeId", leadTypeId)
-                if (expectedValue != null) put("expectedValue", expectedValue)
+                if (amount != null) put("amount", amount)
             }
         val result = http.post("/api/leads", token, body)
         return http.bodyAsMap(result)
-            ?: error("lead creation failed: status=${result.response.status} body=${result.response.contentAsString}")
+            ?: error(
+                "lead creation failed: status=${result.response.status} body=${result.response.contentAsString}",
+            )
     }
+
+    fun id(
+        token: String,
+        title: String = "Lead-${UUID.randomUUID().toString().take(8)}",
+    ): UUID = UUID.fromString(create(token, title)["id"] as String)
 }

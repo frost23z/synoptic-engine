@@ -1,7 +1,6 @@
 package com.synopticengine.api.identity
 
 import com.synopticengine.api.AbstractIntegrationTest
-import com.synopticengine.api.shared.TenantContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.UUID
@@ -41,43 +40,28 @@ class UserIntegrationTest : AbstractIntegrationTest() {
         assertEquals(403, post("/api/users", salespersonToken, validCreateRequest()).status())
     }
 
-    // ── List ──────────────────────────────────────────────────────────────
+    // ── List & search ─────────────────────────────────────────────────────
 
     @Test
     fun `list users as ADMIN returns non-empty list`() {
-        val result = get("/api/users", adminToken)
-        assertEquals(200, result.status())
-        val body = result.bodyAsList()!!
-        assertTrue(body.isNotEmpty())
+        assertTrue(get("/api/users", adminToken).bodyAsList()!!.isNotEmpty())
     }
-
-    // ── Search ────────────────────────────────────────────────────────────
 
     @Test
     fun `search users returns matching results`() {
         val unique = UUID.randomUUID().toString().replace("-", "")
-        TenantContext.runAs(TenantContext.SEED_TENANT_ID) {
-            userService.create(
-                email = "search-$unique@test.com",
-                password = "password123",
-                firstName = "Unique$unique",
-                lastName = "Person",
-                roleNames = setOf("VIEWER"),
-            )
-        }
-
-        val result = get("/api/users/search?q=Unique$unique", adminToken)
-        assertEquals(200, result.status())
-        val body = result.bodyAsList()!!
-        assertTrue(body.isNotEmpty())
+        auth.provision(
+            roleNames = setOf("VIEWER"),
+            email = "search-$unique@test.com",
+            firstName = "Unique$unique",
+            lastName = "Person",
+        )
+        assertTrue(get("/api/users/search?q=Unique$unique", adminToken).bodyAsList()!!.isNotEmpty())
     }
 
     @Test
     fun `search users with no match returns empty list`() {
-        val result = get("/api/users/search?q=xyznosuchemail99999abc", adminToken)
-        assertEquals(200, result.status())
-        val body = result.bodyAsList()!!
-        assertTrue(body.isEmpty())
+        assertTrue(get("/api/users/search?q=xyznosuchemail99999abc", adminToken).bodyAsList()!!.isEmpty())
     }
 
     // ── Create ────────────────────────────────────────────────────────────
@@ -86,7 +70,6 @@ class UserIntegrationTest : AbstractIntegrationTest() {
     fun `create user as ADMIN returns 201 with detail`() {
         val request = validCreateRequest()
         val result = post("/api/users", adminToken, request)
-
         assertEquals(201, result.status())
         val body = result.bodyAsMap()!!
         assertNotNull(body["id"])
@@ -101,54 +84,32 @@ class UserIntegrationTest : AbstractIntegrationTest() {
     fun `create user with duplicate email returns 409`() {
         val request = validCreateRequest()
         post("/api/users", adminToken, request)
-        val result = post("/api/users", adminToken, request)
-        assertEquals(409, result.status())
+        assertEquals(409, post("/api/users", adminToken, request).status())
     }
 
     @Test
     fun `create user with invalid email returns 422`() {
-        val request =
-            mapOf(
-                "email" to "not-an-email",
-                "password" to "password123",
-                "firstName" to "Test",
-                "lastName" to "User",
-            )
+        val request = validCreateRequest() + ("email" to "not-an-email")
         assertEquals(422, post("/api/users", adminToken, request).status())
     }
 
     @Test
     fun `create user with short password returns 422`() {
-        val request =
-            mapOf(
-                "email" to "short-${UUID.randomUUID()}@test.com",
-                "password" to "short",
-                "firstName" to "Test",
-                "lastName" to "User",
-            )
+        val request = validCreateRequest() + ("password" to "short")
         assertEquals(422, post("/api/users", adminToken, request).status())
     }
 
     @Test
-    fun `create user with invalid role returns 400`() {
-        val request =
-            mapOf(
-                "email" to "badrole-${UUID.randomUUID()}@test.com",
-                "password" to "password123",
-                "firstName" to "Test",
-                "lastName" to "User",
-                "roles" to listOf("NONEXISTENT_ROLE"),
-            )
+    fun `create user with unknown role returns 400`() {
+        val request = validCreateRequest() + ("roles" to listOf("NONEXISTENT_ROLE"))
         assertEquals(400, post("/api/users", adminToken, request).status())
     }
 
     // ── Get by ID ─────────────────────────────────────────────────────────
 
     @Test
-    fun `get user by id returns full detail`() {
-        val created = post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!
-        val id = created["id"] as String
-
+    fun `get user by id returns full detail with roles and groups`() {
+        val id = createUserViaApi()
         val result = get("/api/users/$id", adminToken)
         assertEquals(200, result.status())
         val body = result.bodyAsMap()!!
@@ -167,11 +128,17 @@ class UserIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `update user returns 200 with updated fields`() {
-        val id = post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-
-        val update = mapOf("firstName" to "Updated", "lastName" to "Name", "phone" to "+1234567890")
-        val result = put("/api/users/$id", adminToken, update)
-
+        val id = createUserViaApi()
+        val result =
+            put(
+                "/api/users/$id",
+                adminToken,
+                mapOf(
+                    "firstName" to "Updated",
+                    "lastName" to "Name",
+                    "phone" to "+1234567890",
+                ),
+            )
         assertEquals(200, result.status())
         val body = result.bodyAsMap()!!
         assertEquals("Updated", body["firstName"])
@@ -181,11 +148,17 @@ class UserIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `update user roles replaces existing roles`() {
-        val id = post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-
-        val update = mapOf("firstName" to "Test", "lastName" to "User", "roles" to listOf("VIEWER"))
-        val result = put("/api/users/$id", adminToken, update)
-
+        val id = createUserViaApi()
+        val result =
+            put(
+                "/api/users/$id",
+                adminToken,
+                mapOf(
+                    "firstName" to "T",
+                    "lastName" to "U",
+                    "roles" to listOf("VIEWER"),
+                ),
+            )
         assertEquals(200, result.status())
         @Suppress("UNCHECKED_CAST")
         val roles = result.bodyAsMap()!!["roles"] as List<String>
@@ -197,15 +170,14 @@ class UserIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `delete user returns 204 and makes user unfindable`() {
-        val id = post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-
+        val id = createUserViaApi()
         assertEquals(204, delete("/api/users/$id", adminToken).status())
         assertEquals(404, get("/api/users/$id", adminToken).status())
     }
 
     @Test
     fun `delete user as SALESPERSON returns 403`() {
-        val id = post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = createUserViaApi()
         assertEquals(403, delete("/api/users/$id", salespersonToken).status())
     }
 
@@ -214,16 +186,11 @@ class UserIntegrationTest : AbstractIntegrationTest() {
         assertEquals(401, delete("/api/users/${UUID.randomUUID()}", null).status())
     }
 
-    // ── Mass destroy ──────────────────────────────────────────────────────
-
     @Test
     fun `mass destroy deactivates multiple users`() {
-        val id1 = post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val id2 = post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-
-        val result = post("/api/users/mass-destroy", adminToken, mapOf("ids" to listOf(id1, id2)))
-        assertEquals(204, result.status())
-
+        val id1 = createUserViaApi()
+        val id2 = createUserViaApi()
+        assertEquals(204, post("/api/users/mass-destroy", adminToken, mapOf("ids" to listOf(id1, id2))).status())
         assertEquals(404, get("/api/users/$id1", adminToken).status())
         assertEquals(404, get("/api/users/$id2", adminToken).status())
     }
@@ -233,7 +200,8 @@ class UserIntegrationTest : AbstractIntegrationTest() {
         assertEquals(401, post("/api/users/mass-destroy", null, mapOf("ids" to emptyList<String>())).status())
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    private fun createUserViaApi(): String =
+        post("/api/users", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
 
     private fun validCreateRequest() =
         mapOf(
