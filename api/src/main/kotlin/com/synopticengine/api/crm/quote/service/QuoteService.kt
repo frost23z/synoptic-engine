@@ -84,18 +84,7 @@ class QuoteService(
                     this.expiredAt = expiredAt
                 },
             )
-        items.forEach { req ->
-            quote.items.add(
-                QuoteItem().apply {
-                    this.quote = quote
-                    this.quoteId = quote.id!!
-                    this.productId = req.productId
-                    this.quantity = req.quantity
-                    this.unitPrice = req.unitPrice
-                    this.discount = req.discount
-                },
-            )
-        }
+        items.forEach { req -> quote.items.add(buildItem(quote, req)) }
         val saved = quoteRepository.save(quote)
         syncLeadProducts(saved)
         eventPublisher.publishEvent(DomainEvent("quote.created", "Quote", saved.id!!, mapOf("leadId" to leadId)))
@@ -121,22 +110,25 @@ class QuoteService(
         quote.terms = terms
         quote.expiredAt = expiredAt
         quote.items.clear()
-        items.forEach { req ->
-            quote.items.add(
-                QuoteItem().apply {
-                    this.quote = quote
-                    this.quoteId = quote.id!!
-                    this.productId = req.productId
-                    this.quantity = req.quantity
-                    this.unitPrice = req.unitPrice
-                    this.discount = req.discount
-                },
-            )
-        }
+        items.forEach { req -> quote.items.add(buildItem(quote, req)) }
         val saved = quoteRepository.save(quote)
         syncLeadProducts(saved)
         return saved.toResponse()
     }
+
+    /** Build a fresh [QuoteItem] from a request, owned by `quote`. Shared by create/update. */
+    private fun buildItem(
+        quote: Quote,
+        req: QuoteItemRequest,
+    ): QuoteItem =
+        QuoteItem().apply {
+            this.quote = quote
+            this.quoteId = quote.id!!
+            this.productId = req.productId
+            this.quantity = req.quantity
+            this.unitPrice = req.unitPrice
+            this.discount = req.discount
+        }
 
     /**
      * P3.4 / `02 § 2.3`: mirror quote items onto `lead_products` for the linked
@@ -250,7 +242,7 @@ class QuoteService(
                     this.expiredAt = source.expiredAt
                 },
             )
-        val copiedItems =
+        copy.items.addAll(
             source.items.map { item ->
                 QuoteItem().apply {
                     this.quoteId = copy.id!!
@@ -259,8 +251,8 @@ class QuoteService(
                     this.unitPrice = item.unitPrice
                     this.discount = item.discount
                 }
-            }
-        copy.items.addAll(copiedItems)
+            },
+        )
         return quoteRepository.save(copy).toResponse()
     }
 

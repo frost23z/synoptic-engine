@@ -10,6 +10,7 @@ import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
 import com.synopticengine.api.shared.DomainEvent
 import com.synopticengine.api.shared.web.PageResponse
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -29,6 +30,8 @@ class PersonService(
     private val leadRepository: LeadRepository,
     private val objectMapper: ObjectMapper,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     fun findAll(pageable: Pageable): PageResponse<PersonResponse> {
         val scopeIds = scopeResolver.userIdsForCurrentUser()
         return if (scopeIds == null) {
@@ -212,7 +215,11 @@ class PersonService(
         if (json.isNullOrBlank() || json == "[]") return emptyList()
         return try {
             objectMapper.readValue(json, object : TypeReference<List<ContactEntry>>() {})
-        } catch (_: Exception) {
+        } catch (ex: Exception) {
+            // Tolerated for legacy rows that pre-date the JSONB columns; log so an operator
+            // notices if production data starts hitting this branch (would mean a write path
+            // is producing malformed JSON, not just legacy data).
+            log.warn("Failed to parse contact entries JSON, falling back to empty list: {}", ex.message)
             emptyList()
         }
     }
