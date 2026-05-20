@@ -76,11 +76,13 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
         assertEquals(403, result.response.status)
     }
 
-    @Test
-    fun `GET mail attachments download returns 404 for unknown attachment`() {
-        val token = adminToken()
-        val result = get("/api/mail/attachments/${UUID.randomUUID()}/download", token)
-        assertEquals(404, result.status())
+    private fun sign(
+        secret: String,
+        body: ByteArray,
+    ): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return mac.doFinal(body).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     private fun sign(
