@@ -267,7 +267,7 @@ class ActivityService(
         participantId: UUID,
     ): ActivityResponse {
         val activity = requireActivity(activityId)
-        activityParticipantRepository.deleteByParticipantId(participantId)
+        activityParticipantRepository.deleteById(participantId)
         return activity.toResponseWithParticipants()
     }
 

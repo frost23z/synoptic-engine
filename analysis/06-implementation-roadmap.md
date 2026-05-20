@@ -190,3 +190,27 @@ Cross-company sharing extends naturally — share a product catalog with a distr
 | Permission registry / migration / role bootstrap go out of sync | H | Medium | The boot-time drift check above. |
 | Custom-attribute schema differences confuse shared-record consumers | M | Medium | Phase 2 ships read-only attribute visibility; attribute mapping is a Phase 3+ feature. |
 | Concurrent edit conflicts annoy users | M | Low | `@Version` raises `OptimisticLockException`; UI catches and offers "view changes" merge prompt. |
+
+---
+
+## Cross-module @Transactional chains (post-Phase 4)
+
+P1-3 from `08-phase-4-findings.md`. Today these `@Transactional` services call across module boundaries while still inside their own transaction:
+
+| Caller | Target | Stake |
+|---|---|---|
+| `auth/service/AuthService.resetPassword` (write) | `IdentityApi.updatePassword` (write) | Reset rolls back → user keeps old password ✓ |
+| `sharing/service/RecordShareService.share` (write) | `tenantApi.exists`, `crmApi.findTagsByIds` (read) | Validation reads; safe |
+| `sharing/service/TenantRelationshipService.request` (write) | `tenantApi.exists` (read) | Validation read; safe |
+| `inventory/product/service/ProductService.loadTags` (read) | `crmApi.findTagsByIds` (read) | Both read; safe |
+| `inventory/warehouse/service/WarehouseService.loadTags` (read) | `crmApi.findTagsByIds` (read) | Both read; safe |
+
+All work today because everything's one Postgres instance with one `JpaTransactionManager` — the cross-module call participates in the caller's transaction. **No code change in Phase 4.**
+
+This becomes a problem the moment any module moves to:
+- Its own datastore (separate schema with separate TM, or another database engine), or
+- Its own service in a different process.
+
+`AuthService.resetPassword` is the only write-write chain. When that day comes, the fix is to **publish a domain event** (`PasswordResetCompleted` → `IdentityApi.updatePassword` listener) so each side commits its own transaction independently, with idempotent retries and an outbox if needed. Treat the read-only chains the same way the moment the read side moves out of process.
+
+Add a note to any future "extract module X" PR that touches these call sites.
