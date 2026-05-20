@@ -135,6 +135,13 @@ class PipelineIntegrationTest : AbstractIntegrationTest() {
         assertEquals(204, delete("/api/pipelines/$pipelineId/stages/$stageId", adminToken).status())
     }
 
+    @Test
+    fun `reorder stages with empty list is a no-op 200`() {
+        val pipelineId = get("/api/pipelines", adminToken).bodyAsList()!!.first()["id"]
+        val result = patch("/api/pipelines/$pipelineId/stages/reorder", adminToken, mapOf("order" to emptyList<Any>()))
+        assertEquals(200, result.status(), result.response.contentAsString)
+    }
+
     private fun createPipeline(): String =
         post(
             "/api/pipelines",
