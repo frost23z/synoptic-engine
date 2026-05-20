@@ -5,6 +5,7 @@ import com.synopticengine.api.inventory.InventoryApi
 import com.synopticengine.api.settings.imports.domain.DataImport
 import com.synopticengine.api.settings.imports.domain.ImportStatus
 import com.synopticengine.api.settings.imports.repo.DataImportRepository
+import com.synopticengine.api.shared.TenantContext
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.slf4j.LoggerFactory
@@ -25,6 +26,13 @@ class CsvImportProcessor(
 
     @Async
     fun process(importId: UUID) {
+        // P1-1: this is @Async; submission happens from DataImportController inside an
+        // authenticated request, and TenantPropagatingTaskDecorator carries the tenant
+        // across the boundary. Fail loudly if a future caller submits without one
+        // rather than create cross-tenant entities by accident.
+        TenantContext.get()
+            ?: error("CsvImportProcessor.process called without an active TenantContext (importId=$importId)")
+
         val dataImport = dataImportRepository.findById(importId).orElse(null) ?: return
         dataImport.status = ImportStatus.PROCESSING
         dataImportRepository.save(dataImport)

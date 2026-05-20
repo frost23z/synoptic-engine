@@ -31,6 +31,15 @@ class ShareMaterializationTask {
     @Column(name = "policy_id", nullable = false, columnDefinition = "uuid")
     var policyId: UUID = UUID(0, 0)
 
+    /**
+     * The tenant the task should run as. Always the source tenant of the policy's
+     * relationship — populated at enqueue time from the active [com.synopticengine.api.shared.TenantContext].
+     * `ShareMaterializationWorker.drainQueue` wraps each task in `TenantContext.runAs(tenantId)`
+     * so the @Scheduled tick has a tenant identity (the scheduler thread doesn't).
+     */
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
+    var tenantId: UUID = UUID(0, 0)
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     var op: ShareMaterializationOp = ShareMaterializationOp.INSERT
