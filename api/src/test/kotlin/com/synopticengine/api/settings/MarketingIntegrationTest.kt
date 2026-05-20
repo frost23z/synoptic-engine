@@ -34,13 +34,16 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
         assertEquals(403, post("/api/settings/marketing/events", viewerToken, mapOf("name" to "Event")).status())
     }
 
-    // ── Marketing Events CRUD ─────────────────────────────────────────────
+    @Test
+    fun `list marketing campaigns without token returns 401`() {
+        assertEquals(401, get("/api/settings/marketing/campaigns", null).status())
+    }
+
+    // ── Marketing Events ──────────────────────────────────────────────────
 
     @Test
-    fun `create marketing event returns 201`() {
-        val result = post("/api/settings/marketing/events", adminToken, validEventRequest())
-        assertEquals(201, result.status())
-        val body = result.bodyAsMap()!!
+    fun `create marketing event returns 201 with id and name`() {
+        val body = createEvent()
         assertNotNull(body["id"])
         assertNotNull(body["name"])
     }
@@ -52,7 +55,7 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `get marketing event by id returns detail`() {
-        val id = post("/api/settings/marketing/events", adminToken, validEventRequest()).bodyAsMap()!!["id"] as String
+        val id = createEvent()["id"] as String
         val result = get("/api/settings/marketing/events/$id", adminToken)
         assertEquals(200, result.status())
         assertEquals(id, result.bodyAsMap()!!["id"])
@@ -65,7 +68,7 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `update marketing event returns 200`() {
-        val id = post("/api/settings/marketing/events", adminToken, validEventRequest()).bodyAsMap()!!["id"] as String
+        val id = createEvent()["id"] as String
         val result = put("/api/settings/marketing/events/$id", adminToken, mapOf("name" to "Updated Event"))
         assertEquals(200, result.status())
         assertEquals("Updated Event", result.bodyAsMap()!!["name"])
@@ -73,32 +76,27 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `delete marketing event returns 204 and is unfindable`() {
-        val id = post("/api/settings/marketing/events", adminToken, validEventRequest()).bodyAsMap()!!["id"] as String
+        val id = createEvent()["id"] as String
         assertEquals(204, delete("/api/settings/marketing/events/$id", adminToken).status())
         assertEquals(404, get("/api/settings/marketing/events/$id", adminToken).status())
     }
 
     @Test
-    fun `mass destroy marketing events returns 204`() {
-        val id1 = post("/api/settings/marketing/events", adminToken, validEventRequest()).bodyAsMap()!!["id"] as String
-        val id2 = post("/api/settings/marketing/events", adminToken, validEventRequest()).bodyAsMap()!!["id"] as String
-        val result = post("/api/settings/marketing/events/mass-destroy", adminToken, mapOf("ids" to listOf(id1, id2)))
-        assertEquals(204, result.status())
+    fun `mass destroy marketing events returns 204 and removes them`() {
+        val id1 = createEvent()["id"] as String
+        val id2 = createEvent()["id"] as String
+        assertEquals(
+            204,
+            post("/api/settings/marketing/events/mass-destroy", adminToken, mapOf("ids" to listOf(id1, id2))).status(),
+        )
         assertEquals(404, get("/api/settings/marketing/events/$id1", adminToken).status())
     }
 
-    // ── Marketing Campaigns CRUD ──────────────────────────────────────────
+    // ── Marketing Campaigns ───────────────────────────────────────────────
 
     @Test
-    fun `list marketing campaigns without token returns 401`() {
-        assertEquals(401, get("/api/settings/marketing/campaigns", null).status())
-    }
-
-    @Test
-    fun `create marketing campaign returns 201`() {
-        val result = post("/api/settings/marketing/campaigns", adminToken, validCampaignRequest())
-        assertEquals(201, result.status())
-        val body = result.bodyAsMap()!!
+    fun `create marketing campaign returns 201 with subject`() {
+        val body = createCampaign()
         assertNotNull(body["id"])
         assertNotNull(body["name"])
         assertEquals("Monthly Newsletter", body["subject"])
@@ -108,22 +106,13 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
     fun `create marketing campaign with blank subject returns 422`() {
         assertEquals(
             422,
-            post(
-                "/api/settings/marketing/campaigns",
-                adminToken,
-                mapOf("name" to "Camp", "subject" to "  "),
-            ).status(),
+            post("/api/settings/marketing/campaigns", adminToken, mapOf("name" to "Camp", "subject" to "  ")).status(),
         )
     }
 
     @Test
     fun `get marketing campaign by id returns detail`() {
-        val id =
-            post(
-                "/api/settings/marketing/campaigns",
-                adminToken,
-                validCampaignRequest(),
-            ).bodyAsMap()!!["id"] as String
+        val id = createCampaign()["id"] as String
         val result = get("/api/settings/marketing/campaigns/$id", adminToken)
         assertEquals(200, result.status())
         assertEquals(id, result.bodyAsMap()!!["id"])
@@ -135,43 +124,36 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `update marketing campaign returns 200`() {
-        val id =
-            post(
-                "/api/settings/marketing/campaigns",
-                adminToken,
-                validCampaignRequest(),
-            ).bodyAsMap()!!["id"] as String
+    fun `update marketing campaign returns 200 with new subject`() {
+        val id = createCampaign()["id"] as String
         val result =
             put(
                 "/api/settings/marketing/campaigns/$id",
                 adminToken,
-                mapOf("name" to "updated-camp-${UUID.randomUUID().toString().take(4)}", "subject" to "Updated Subject"),
+                mapOf("name" to "updated-${UUID.randomUUID().toString().take(4)}", "subject" to "Updated Subject"),
             )
         assertEquals(200, result.status())
         assertEquals("Updated Subject", result.bodyAsMap()!!["subject"])
     }
 
     @Test
-    fun `delete marketing campaign returns 204`() {
-        val id =
-            post(
-                "/api/settings/marketing/campaigns",
-                adminToken,
-                validCampaignRequest(),
-            ).bodyAsMap()!!["id"] as String
+    fun `delete marketing campaign returns 204 and is unfindable`() {
+        val id = createCampaign()["id"] as String
         assertEquals(204, delete("/api/settings/marketing/campaigns/$id", adminToken).status())
         assertEquals(404, get("/api/settings/marketing/campaigns/$id", adminToken).status())
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    private fun createEvent(): Map<String, Any> =
+        post(
+            "/api/settings/marketing/events",
+            adminToken,
+            mapOf("name" to "Event ${UUID.randomUUID().toString().take(8)}", "description" to "Test event"),
+        ).bodyAsMap()!!
 
-    private fun validEventRequest() =
-        mapOf(
-            "name" to "Event ${UUID.randomUUID().toString().take(8)}",
-            "description" to "Test event",
-        )
-
-    private fun validCampaignRequest() =
-        mapOf("name" to "campaign-${UUID.randomUUID().toString().take(8)}", "subject" to "Monthly Newsletter")
+    private fun createCampaign(): Map<String, Any> =
+        post(
+            "/api/settings/marketing/campaigns",
+            adminToken,
+            mapOf("name" to "campaign-${UUID.randomUUID().toString().take(8)}", "subject" to "Monthly Newsletter"),
+        ).bodyAsMap()!!
 }

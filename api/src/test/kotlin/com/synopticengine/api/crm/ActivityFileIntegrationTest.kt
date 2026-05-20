@@ -1,30 +1,19 @@
 package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.ActivityFactory
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
 import kotlin.test.assertEquals
 
 class ActivityFileIntegrationTest : AbstractIntegrationTest() {
-    @Test
-    fun `POST activities uploads file and returns 201`() {
-        val token = adminToken()
-        // Create an activity first
-        val activityResult =
-            post(
-                "/api/activities",
-                token,
-                mapOf(
-                    "title" to "File test activity",
-                    "type" to "NOTE",
-                    "scheduleFrom" to "2026-05-16T10:00:00Z",
-                    "scheduleTo" to "2026-05-16T11:00:00Z",
-                ),
-            )
-        assertEquals(201, activityResult.status(), activityResult.response.contentAsString)
-        val activityId = activityResult.bodyAsMap()!!["id"] as String
+    @Autowired private lateinit var activityFactory: ActivityFactory
 
-        // Upload a file
+    @Test
+    fun `upload file to activity returns 201`() {
+        val token = adminToken()
+        val activityId = activityFactory.id(token, type = "NOTE")
         val result =
             multipart(
                 "/api/activities/$activityId/file",
@@ -36,20 +25,9 @@ class ActivityFileIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `GET activities file download returns 404 for unknown file`() {
+    fun `download unknown file from activity returns 404`() {
         val token = adminToken()
-        val activityResult =
-            post(
-                "/api/activities",
-                token,
-                mapOf(
-                    "title" to "Download test",
-                    "type" to "NOTE",
-                    "scheduleFrom" to "2026-05-16T10:00:00Z",
-                    "scheduleTo" to "2026-05-16T11:00:00Z",
-                ),
-            )
-        val activityId = activityResult.bodyAsMap()!!["id"] as String
+        val activityId = activityFactory.id(token, type = "NOTE")
         val result = get("/api/activities/$activityId/file/${UUID.randomUUID()}/download", token)
         assertEquals(404, result.status())
     }
