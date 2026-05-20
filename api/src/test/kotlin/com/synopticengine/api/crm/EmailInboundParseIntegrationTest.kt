@@ -4,7 +4,6 @@ import com.synopticengine.api.AbstractIntegrationTest
 import org.junit.jupiter.api.Test
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.test.assertEquals
@@ -74,15 +73,6 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                         .content(body),
                 ).andReturn()
         assertEquals(403, result.response.status)
-    }
-
-    private fun sign(
-        secret: String,
-        body: ByteArray,
-    ): String {
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        return mac.doFinal(body).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     private fun sign(
