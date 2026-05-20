@@ -91,6 +91,18 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+// Fast path: pure unit tests (no Spring context, no Testcontainers). Excludes
+// every class tagged `integration` (the base class for integration tests carries
+// the tag, so all subclasses are filtered out). Use `./gradlew unitTests` for
+// sub-second local feedback while writing pure-logic code.
+tasks.register<Test>("unitTests") {
+    description = "Runs pure unit tests (excludes the 'integration' JUnit tag)."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { excludeTags("integration") }
+}
+
 spotless {
     kotlin {
         target("src/**/*.kt")

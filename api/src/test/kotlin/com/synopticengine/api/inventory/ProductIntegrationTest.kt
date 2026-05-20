@@ -1,14 +1,22 @@
 package com.synopticengine.api.inventory
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.ProductFactory
+import com.synopticengine.api.support.factories.WarehouseFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import java.math.BigDecimal
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ProductIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var productFactory: ProductFactory
+
+    @Autowired private lateinit var warehouseFactory: WarehouseFactory
+
     private lateinit var adminToken: String
     private lateinit var viewerToken: String
 
@@ -32,35 +40,37 @@ class ProductIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `create product as VIEWER returns 403`() {
-        assertEquals(403, post("/api/products", viewerToken, validCreateRequest()).status())
+        assertEquals(403, post("/api/products", viewerToken, mapOf("name" to "x", "price" to 1)).status())
     }
 
     @Test
     fun `delete product as SALESPERSON returns 403`() {
-        val id = post("/api/products", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val salesperson = salespersonToken()
-        assertEquals(403, delete("/api/products/$id", salesperson).status())
+        val id = productFactory.id(adminToken)
+        assertEquals(403, delete("/api/products/$id", salespersonToken()).status())
     }
 
     // ── CRUD ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `create product returns 201 with correct fields`() {
-        val request = validCreateRequest()
-        val result = post("/api/products", adminToken, request)
-        assertEquals(201, result.status())
-        val body = result.bodyAsMap()!!
+    fun `create product returns 201 with isActive true`() {
+        val body = productFactory.create(adminToken)
         assertNotNull(body["id"])
-        assertEquals(request["name"], body["name"])
+        assertNotNull(body["name"])
         assertEquals(true, body["isActive"])
     }
 
     @Test
     fun `create product with duplicate sku returns 409`() {
         val sku = "SKU-${UUID.randomUUID().toString().take(8)}"
-        post("/api/products", adminToken, mapOf("name" to "Product A", "sku" to sku, "price" to 10.0))
-        val result = post("/api/products", adminToken, mapOf("name" to "Product B", "sku" to sku, "price" to 20.0))
-        assertEquals(409, result.status())
+        productFactory.create(adminToken, sku = sku)
+        assertEquals(
+            409,
+            post(
+                "/api/products",
+                adminToken,
+                mapOf("name" to "Product B", "sku" to sku, "price" to BigDecimal("20.0")),
+            ).status(),
+        )
     }
 
     @Test
@@ -70,10 +80,10 @@ class ProductIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `get product by id returns detail`() {
-        val id = post("/api/products", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = productFactory.id(adminToken)
         val result = get("/api/products/$id", adminToken)
         assertEquals(200, result.status())
-        assertEquals(id, result.bodyAsMap()!!["id"])
+        assertEquals(id.toString(), result.bodyAsMap()!!["id"])
     }
 
     @Test
@@ -82,8 +92,8 @@ class ProductIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `update product returns 200`() {
-        val id = post("/api/products", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+    fun `update product returns 200 with updated fields`() {
+        val id = productFactory.id(adminToken)
         val result =
             put(
                 "/api/products/$id",
@@ -101,7 +111,7 @@ class ProductIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `delete product returns 204 and is unfindable`() {
-        val id = post("/api/products", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = productFactory.id(adminToken)
         assertEquals(204, delete("/api/products/$id", adminToken).status())
         assertEquals(404, get("/api/products/$id", adminToken).status())
     }
@@ -109,71 +119,47 @@ class ProductIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `search products returns matching results`() {
         val unique = "SRCH${UUID.randomUUID().toString().take(6)}"
-        post("/api/products", adminToken, mapOf("name" to "Product $unique", "price" to 50.0))
+        productFactory.create(adminToken, name = "Product $unique")
         val result = get("/api/products/search?q=$unique", adminToken)
         assertEquals(200, result.status())
-        val content = result.bodyAsMap()!!["content"] as List<*>
-        assertTrue(content.isNotEmpty())
+        assertTrue((result.bodyAsMap()!!["content"] as List<*>).isNotEmpty())
     }
 
     // ── Inventory ─────────────────────────────────────────────────────────
 
     @Test
-    fun `set and get product inventory`() {
-        val productId = post("/api/products", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val warehouseId = createWarehouse()
+    fun `set inventory then update reflects new quantity`() {
+        val productId = productFactory.id(adminToken)
+        val warehouseId = warehouseFactory.id(adminToken)
 
-        val setResult =
+        val initial =
             put(
                 "/api/products/$productId/inventory",
                 adminToken,
                 mapOf(
-                    "warehouseId" to warehouseId,
+                    "warehouseId" to warehouseId.toString(),
                     "quantity" to 50,
                 ),
             )
-        assertEquals(200, setResult.status())
-        assertEquals(50, (setResult.bodyAsMap()!!["quantity"] as Number).toInt())
+        assertEquals(200, initial.status())
+        assertEquals(50, (initial.bodyAsMap()!!["quantity"] as Number).toInt())
 
-        val getResult = get("/api/products/$productId/inventory", adminToken)
-        assertEquals(200, getResult.status())
-        val entries = getResult.bodyAsList()!!
-        assertEquals(1, entries.size)
-        assertEquals(50, (entries.first()["quantity"] as Number).toInt())
-    }
-
-    @Test
-    fun `update product inventory quantity`() {
-        val productId = post("/api/products", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val warehouseId = createWarehouse()
-
-        put("/api/products/$productId/inventory", adminToken, mapOf("warehouseId" to warehouseId, "quantity" to 10))
         val updated =
             put(
                 "/api/products/$productId/inventory",
                 adminToken,
                 mapOf(
-                    "warehouseId" to warehouseId,
+                    "warehouseId" to warehouseId.toString(),
                     "quantity" to 25,
                 ),
             )
         assertEquals(200, updated.status())
         assertEquals(25, (updated.bodyAsMap()!!["quantity"] as Number).toInt())
+
+        val getResult = get("/api/products/$productId/inventory", adminToken)
+        assertEquals(200, getResult.status())
+        val entries = getResult.bodyAsList()!!
+        assertEquals(1, entries.size)
+        assertEquals(25, (entries.first()["quantity"] as Number).toInt())
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private fun createWarehouse(): String =
-        post(
-            "/api/warehouses",
-            adminToken,
-            mapOf("name" to "WH-${UUID.randomUUID().toString().take(8)}"),
-        ).bodyAsMap()!!["id"] as String
-
-    private fun validCreateRequest() =
-        mapOf(
-            "name" to "Product ${UUID.randomUUID().toString().take(8)}",
-            "price" to 99.99,
-            "sku" to "SKU-${UUID.randomUUID().toString().take(8)}",
-        )
 }

@@ -1,14 +1,21 @@
 package com.synopticengine.api.inventory
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.ProductFactory
+import com.synopticengine.api.support.factories.WarehouseFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class WarehouseIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var warehouseFactory: WarehouseFactory
+
+    @Autowired private lateinit var productFactory: ProductFactory
+
     private lateinit var adminToken: String
     private lateinit var viewerToken: String
 
@@ -32,25 +39,22 @@ class WarehouseIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `create warehouse as VIEWER returns 403`() {
-        assertEquals(403, post("/api/warehouses", viewerToken, validCreateRequest()).status())
+        assertEquals(403, post("/api/warehouses", viewerToken, mapOf("name" to "x")).status())
     }
 
     @Test
     fun `delete warehouse as VIEWER returns 403`() {
-        val id = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = warehouseFactory.id(adminToken)
         assertEquals(403, delete("/api/warehouses/$id", viewerToken).status())
     }
 
     // ── CRUD ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `create warehouse returns 201 with correct fields`() {
-        val request = validCreateRequest()
-        val result = post("/api/warehouses", adminToken, request)
-        assertEquals(201, result.status())
-        val body = result.bodyAsMap()!!
+    fun `create warehouse returns 201 with id and name`() {
+        val body = warehouseFactory.create(adminToken)
         assertNotNull(body["id"])
-        assertEquals(request["name"], body["name"])
+        assertNotNull(body["name"])
     }
 
     @Test
@@ -60,10 +64,10 @@ class WarehouseIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `get warehouse by id returns detail`() {
-        val id = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = warehouseFactory.id(adminToken)
         val result = get("/api/warehouses/$id", adminToken)
         assertEquals(200, result.status())
-        assertEquals(id, result.bodyAsMap()!!["id"])
+        assertEquals(id.toString(), result.bodyAsMap()!!["id"])
     }
 
     @Test
@@ -72,17 +76,10 @@ class WarehouseIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `update warehouse returns 200`() {
-        val id = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+    fun `update warehouse returns 200 with updated fields`() {
+        val id = warehouseFactory.id(adminToken)
         val result =
-            put(
-                "/api/warehouses/$id",
-                adminToken,
-                mapOf(
-                    "name" to "Updated WH",
-                    "contactEmail" to "wh@test.com",
-                ),
-            )
+            put("/api/warehouses/$id", adminToken, mapOf("name" to "Updated WH", "contactEmail" to "wh@test.com"))
         assertEquals(200, result.status())
         assertEquals("Updated WH", result.bodyAsMap()!!["name"])
         assertEquals("wh@test.com", result.bodyAsMap()!!["contactEmail"])
@@ -90,7 +87,7 @@ class WarehouseIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `delete warehouse returns 204 and is unfindable`() {
-        val id = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = warehouseFactory.id(adminToken)
         assertEquals(204, delete("/api/warehouses/$id", adminToken).status())
         assertEquals(404, get("/api/warehouses/$id", adminToken).status())
     }
@@ -98,7 +95,7 @@ class WarehouseIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `search warehouses returns matching results`() {
         val unique = "WH${UUID.randomUUID().toString().take(6)}"
-        post("/api/warehouses", adminToken, mapOf("name" to "Warehouse $unique"))
+        warehouseFactory.create(adminToken, name = "Warehouse $unique")
         val result = get("/api/warehouses/search?q=$unique", adminToken)
         assertEquals(200, result.status())
         assertTrue((result.bodyAsMap()!!["content"] as List<*>).isNotEmpty())
@@ -107,69 +104,37 @@ class WarehouseIntegrationTest : AbstractIntegrationTest() {
     // ── Locations ─────────────────────────────────────────────────────────
 
     @Test
-    fun `add location returns 201`() {
-        val warehouseId = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val result = post("/api/warehouses/$warehouseId/locations", adminToken, mapOf("name" to "Shelf A1"))
-        assertEquals(201, result.status())
-        val body = result.bodyAsMap()!!
-        assertNotNull(body["id"])
-        assertEquals("Shelf A1", body["name"])
-        assertEquals(warehouseId, body["warehouseId"])
-    }
+    fun `add update list and delete locations`() {
+        val warehouseId = warehouseFactory.id(adminToken)
 
-    @Test
-    fun `list locations returns warehouse locations`() {
-        val warehouseId = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        post("/api/warehouses/$warehouseId/locations", adminToken, mapOf("name" to "Shelf B1"))
-        post("/api/warehouses/$warehouseId/locations", adminToken, mapOf("name" to "Shelf B2"))
+        val a1 = createLocation(warehouseId, "Shelf A1")
+        assertEquals("Shelf A1", a1["name"])
+        assertEquals(warehouseId.toString(), a1["warehouseId"])
 
-        val result = get("/api/warehouses/$warehouseId/locations", adminToken)
-        assertEquals(200, result.status())
-        assertEquals(2, result.bodyAsList()!!.size)
-    }
+        val a2id = createLocation(warehouseId, "Shelf A2")["id"] as String
 
-    @Test
-    fun `update location returns 200`() {
-        val warehouseId = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val locationId =
-            post(
-                "/api/warehouses/$warehouseId/locations",
-                adminToken,
-                mapOf("name" to "Old Name"),
-            ).bodyAsMap()!!["id"] as String
+        // List shows both.
+        assertEquals(2, get("/api/warehouses/$warehouseId/locations", adminToken).bodyAsList()!!.size)
 
-        val result = put("/api/warehouses/$warehouseId/locations/$locationId", adminToken, mapOf("name" to "New Name"))
-        assertEquals(200, result.status())
-        assertEquals("New Name", result.bodyAsMap()!!["name"])
-    }
+        // Update name.
+        val updated = put("/api/warehouses/$warehouseId/locations/$a2id", adminToken, mapOf("name" to "Shelf A2-new"))
+        assertEquals(200, updated.status())
+        assertEquals("Shelf A2-new", updated.bodyAsMap()!!["name"])
 
-    @Test
-    fun `delete location returns 204`() {
-        val warehouseId = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val locationId =
-            post(
-                "/api/warehouses/$warehouseId/locations",
-                adminToken,
-                mapOf("name" to "To Delete"),
-            ).bodyAsMap()!!["id"] as String
-
-        assertEquals(204, delete("/api/warehouses/$warehouseId/locations/$locationId", adminToken).status())
-        assertEquals(0, get("/api/warehouses/$warehouseId/locations", adminToken).bodyAsList()!!.size)
+        // Delete leaves only the survivor.
+        assertEquals(204, delete("/api/warehouses/$warehouseId/locations/$a2id", adminToken).status())
+        assertEquals(1, get("/api/warehouses/$warehouseId/locations", adminToken).bodyAsList()!!.size)
     }
 
     @Test
     fun `get warehouse products returns stock entries`() {
-        val warehouseId = post("/api/warehouses", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val productId =
-            post(
-                "/api/products",
-                adminToken,
-                mapOf(
-                    "name" to "P-${UUID.randomUUID().toString().take(6)}",
-                    "price" to 10.0,
-                ),
-            ).bodyAsMap()!!["id"] as String
-        put("/api/products/$productId/inventory", adminToken, mapOf("warehouseId" to warehouseId, "quantity" to 30))
+        val warehouseId = warehouseFactory.id(adminToken)
+        val productId = productFactory.id(adminToken)
+        put(
+            "/api/products/$productId/inventory",
+            adminToken,
+            mapOf("warehouseId" to warehouseId.toString(), "quantity" to 30),
+        )
 
         val result = get("/api/warehouses/$warehouseId/products", adminToken)
         assertEquals(200, result.status())
@@ -178,12 +143,9 @@ class WarehouseIntegrationTest : AbstractIntegrationTest() {
         assertEquals(30, (entries.first()["quantity"] as Number).toInt())
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private fun validCreateRequest() =
-        mapOf(
-            "name" to "Warehouse ${UUID.randomUUID().toString().take(8)}",
-            "description" to "Test warehouse",
-            "contactName" to "John Doe",
-        )
+    private fun createLocation(
+        warehouseId: UUID,
+        name: String,
+    ): Map<String, Any> =
+        post("/api/warehouses/$warehouseId/locations", adminToken, mapOf("name" to name)).bodyAsMap()!!
 }

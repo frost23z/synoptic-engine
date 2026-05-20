@@ -28,24 +28,29 @@ class EmailTemplateIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `create template returns 201`() {
-        val result = post("/api/settings/email-templates", adminToken, validCreateRequest())
-        assertEquals(201, result.status())
-        val body = result.bodyAsMap()!!
+    fun `create template returns 201 with isPredefined false`() {
+        val body = createTemplate()
         assertNotNull(body["id"])
         assertEquals(false, body["isPredefined"])
     }
 
     @Test
     fun `create template with duplicate name returns 409`() {
-        val request = validCreateRequest()
-        post("/api/settings/email-templates", adminToken, request)
-        assertEquals(409, post("/api/settings/email-templates", adminToken, request).status())
+        val name = "Template ${UUID.randomUUID().toString().take(8)}"
+        createTemplate(name)
+        assertEquals(
+            409,
+            post(
+                "/api/settings/email-templates",
+                adminToken,
+                mapOf("name" to name, "subject" to "x", "content" to "<p>x</p>"),
+            ).status(),
+        )
     }
 
     @Test
     fun `get template by id returns detail`() {
-        val id = post("/api/settings/email-templates", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+        val id = createTemplate()["id"] as String
         val result = get("/api/settings/email-templates/$id", adminToken)
         assertEquals(200, result.status())
         assertEquals(id, result.bodyAsMap()!!["id"])
@@ -57,30 +62,33 @@ class EmailTemplateIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `update template returns 200`() {
-        val id = post("/api/settings/email-templates", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
-        val update =
-            mapOf(
-                "name" to "Updated Name ${UUID.randomUUID().toString().take(6)}",
-                "subject" to "New Subject",
-                "content" to "<p>New</p>",
+    fun `update template returns 200 with new subject`() {
+        val id = createTemplate()["id"] as String
+        val result =
+            put(
+                "/api/settings/email-templates/$id",
+                adminToken,
+                mapOf(
+                    "name" to "Updated ${UUID.randomUUID().toString().take(6)}",
+                    "subject" to "New Subject",
+                    "content" to "<p>New</p>",
+                ),
             )
-        val result = put("/api/settings/email-templates/$id", adminToken, update)
         assertEquals(200, result.status())
         assertEquals("New Subject", result.bodyAsMap()!!["subject"])
     }
 
     @Test
-    fun `delete template returns 204`() {
-        val id = post("/api/settings/email-templates", adminToken, validCreateRequest()).bodyAsMap()!!["id"] as String
+    fun `delete template returns 204 and is unfindable`() {
+        val id = createTemplate()["id"] as String
         assertEquals(204, delete("/api/settings/email-templates/$id", adminToken).status())
         assertEquals(404, get("/api/settings/email-templates/$id", adminToken).status())
     }
 
-    private fun validCreateRequest() =
-        mapOf(
-            "name" to "Template ${UUID.randomUUID().toString().take(8)}",
-            "subject" to "Hello {{name}}",
-            "content" to "<p>Dear {{name}}, welcome!</p>",
-        )
+    private fun createTemplate(name: String = "Template ${UUID.randomUUID().toString().take(8)}"): Map<String, Any> =
+        post(
+            "/api/settings/email-templates",
+            adminToken,
+            mapOf("name" to name, "subject" to "Hello {{name}}", "content" to "<p>Dear {{name}}</p>"),
+        ).bodyAsMap()!!
 }

@@ -3,7 +3,12 @@ package com.synopticengine.api.crm
 import com.synopticengine.api.AbstractIntegrationTest
 import com.synopticengine.api.identity.domain.ViewPermission
 import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.support.factories.ActivityFactory
+import com.synopticengine.api.support.factories.LeadFactory
+import com.synopticengine.api.support.factories.OrganizationFactory
+import com.synopticengine.api.support.factories.PersonFactory
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,17 +30,20 @@ import kotlin.test.assertTrue
  * the three exporters were not). This test asserts the leak is shut.
  */
 class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var personFactory: PersonFactory
+
+    @Autowired private lateinit var organizationFactory: OrganizationFactory
+
+    @Autowired private lateinit var activityFactory: ActivityFactory
+
+    @Autowired private lateinit var leadFactory: LeadFactory
+
     @Test
     fun `person search does not leak records owned by other users`() {
         val unique = uniqueTag()
         val admin = adminToken()
         // Admin creates a person (it gets created_by = admin).
-        val person =
-            post(
-                "/api/contacts/persons",
-                admin,
-                mapOf("firstName" to "Scope$unique", "lastName" to "Smith"),
-            ).bodyAsMap()!!
+        val person = personFactory.create(admin, firstName = "Scope$unique", lastName = "Smith")
         val individualToken = individualSalespersonToken()
 
         val result = get("/api/contacts/persons/search?q=Scope$unique", individualToken)
@@ -52,12 +60,7 @@ class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
     fun `organization search does not leak records owned by other users`() {
         val unique = uniqueTag()
         val admin = adminToken()
-        val org =
-            post(
-                "/api/contacts/organizations",
-                admin,
-                mapOf("name" to "ScopeOrg$unique"),
-            ).bodyAsMap()!!
+        val org = organizationFactory.create(admin, name = "ScopeOrg$unique")
         val individualToken = individualSalespersonToken()
 
         val result = get("/api/contacts/organizations/search?q=ScopeOrg$unique", individualToken)
@@ -73,16 +76,7 @@ class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `activity filter does not leak activities owned by other users`() {
         val admin = adminToken()
-        // Admin creates an activity. type=NOTE so schedule isn't required.
-        val activity =
-            post(
-                "/api/activities",
-                admin,
-                mapOf(
-                    "title" to "Scope leak probe ${UUID.randomUUID()}",
-                    "type" to "NOTE",
-                ),
-            ).bodyAsMap()!!
+        val activity = activityFactory.create(admin, title = "Scope leak probe ${UUID.randomUUID()}", type = "NOTE")
         val individualToken = individualSalespersonToken()
 
         val result = get("/api/activities?page=0&size=200", individualToken)
@@ -99,11 +93,7 @@ class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
     fun `persons export does not leak records owned by other users`() {
         val unique = uniqueTag()
         val admin = adminToken()
-        post(
-            "/api/contacts/persons",
-            admin,
-            mapOf("firstName" to "Export$unique", "lastName" to "Smith"),
-        )
+        personFactory.create(admin, firstName = "Export$unique", lastName = "Smith")
         val individualToken = individualSalespersonToken()
 
         val result = get("/api/persons/export", individualToken)
@@ -119,11 +109,7 @@ class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
     fun `organizations export does not leak records owned by other users`() {
         val unique = uniqueTag()
         val admin = adminToken()
-        post(
-            "/api/contacts/organizations",
-            admin,
-            mapOf("name" to "ExportOrg$unique"),
-        )
+        organizationFactory.create(admin, name = "ExportOrg$unique")
         val individualToken = individualSalespersonToken()
 
         val result = get("/api/organizations/export", individualToken)
@@ -138,21 +124,8 @@ class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `leads export does not leak records owned by other users`() {
         val admin = adminToken()
-        val pipelines = get("/api/pipelines", admin).bodyAsList()!!
-        val pipelineId = pipelines.first()["id"] as String
-        @Suppress("UNCHECKED_CAST")
-        val stages = pipelines.first()["stages"] as List<Map<String, Any>>
-        val stageId = stages.first()["id"] as String
         val uniqueTitle = "ExportLead${UUID.randomUUID()}"
-        post(
-            "/api/leads",
-            admin,
-            mapOf(
-                "title" to uniqueTitle,
-                "pipelineId" to pipelineId,
-                "stageId" to stageId,
-            ),
-        )
+        leadFactory.create(admin, title = uniqueTitle)
         val individualToken = individualSalespersonToken()
 
         val result = get("/api/leads/export", individualToken)
@@ -169,12 +142,7 @@ class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
         val unique = uniqueTag()
         val salespersonEmail = "indiv-self-${UUID.randomUUID()}@test.com"
         val salespersonToken = createIndividualSalesperson(salespersonEmail)
-        // The salesperson creates their own person.
-        post(
-            "/api/contacts/persons",
-            salespersonToken,
-            mapOf("firstName" to "Self$unique", "lastName" to "Owned"),
-        )
+        personFactory.create(salespersonToken, firstName = "Self$unique", lastName = "Owned")
 
         val result = get("/api/contacts/persons/search?q=Self$unique", salespersonToken)
         assertEquals(200, result.status())
@@ -186,7 +154,12 @@ class ScopeLeakIntegrationTest : AbstractIntegrationTest() {
         )
     }
 
-    private fun uniqueTag() = UUID.randomUUID().toString().take(8).uppercase()
+    private fun uniqueTag() =
+        UUID
+            .randomUUID()
+            .toString()
+            .take(8)
+            .uppercase()
 
     private fun individualSalespersonToken(): String =
         createIndividualSalesperson("indiv-${UUID.randomUUID()}@test.com")

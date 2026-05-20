@@ -1,8 +1,10 @@
 package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.ActivityFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import java.time.Instant
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -12,6 +14,8 @@ import kotlin.test.assertTrue
  * Phase 3 / P3.6 — calendar range + meeting overlap detection.
  */
 class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var activityFactory: ActivityFactory
+
     private lateinit var adminToken: String
     private lateinit var ownerUserId: String
 
@@ -19,30 +23,46 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
     fun setup() {
         adminToken = adminToken()
         // Pick a real user id so the activity FK to users(id) is satisfied.
-        val users = get("/api/users", adminToken).bodyAsList()!!
-        ownerUserId = users.first()["id"] as String
+        ownerUserId = get("/api/users", adminToken).bodyAsList()!!.first()["id"] as String
     }
 
     @Test
     fun `calendar lists activities whose schedule intersects the range`() {
         val now = Instant.now()
-        val inRangeId = createActivity("Inside range", now.plusSeconds(3600), now.plusSeconds(7200))
-        createActivity("Outside range", now.plusSeconds(86400 * 10), now.plusSeconds(86400 * 11))
+        val inRange =
+            activityFactory.create(
+                adminToken,
+                title = "Inside range",
+                type = "CALL",
+                scheduleFrom = now.plusSeconds(3600),
+                scheduleTo = now.plusSeconds(7200),
+            )
+        activityFactory.create(
+            adminToken,
+            title = "Outside range",
+            type = "CALL",
+            scheduleFrom = now.plusSeconds(86400 * 10),
+            scheduleTo = now.plusSeconds(86400 * 11),
+        )
 
-        val start = now.toString()
-        val end = now.plusSeconds(86400).toString()
-        val result = get("/api/activities/calendar?start=$start&end=$end", adminToken)
+        val result = get("/api/activities/calendar?start=$now&end=${now.plusSeconds(86400)}", adminToken)
         assertEquals(200, result.status())
-        val list = result.bodyAsList()!!
-        assertTrue(list.any { it["id"] == inRangeId })
+        assertTrue(result.bodyAsList()!!.any { it["id"] == inRange["id"] })
     }
 
     @Test
     fun `check-overlap finds a meeting that intersects the proposed window for the same user`() {
         val now = Instant.now()
-        val existing = createMeeting("Existing meeting", now.plusSeconds(3600), now.plusSeconds(7200), ownerUserId)
+        val existing =
+            activityFactory.create(
+                adminToken,
+                title = "Existing meeting",
+                type = "MEETING",
+                scheduleFrom = now.plusSeconds(3600),
+                scheduleTo = now.plusSeconds(7200),
+                userId = ownerUserId,
+            )
 
-        // Propose a meeting that overlaps and includes the same user.
         val resp =
             post(
                 "/api/activities/check-overlap",
@@ -59,13 +79,12 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
         assertEquals(true, body["hasOverlap"])
         @Suppress("UNCHECKED_CAST")
         val overlaps = body["overlaps"] as List<Map<String, Any>>
-        assertTrue(overlaps.any { it["id"] == existing })
+        assertTrue(overlaps.any { it["id"] == existing["id"] })
     }
 
     @Test
     fun `check-overlap returns false when nobody overlaps`() {
         val now = Instant.now()
-        // Random user id — guarantees no existing meeting matches.
         val randomUser = UUID.randomUUID().toString()
         val resp =
             post(
@@ -85,7 +104,15 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `check-overlap excludes a specified activity`() {
         val now = Instant.now()
-        val existing = createMeeting("Existing", now.plusSeconds(3600), now.plusSeconds(7200), ownerUserId)
+        val existing =
+            activityFactory.create(
+                adminToken,
+                title = "Existing",
+                type = "MEETING",
+                scheduleFrom = now.plusSeconds(3600),
+                scheduleTo = now.plusSeconds(7200),
+                userId = ownerUserId,
+            )
         val resp =
             post(
                 "/api/activities/check-overlap",
@@ -94,7 +121,7 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
                     "scheduleFrom" to now.plusSeconds(3600).toString(),
                     "scheduleTo" to now.plusSeconds(7200).toString(),
                     "userIds" to listOf(ownerUserId),
-                    "excludeActivityId" to existing,
+                    "excludeActivityId" to existing["id"],
                 ),
             )
         assertEquals(200, resp.status())
@@ -102,7 +129,7 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `bad range returns 400`() {
+    fun `check-overlap with end before start returns 400`() {
         val resp =
             post(
                 "/api/activities/check-overlap",
@@ -115,38 +142,4 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
             )
         assertEquals(400, resp.status())
     }
-
-    private fun createActivity(
-        title: String,
-        from: Instant,
-        to: Instant,
-    ): String =
-        post(
-            "/api/activities",
-            adminToken,
-            mapOf(
-                "title" to title,
-                "type" to "CALL",
-                "scheduleFrom" to from.toString(),
-                "scheduleTo" to to.toString(),
-            ),
-        ).bodyAsMap()!!["id"] as String
-
-    private fun createMeeting(
-        title: String,
-        from: Instant,
-        to: Instant,
-        ownerUserId: String,
-    ): String =
-        post(
-            "/api/activities",
-            adminToken,
-            mapOf(
-                "title" to title,
-                "type" to "MEETING",
-                "scheduleFrom" to from.toString(),
-                "scheduleTo" to to.toString(),
-                "userId" to ownerUserId,
-            ),
-        ).bodyAsMap()!!["id"] as String
 }

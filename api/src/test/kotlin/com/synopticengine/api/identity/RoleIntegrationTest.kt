@@ -32,32 +32,22 @@ class RoleIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `create role without token returns 401`() {
-        val request = mapOf("name" to "X", "permissions" to emptyList<String>())
-        assertEquals(401, post("/api/roles", null, request).status())
+        assertEquals(401, post("/api/roles", null, mapOf("name" to "X", "permissions" to emptyList<String>())).status())
     }
 
     // ── List ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `list roles as ADMIN returns seeded roles`() {
-        val result = get("/api/roles", adminToken)
-        assertEquals(200, result.status())
-        val body = result.bodyAsList()!!
-        // V007 seeds 4 roles: ADMIN, MANAGER, SALESPERSON, VIEWER
-        assertTrue(body.size >= 4)
-        val names = body.map { it["name"] as String }
-        assertTrue(names.contains("ADMIN"))
-        assertTrue(names.contains("MANAGER"))
-        assertTrue(names.contains("SALESPERSON"))
-        assertTrue(names.contains("VIEWER"))
+    fun `list roles as ADMIN returns the four seeded roles`() {
+        // V007 seeds 4 roles: ADMIN, MANAGER, SALESPERSON, VIEWER.
+        val names = get("/api/roles", adminToken).bodyAsList()!!.map { it["name"] as String }
+        assertTrue(names.containsAll(listOf("ADMIN", "MANAGER", "SALESPERSON", "VIEWER")))
     }
 
     @Test
     fun `list permissions as ADMIN returns all seeded permissions`() {
-        val result = get("/api/roles/permissions", adminToken)
-        assertEquals(200, result.status())
-        // V007 has 20 + V008 adds 3 = 23 total
-        assertTrue(result.bodyAsList()!!.size >= 20)
+        // V007 + V008 ship ≥ 20 permission keys.
+        assertTrue(get("/api/roles/permissions", adminToken).bodyAsList()!!.size >= 20)
     }
 
     // ── Get by ID ─────────────────────────────────────────────────────────
@@ -65,7 +55,6 @@ class RoleIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `get role by id returns role with permissions`() {
         val id = get("/api/roles", adminToken).bodyAsList()!!.first()["id"] as String
-
         val result = get("/api/roles/$id", adminToken)
         assertEquals(200, result.status())
         val body = result.bodyAsMap()!!
@@ -84,54 +73,48 @@ class RoleIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `create role returns 201 with assigned permissions`() {
         val name = "CUSTOM_${UUID.randomUUID().toString().take(8)}"
-        val request =
-            mapOf(
-                "name" to name,
-                "description" to "test",
-                "permissions" to listOf("leads.view", "contacts.view"),
+        val result =
+            post(
+                "/api/roles",
+                adminToken,
+                mapOf("name" to name, "description" to "test", "permissions" to listOf("leads.view", "contacts.view")),
             )
-
-        val result = post("/api/roles", adminToken, request)
         assertEquals(201, result.status())
         val body = result.bodyAsMap()!!
         assertNotNull(body["id"])
         assertEquals(name, body["name"])
         @Suppress("UNCHECKED_CAST")
         val perms = body["permissions"] as List<String>
-        assertTrue(perms.contains("leads.view"))
-        assertTrue(perms.contains("contacts.view"))
+        assertTrue(perms.containsAll(listOf("leads.view", "contacts.view")))
     }
 
     @Test
     fun `create role with duplicate name returns 409`() {
         val name = "DUP_${UUID.randomUUID().toString().take(8)}"
-        val request = mapOf("name" to name, "permissions" to emptyList<String>())
-        post("/api/roles", adminToken, request)
-        assertEquals(409, post("/api/roles", adminToken, request).status())
+        createRole(name)
+        assertEquals(
+            409,
+            post("/api/roles", adminToken, mapOf("name" to name, "permissions" to emptyList<String>())).status(),
+        )
     }
 
     @Test
     fun `create role with blank name returns 422`() {
-        val request = mapOf("name" to "  ", "permissions" to emptyList<String>())
-        assertEquals(422, post("/api/roles", adminToken, request).status())
+        assertEquals(
+            422,
+            post("/api/roles", adminToken, mapOf("name" to "  ", "permissions" to emptyList<String>())).status(),
+        )
     }
 
     // ── Update ────────────────────────────────────────────────────────────
 
     @Test
     fun `update role changes name and replaces permissions`() {
-        val name = "UPDT_${UUID.randomUUID().toString().take(8)}"
-        val id =
-            post(
-                "/api/roles",
-                adminToken,
-                mapOf("name" to name, "permissions" to listOf("leads.view")),
-            ).bodyAsMap()!!["id"] as String
+        val id = createRole(name = "UPDT_${UUID.randomUUID().toString().take(8)}", permissions = listOf("leads.view"))
 
         val newName = "NEW_${UUID.randomUUID().toString().take(8)}"
         val result =
             put("/api/roles/$id", adminToken, mapOf("name" to newName, "permissions" to listOf("contacts.view")))
-
         assertEquals(200, result.status())
         val body = result.bodyAsMap()!!
         assertEquals(newName, body["name"])
@@ -143,22 +126,21 @@ class RoleIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `update role with unknown id returns 404`() {
-        val request = mapOf("name" to "X", "permissions" to emptyList<String>())
-        assertEquals(404, put("/api/roles/${UUID.randomUUID()}", adminToken, request).status())
+        assertEquals(
+            404,
+            put(
+                "/api/roles/${UUID.randomUUID()}",
+                adminToken,
+                mapOf("name" to "X", "permissions" to emptyList<String>()),
+            ).status(),
+        )
     }
 
     // ── Delete ────────────────────────────────────────────────────────────
 
     @Test
     fun `delete role returns 204 and is no longer findable`() {
-        val name = "DEL_${UUID.randomUUID().toString().take(8)}"
-        val id =
-            post(
-                "/api/roles",
-                adminToken,
-                mapOf("name" to name, "permissions" to emptyList<String>()),
-            ).bodyAsMap()!!["id"] as String
-
+        val id = createRole()
         assertEquals(204, delete("/api/roles/$id", adminToken).status())
         assertEquals(404, get("/api/roles/$id", adminToken).status())
     }
@@ -172,4 +154,11 @@ class RoleIntegrationTest : AbstractIntegrationTest() {
     fun `delete role without token returns 401`() {
         assertEquals(401, delete("/api/roles/${UUID.randomUUID()}", null).status())
     }
+
+    private fun createRole(
+        name: String = "R_${UUID.randomUUID().toString().take(8)}",
+        permissions: List<String> = emptyList(),
+    ): String =
+        post("/api/roles", adminToken, mapOf("name" to name, "permissions" to permissions))
+            .bodyAsMap()!!["id"] as String
 }

@@ -1,13 +1,20 @@
 package com.synopticengine.api
 
+import com.synopticengine.api.support.factories.ActivityFactory
+import com.synopticengine.api.support.factories.LeadFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.UUID
+import org.springframework.beans.factory.annotation.Autowired
+import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DashboardIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var leadFactory: LeadFactory
+
+    @Autowired private lateinit var activityFactory: ActivityFactory
+
     private lateinit var adminToken: String
     private lateinit var viewerToken: String
 
@@ -16,8 +23,6 @@ class DashboardIntegrationTest : AbstractIntegrationTest() {
         adminToken = adminToken()
         viewerToken = tokenFor(setOf("VIEWER"))
     }
-
-    // ── Auth guards ───────────────────────────────────────────────────────
 
     @Test
     fun `dashboard without token returns 401`() {
@@ -29,39 +34,28 @@ class DashboardIntegrationTest : AbstractIntegrationTest() {
         assertEquals(200, get("/api/dashboard", viewerToken).status())
     }
 
-    // ── Response structure ────────────────────────────────────────────────
-
     @Test
-    fun `dashboard returns all required fields`() {
-        val result = get("/api/dashboard", adminToken)
-        assertEquals(200, result.status())
-        val body = result.bodyAsMap()!!
-        assertNotNull(body["totalLeads"])
-        assertNotNull(body["openLeads"])
-        assertNotNull(body["wonLeads"])
-        assertNotNull(body["lostLeads"])
-        assertNotNull(body["totalRevenue"])
-        assertNotNull(body["leadsByStage"])
-        assertNotNull(body["recentActivities"])
-        assertNotNull(body["upcomingActivities"])
-        assertNotNull(body["topSalespeople"])
+    fun `dashboard returns all required summary fields`() {
+        val body = get("/api/dashboard", adminToken).bodyAsMap()!!
+        listOf(
+            "totalLeads",
+            "openLeads",
+            "wonLeads",
+            "lostLeads",
+            "totalRevenue",
+            "leadsByStage",
+            "recentActivities",
+            "upcomingActivities",
+            "topSalespeople",
+        ).forEach { assertNotNull(body[it], "dashboard missing field $it") }
+        assertTrue(body["leadsByStage"] is List<*>)
+        assertTrue(body["topSalespeople"] is List<*>)
     }
 
     @Test
     fun `dashboard counts reflect created leads`() {
-        val before = get("/api/dashboard", adminToken).bodyAsMap()!!
-        val beforeTotal = (before["totalLeads"] as Int)
-
-        // Create a lead
-        post(
-            "/api/leads",
-            adminToken,
-            mapOf(
-                "title" to "Dashboard Test Lead ${UUID.randomUUID().toString().take(6)}",
-                "pipelineId" to "00000000-0000-0000-0000-000000000010",
-                "stageId" to "00000000-0000-0000-0000-000000000011",
-            ),
-        )
+        val beforeTotal = get("/api/dashboard", adminToken).bodyAsMap()!!["totalLeads"] as Int
+        leadFactory.create(adminToken, title = "Dashboard Test Lead")
 
         val after = get("/api/dashboard", adminToken).bodyAsMap()!!
         assertEquals(beforeTotal + 1, after["totalLeads"] as Int)
@@ -70,70 +64,24 @@ class DashboardIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `dashboard recent activities reflect created activities`() {
-        post(
-            "/api/activities",
-            adminToken,
-            mapOf(
-                "title" to "Dashboard Activity ${UUID.randomUUID().toString().take(6)}",
-                "type" to "CALL",
-                "scheduleFrom" to
-                    java.time.Instant
-                        .now()
-                        .toString(),
-                "scheduleTo" to
-                    java.time.Instant
-                        .now()
-                        .plusSeconds(3600)
-                        .toString(),
-            ),
-        )
-
-        val result = get("/api/dashboard", adminToken)
-        assertEquals(200, result.status())
+        activityFactory.create(adminToken, title = "Dashboard Activity")
         @Suppress("UNCHECKED_CAST")
-        val recent = result.bodyAsMap()!!["recentActivities"] as List<*>
+        val recent = get("/api/dashboard", adminToken).bodyAsMap()!!["recentActivities"] as List<*>
         assertTrue(recent.isNotEmpty())
     }
 
     @Test
-    fun `dashboard upcoming activities only includes future undone activities`() {
-        // Create a future activity
-        post(
-            "/api/activities",
+    fun `dashboard upcoming activities are all not done`() {
+        val now = Instant.now()
+        activityFactory.create(
             adminToken,
-            mapOf(
-                "title" to "Future Activity ${UUID.randomUUID().toString().take(6)}",
-                "type" to "MEETING",
-                "scheduleFrom" to
-                    java.time.Instant
-                        .now()
-                        .plusSeconds(7200)
-                        .toString(),
-                "scheduleTo" to
-                    java.time.Instant
-                        .now()
-                        .plusSeconds(10800)
-                        .toString(),
-            ),
+            title = "Future Activity",
+            type = "MEETING",
+            scheduleFrom = now.plusSeconds(7200),
+            scheduleTo = now.plusSeconds(10800),
         )
-
-        val result = get("/api/dashboard", adminToken)
-        assertEquals(200, result.status())
         @Suppress("UNCHECKED_CAST")
-        val upcoming = result.bodyAsMap()!!["upcomingActivities"] as List<Map<String, Any>>
-        // All upcoming activities must be not done
+        val upcoming = get("/api/dashboard", adminToken).bodyAsMap()!!["upcomingActivities"] as List<Map<String, Any>>
         assertTrue(upcoming.all { it["isDone"] == false })
-    }
-
-    @Test
-    fun `dashboard leadsByStage is a list`() {
-        val body = get("/api/dashboard", adminToken).bodyAsMap()!!
-        assertTrue(body["leadsByStage"] is List<*>)
-    }
-
-    @Test
-    fun `dashboard topSalespeople is a list`() {
-        val body = get("/api/dashboard", adminToken).bodyAsMap()!!
-        assertTrue(body["topSalespeople"] is List<*>)
     }
 }

@@ -1,125 +1,84 @@
 package com.synopticengine.api
 
 import com.synopticengine.api.identity.service.UserService
-import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.support.TestAuth
+import com.synopticengine.api.support.TestHttp
+import com.synopticengine.api.support.TestSupportConfig
+import org.junit.jupiter.api.Tag
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
-import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-import tools.jackson.core.type.TypeReference
 import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
+/**
+ * Thin base for integration tests that need a booted Spring context. The HTTP and
+ * auth machinery lives in [TestHttp] and [TestAuth] (wired by [TestSupportConfig]);
+ * the methods below are backwards-compatible thin delegates so the 50+ existing
+ * tests keep working unchanged. New tests should prefer `http.`/`auth.` directly.
+ *
+ * Carries the `integration` JUnit tag so the `unitTests` Gradle task can exclude
+ * the slow, context-booting tests for sub-second local feedback.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, TestSupportConfig::class)
+@Tag("integration")
 abstract class AbstractIntegrationTest {
-    @Autowired
-    lateinit var mockMvc: MockMvc
+    @Autowired protected lateinit var mockMvc: MockMvc
 
-    @Autowired
-    lateinit var objectMapper: ObjectMapper
+    @Autowired protected lateinit var objectMapper: ObjectMapper
 
-    @Autowired
-    lateinit var userService: UserService
+    @Autowired protected lateinit var userService: UserService
 
-    protected fun adminToken(): String = tokenFor(setOf("ADMIN"))
+    @Autowired protected lateinit var http: TestHttp
 
-    protected fun salespersonToken(): String = tokenFor(setOf("SALESPERSON"))
+    @Autowired protected lateinit var auth: TestAuth
+
+    protected fun adminToken(): String = auth.adminToken()
+
+    protected fun salespersonToken(): String = auth.salespersonToken()
 
     protected fun tokenFor(
         roleNames: Set<String>,
-        tenantId: UUID = TenantContext.SEED_TENANT_ID,
-    ): String {
-        val email = "test-${UUID.randomUUID()}@test.com"
-        TenantContext.runAs(tenantId) {
-            userService.create(
-                email = email,
-                password = "password123",
-                firstName = "Test",
-                lastName = "User",
-                roleNames = roleNames,
-            )
-        }
-        return login(email, "password123")
-    }
+        tenantId: UUID = com.synopticengine.api.shared.TenantContext.SEED_TENANT_ID,
+    ): String = auth.tokenFor(roleNames, tenantId)
 
     protected fun login(
         email: String,
         password: String,
-    ): String {
-        val result =
-            mockMvc
-                .perform(
-                    MockMvcRequestBuilders
-                        .post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(mapOf("email" to email, "password" to password))),
-                ).andReturn()
-        val body = result.bodyAsMap()!!
-        return body["accessToken"] as String
-    }
+    ): String = auth.login(email, password)
 
     protected fun get(
         path: String,
         token: String?,
-    ): MvcResult {
-        val req = MockMvcRequestBuilders.get(path)
-        if (token != null) req.header("Authorization", "Bearer $token")
-        return mockMvc.perform(req).andReturn()
-    }
+    ): MvcResult = http.get(path, token)
 
     protected fun post(
         path: String,
         token: String?,
         body: Any?,
-    ): MvcResult {
-        val req =
-            MockMvcRequestBuilders
-                .post(path)
-                .contentType(MediaType.APPLICATION_JSON)
-        if (token != null) req.header("Authorization", "Bearer $token")
-        if (body != null) req.content(objectMapper.writeValueAsString(body))
-        return mockMvc.perform(req).andReturn()
-    }
+    ): MvcResult = http.post(path, token, body)
 
     protected fun put(
         path: String,
         token: String?,
         body: Any?,
-    ): MvcResult {
-        val req =
-            MockMvcRequestBuilders
-                .put(path)
-                .contentType(MediaType.APPLICATION_JSON)
-        if (token != null) req.header("Authorization", "Bearer $token")
-        if (body != null) req.content(objectMapper.writeValueAsString(body))
-        return mockMvc.perform(req).andReturn()
-    }
+    ): MvcResult = http.put(path, token, body)
 
     protected fun delete(
         path: String,
         token: String?,
-    ): MvcResult {
-        val req = MockMvcRequestBuilders.delete(path)
-        if (token != null) req.header("Authorization", "Bearer $token")
-        return mockMvc.perform(req).andReturn()
-    }
+    ): MvcResult = http.delete(path, token)
 
     protected fun patch(
         path: String,
         token: String?,
         body: Any? = null,
-    ): MvcResult {
-        val req = MockMvcRequestBuilders.patch(path).contentType(MediaType.APPLICATION_JSON)
-        if (token != null) req.header("Authorization", "Bearer $token")
-        if (body != null) req.content(objectMapper.writeValueAsString(body))
-        return mockMvc.perform(req).andReturn()
-    }
+    ): MvcResult = http.patch(path, token, body)
 
     protected fun multipart(
         path: String,
@@ -127,34 +86,11 @@ abstract class AbstractIntegrationTest {
         fileBytes: ByteArray,
         filename: String,
         params: Map<String, String> = emptyMap(),
-    ): MvcResult {
-        val req =
-            MockMvcRequestBuilders
-                .multipart(path)
-                .file(
-                    org.springframework.mock.web.MockMultipartFile(
-                        "file",
-                        filename,
-                        "text/csv",
-                        fileBytes,
-                    ),
-                )
-        if (token != null) req.header("Authorization", "Bearer $token")
-        params.forEach { (k, v) -> req.param(k, v) }
-        return mockMvc.perform(req).andReturn()
-    }
+    ): MvcResult = http.multipart(path, token, fileBytes, filename, params)
 
     protected fun MvcResult.status(): Int = response.status
 
-    protected fun MvcResult.bodyAsMap(): Map<String, Any>? {
-        val content = response.contentAsString
-        if (content.isBlank()) return null
-        return objectMapper.readValue(content, object : TypeReference<Map<String, Any>>() {})
-    }
+    protected fun MvcResult.bodyAsMap(): Map<String, Any>? = http.bodyAsMap(this)
 
-    protected fun MvcResult.bodyAsList(): List<Map<String, Any>>? {
-        val content = response.contentAsString
-        if (content.isBlank()) return null
-        return objectMapper.readValue(content, object : TypeReference<List<Map<String, Any>>>() {})
-    }
+    protected fun MvcResult.bodyAsList(): List<Map<String, Any>>? = http.bodyAsList(this)
 }

@@ -1,8 +1,9 @@
 package com.synopticengine.api
 
+import com.synopticengine.api.support.factories.LeadFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.Instant
+import org.springframework.beans.factory.annotation.Autowired
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -17,18 +18,16 @@ import kotlin.test.assertTrue
  * known create.
  */
 class DashboardStatsIntegrationTest : AbstractIntegrationTest() {
+    @Autowired private lateinit var leadFactory: LeadFactory
+
     private lateinit var adminToken: String
 
-    private val defaultPipelineId = "00000000-0000-0000-0000-000000000010"
-    private val defaultStageId = "00000000-0000-0000-0000-000000000011"
     private val wonStageId = "00000000-0000-0000-0000-000000000015"
 
     @BeforeEach
     fun setup() {
         adminToken = adminToken()
     }
-
-    // ── Auth ──────────────────────────────────────────────────────────────
 
     @Test
     fun `stats without token returns 401`() {
@@ -40,164 +39,120 @@ class DashboardStatsIntegrationTest : AbstractIntegrationTest() {
         assertEquals(400, get("/api/dashboard/stats?type=bogus", adminToken).status())
     }
 
-    // ── over-all ──────────────────────────────────────────────────────────
-
     @Test
     fun `over-all returns the four period counters with deltas`() {
         val body = get("/api/dashboard/stats?type=over-all", adminToken).bodyAsMap()!!
-        assertNotNull(body["leads"])
-        assertNotNull(body["activities"])
-        assertNotNull(body["quotes"])
-        assertNotNull(body["persons"])
+        listOf("leads", "activities", "quotes", "persons").forEach { assertNotNull(body[it]) }
         @Suppress("UNCHECKED_CAST")
         val leads = body["leads"] as Map<String, Any>
-        assertNotNull(leads["current"])
-        assertNotNull(leads["previous"])
-        assertNotNull(leads["delta"])
-        assertNotNull(leads["changePercent"])
+        listOf("current", "previous", "delta", "changePercent").forEach { assertNotNull(leads[it]) }
     }
 
     @Test
     fun `over-all current count grows after a new lead is created`() {
-        val before =
-            (
-                get(
-                    "/api/dashboard/stats?type=over-all",
-                    adminToken,
-                ).bodyAsMap()!!["leads"] as Map<*, *>
-            )["current"] as Int
-        post(
-            "/api/leads",
-            adminToken,
-            mapOf(
-                "title" to "Stats test ${UUID.randomUUID()}",
-                "pipelineId" to defaultPipelineId,
-                "stageId" to defaultStageId,
-            ),
-        )
-        val after =
-            (
-                get(
-                    "/api/dashboard/stats?type=over-all",
-                    adminToken,
-                ).bodyAsMap()!!["leads"] as Map<*, *>
-            )["current"] as Int
-        assertEquals(before + 1, after)
+        val before = leadsCurrentCount()
+        leadFactory.create(adminToken, title = "Stats test ${UUID.randomUUID()}")
+        assertEquals(before + 1, leadsCurrentCount())
     }
-
-    // ── revenue-stats ─────────────────────────────────────────────────────
 
     @Test
     fun `revenue-stats returns won and lost revenue fields`() {
         val body = get("/api/dashboard/stats?type=revenue-stats", adminToken).bodyAsMap()!!
-        assertNotNull(body["wonRevenue"])
-        assertNotNull(body["lostRevenue"])
-        assertNotNull(body["previousWonRevenue"])
-        assertNotNull(body["previousLostRevenue"])
+        listOf("wonRevenue", "lostRevenue", "previousWonRevenue", "previousLostRevenue").forEach {
+            assertNotNull(body[it])
+        }
     }
 
     @Test
     fun `revenue-stats won amount climbs after a won lead lands`() {
         val today = LocalDate.now().toString()
         val range = "startDate=${LocalDate.now().minusDays(7)}&endDate=$today"
-        val before = get("/api/dashboard/stats?type=revenue-stats&$range", adminToken).bodyAsMap()!!
-        val beforeWon = (before["wonRevenue"] as Number).toDouble()
+        val beforeWon =
+            (get("/api/dashboard/stats?type=revenue-stats&$range", adminToken).bodyAsMap()!!["wonRevenue"] as Number)
+                .toDouble()
 
-        // Create a lead, move it to the WON stage.
-        val createResp =
-            post(
-                "/api/leads",
-                adminToken,
-                mapOf(
-                    "title" to "Won lead ${UUID.randomUUID()}",
-                    "amount" to 1000,
-                    "pipelineId" to defaultPipelineId,
-                    "stageId" to defaultStageId,
-                ),
-            )
-        val leadId = createResp.bodyAsMap()!!["id"] as String
-        val moveResp = patch("/api/leads/$leadId/stage", adminToken, mapOf("stageId" to wonStageId))
-        assertEquals(200, moveResp.status())
+        val leadId =
+            leadFactory.id(adminToken, title = "Won lead ${UUID.randomUUID()}").let {
+                // amount=1000 is required for revenue movement.
+                put(
+                    "/api/leads/$it",
+                    adminToken,
+                    mapOf("title" to "Won lead", "amount" to 1000),
+                )
+                it
+            }
+        assertEquals(200, patch("/api/leads/$leadId/stage", adminToken, mapOf("stageId" to wonStageId)).status())
 
-        val after = get("/api/dashboard/stats?type=revenue-stats&$range", adminToken).bodyAsMap()!!
-        val afterWon = (after["wonRevenue"] as Number).toDouble()
+        val afterWon =
+            (get("/api/dashboard/stats?type=revenue-stats&$range", adminToken).bodyAsMap()!!["wonRevenue"] as Number)
+                .toDouble()
         assertTrue(afterWon >= beforeWon + 1000.0, "expected won-revenue to climb by at least 1000")
     }
 
-    // ── total-leads ───────────────────────────────────────────────────────
-
     @Test
-    fun `total-leads returns time-series bucketed by day`() {
-        val body = get("/api/dashboard/stats?type=total-leads", adminToken).bodyAsMap()!!
-        assertEquals("day", body["bucket"])
-        assertNotNull(body["series"])
-        assertTrue(body["series"] is List<*>)
+    fun `total-leads returns time-series with day or week bucket`() {
+        val day = get("/api/dashboard/stats?type=total-leads", adminToken).bodyAsMap()!!
+        assertEquals("day", day["bucket"])
+        assertTrue(day["series"] is List<*>)
+
+        val week = get("/api/dashboard/stats?type=total-leads&bucket=week", adminToken).bodyAsMap()!!
+        assertEquals("week", week["bucket"])
     }
 
     @Test
-    fun `total-leads accepts week bucket`() {
-        val body = get("/api/dashboard/stats?type=total-leads&bucket=week", adminToken).bodyAsMap()!!
-        assertEquals("week", body["bucket"])
-    }
-
-    // ── revenue-by-sources / types ────────────────────────────────────────
-
-    @Test
-    fun `revenue-by-sources returns list`() {
+    fun `revenue-by-sources returns a list`() {
         val result = get("/api/dashboard/stats?type=revenue-by-sources", adminToken)
         assertEquals(200, result.status())
         assertNotNull(result.bodyAsList())
     }
 
     @Test
-    fun `revenue-by-types returns list`() {
+    fun `revenue-by-types returns a list`() {
         val result = get("/api/dashboard/stats?type=revenue-by-types", adminToken)
         assertEquals(200, result.status())
         assertNotNull(result.bodyAsList())
     }
 
-    // ── top-selling-products / top-persons ────────────────────────────────
-
     @Test
-    fun `top-selling-products returns list`() {
+    fun `top-selling-products returns a list`() {
         val result = get("/api/dashboard/stats?type=top-selling-products", adminToken)
         assertEquals(200, result.status())
         assertNotNull(result.bodyAsList())
     }
 
     @Test
-    fun `top-persons returns list`() {
+    fun `top-persons returns a list`() {
         val result = get("/api/dashboard/stats?type=top-persons", adminToken)
         assertEquals(200, result.status())
         assertNotNull(result.bodyAsList())
     }
 
-    // ── open-leads-by-states ──────────────────────────────────────────────
-
     @Test
-    fun `open-leads-by-states returns one entry per stage that has open leads`() {
-        // Seed a lead so we have at least one row.
-        post(
-            "/api/leads",
-            adminToken,
-            mapOf(
-                "title" to "Open lead ${UUID.randomUUID()}",
-                "pipelineId" to defaultPipelineId,
-                "stageId" to defaultStageId,
-            ),
-        )
+    fun `open-leads-by-states returns one entry per stage with open leads`() {
+        leadFactory.create(adminToken, title = "Open lead ${UUID.randomUUID()}")
         val rows = get("/api/dashboard/stats?type=open-leads-by-states", adminToken).bodyAsList()!!
         assertTrue(rows.isNotEmpty())
+        val defaultStageId = "00000000-0000-0000-0000-000000000011"
         val row = rows.first { it["stageId"] == defaultStageId }
         assertTrue((row["count"] as Int) >= 1)
         assertNotNull(row["stageName"])
     }
 
-    // ── Date range validation ─────────────────────────────────────────────
-
     @Test
     fun `bad date range returns 400`() {
-        val result = get("/api/dashboard/stats?type=over-all&startDate=2026-12-01&endDate=2026-01-01", adminToken)
-        assertEquals(400, result.status())
+        assertEquals(
+            400,
+            get("/api/dashboard/stats?type=over-all&startDate=2026-12-01&endDate=2026-01-01", adminToken).status(),
+        )
+    }
+
+    private fun leadsCurrentCount(): Int {
+        @Suppress("UNCHECKED_CAST")
+        return (
+            get(
+                "/api/dashboard/stats?type=over-all",
+                adminToken,
+            ).bodyAsMap()!!["leads"] as Map<String, Any>
+        )["current"] as Int
     }
 }
