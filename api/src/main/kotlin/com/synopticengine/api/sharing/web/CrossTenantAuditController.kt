@@ -34,6 +34,7 @@ class CrossTenantAuditController(
         @RequestParam resourceType: String?,
         @RequestParam resourceId: UUID?,
         @RequestParam actorTenantId: UUID?,
+        @RequestParam ownerTenantId: UUID?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
     ): ResponseEntity<PageResponse<CrossTenantAuditDto>> {
@@ -42,6 +43,9 @@ class CrossTenantAuditController(
             if (resourceType != null && resourceId != null) {
                 // Owner view of a single record.
                 auditService.byOwnerResource(principal.tenantId, resourceType, resourceId, pageable)
+            } else if (ownerTenantId != null && ownerTenantId == principal.tenantId) {
+                // Owner view across every record this tenant owns.
+                auditService.byOwner(ownerTenantId, pageable)
             } else if (actorTenantId != null && actorTenantId == principal.tenantId) {
                 // Self view of "everything I did across borders".
                 auditService.byActor(actorTenantId, pageable)

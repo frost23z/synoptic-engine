@@ -200,10 +200,11 @@ P1-3 from `08-phase-4-findings.md`. Today these `@Transactional` services call a
 | Caller | Target | Stake |
 |---|---|---|
 | `auth/service/AuthService.resetPassword` (write) | `IdentityApi.updatePassword` (write) | Reset rolls back → user keeps old password ✓ |
-| `sharing/service/RecordShareService.share` (write) | `tenantApi.exists`, `crmApi.findTagsByIds` (read) | Validation reads; safe |
+| `sharing/service/RecordShareService.share` (write) | `tenantApi.exists`, `crmApi.findLeadOwnerTenant` / `findPersonOwnerTenant` / `findOrganizationOwnerTenant` / `findQuoteOwnerTenant` / `findActivityOwnerTenant`, `inventoryApi.findProductOwnerTenant` / `findWarehouseOwnerTenant` (read) | Validation reads; safe |
 | `sharing/service/TenantRelationshipService.request` (write) | `tenantApi.exists` (read) | Validation read; safe |
 | `inventory/product/service/ProductService.loadTags` (read) | `crmApi.findTagsByIds` (read) | Both read; safe |
 | `inventory/warehouse/service/WarehouseService.loadTags` (read) | `crmApi.findTagsByIds` (read) | Both read; safe |
+| `identity/service/TenantProvisioningService.seedTenantDefaults` (write) | `crm.CrmBootstrapPort.seedDefault{Pipeline,LeadSources,LeadTypes}` via synchronous `TenantProvisionedEvent` listener (write) | Identity → CRM write-write chain. If CRM seed fails, tenant creation rolls back ✓ |
 
 All work today because everything's one Postgres instance with one `JpaTransactionManager` — the cross-module call participates in the caller's transaction. **No code change in Phase 4.**
 

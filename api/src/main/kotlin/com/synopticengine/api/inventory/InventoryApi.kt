@@ -31,5 +31,11 @@ interface InventoryApi {
         sku: String?,
     ): ProductSummary
 
-    fun exportProductsCsv(): List<ProductCsvRow>
+    /** Streaming export of every product as CSV rows. See CrmApi.streamPersonsCsv for the rationale. */
+    fun streamProductsCsv(consume: (ProductCsvRow) -> Unit)
+
+    /** Owner of a given record — needed by sharing.service.RecordShareService. */
+    fun findProductOwnerTenant(productId: UUID): UUID?
+
+    fun findWarehouseOwnerTenant(warehouseId: UUID): UUID?
 }
