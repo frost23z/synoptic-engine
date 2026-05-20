@@ -42,6 +42,11 @@ class TenantSharePolicyService(
             throw IllegalStateException("Cannot create policies on a revoked relationship")
         }
         require(ResourceType.isKnown(resourceType)) { "Unknown resource type: $resourceType" }
+        // The materialization worker can't evaluate filter_jsonb yet (Sprint 2c). Accepting
+        // a filter here would let it silently materialize zero records — worse than refusing.
+        require(filterJson == null) {
+            "filterJson is not yet supported; the materialization worker would silently match no records"
+        }
         val existing = policyRepository.findByRelationshipIdAndResourceType(relationshipId, resourceType)
         if (existing != null) {
             throw IllegalStateException("A policy for $resourceType already exists on this relationship")
@@ -70,13 +75,14 @@ class TenantSharePolicyService(
         cascadeJson: String? = null,
     ): TenantSharePolicy {
         val policy = loadOwnedPolicy(policyId, actingTenantId)
+        // Same rationale as create(): the worker can't honour a filter yet, so accepting one
+        // would silently break materialization.
+        require(filterJson == null) {
+            "filterJson is not yet supported; the materialization worker would silently match no records"
+        }
         var changed = false
         if (accessLevel != null && policy.accessLevel != accessLevel) {
             policy.accessLevel = accessLevel
-            changed = true
-        }
-        if (filterJson != null && policy.filterJson != filterJson) {
-            policy.filterJson = filterJson
             changed = true
         }
         if (cascadeJson != null && policy.cascadeJson != cascadeJson) {

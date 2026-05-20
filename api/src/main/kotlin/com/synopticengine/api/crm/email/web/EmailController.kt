@@ -2,7 +2,9 @@ package com.synopticengine.api.crm.email.web
 
 import com.synopticengine.api.crm.email.service.EmailService
 import com.synopticengine.api.shared.web.PageResponse
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
+import tools.jackson.databind.ObjectMapper
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.ContentDisposition
@@ -30,6 +32,8 @@ import java.util.UUID
 @RequestMapping($$"${api.base-path}/mail")
 class EmailController(
     private val emailService: EmailService,
+    private val inboundMailSignatureVerifier: InboundMailSignatureVerifier,
+    private val objectMapper: ObjectMapper,
 ) {
     /**
      * Folder listings are gated on `mail.view` AND a per-folder permission
@@ -197,18 +201,35 @@ class EmailController(
         return ResponseEntity.ok().headers(headers).body(bytes)
     }
 
+    /**
+     * Public, unauthenticated inbound-mail webhook. Required by upstream MTAs/inbound
+     * providers (Postmark, SendGrid) that POST parsed mail to us — they can't carry a JWT.
+     *
+     * Because there's no JWT, the body itself is the credential: every request must
+     * include `X-Synoptic-Signature` = `hex(HMAC_SHA256(secret, raw_body))`. The shared
+     * secret comes from `synoptic.inbound-mail.webhook-secret`. Without that env var,
+     * the verifier fails closed — better to refuse delivery than land attacker-controlled
+     * rows in the seed tenant.
+     */
     @PostMapping("/inbound-parse")
     fun inboundParse(
-        @RequestBody request: InboundParseRequest,
-    ): ResponseEntity<EmailResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(
+        request: HttpServletRequest,
+        @RequestBody rawBody: ByteArray,
+    ): ResponseEntity<EmailResponse> {
+        inboundMailSignatureVerifier.verify(request, rawBody)
+        val parsed = parseInboundBody(rawBody)
+        return ResponseEntity.status(HttpStatus.CREATED).body(
             emailService.parseInbound(
-                from = request.from,
-                to = request.to,
-                subject = request.subject,
-                body = request.body,
+                from = parsed.from,
+                to = parsed.to,
+                subject = parsed.subject,
+                body = parsed.body,
             ),
         )
+    }
+
+    private fun parseInboundBody(rawBody: ByteArray): InboundParseRequest =
+        objectMapper.readValue(rawBody, InboundParseRequest::class.java)
 
     /**
      * P3.3 — per-folder permission gating. The catalog ships:

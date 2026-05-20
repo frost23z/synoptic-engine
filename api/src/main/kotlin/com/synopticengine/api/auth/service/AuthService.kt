@@ -8,11 +8,10 @@ import com.synopticengine.api.auth.web.TokenResponse
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.shared.email.MailSenderService
-import jakarta.transaction.Transactional
-import org.slf4j.LoggerFactory
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class AuthService(
@@ -22,8 +21,6 @@ class AuthService(
     private val passwordResetRepository: PasswordResetRepository,
     private val mailSenderService: MailSenderService,
 ) {
-    private val log = LoggerFactory.getLogger(javaClass)
-
     fun login(
         email: String,
         password: String,
@@ -99,15 +96,13 @@ class AuthService(
                 this.token = token
             },
         )
-        try {
-            mailSenderService.sendEmail(
-                to = email,
-                subject = "Password Reset",
-                body = "Your password reset token: $token\n\nThis token expires in 60 minutes.",
-            )
-        } catch (e: Exception) {
-            log.warn("Failed to send password reset email", e)
-        }
+        // Send inside the transaction so SMTP failures roll back the unused token row —
+        // we'd rather the user retry than leave a stranded token they never received.
+        mailSenderService.sendEmail(
+            to = email,
+            subject = "Password Reset",
+            body = "Your password reset token: $token\n\nThis token expires in 60 minutes.",
+        )
     }
 
     @Transactional

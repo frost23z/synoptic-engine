@@ -2,6 +2,7 @@ package com.synopticengine.api.sharing.service
 
 import com.synopticengine.api.crm.CrmApi
 import com.synopticengine.api.identity.TenantApi
+import com.synopticengine.api.inventory.InventoryApi
 import com.synopticengine.api.sharing.domain.AccessLevel
 import com.synopticengine.api.sharing.domain.RecordShare
 import com.synopticengine.api.sharing.domain.ResourceType
@@ -32,6 +33,7 @@ class RecordShareService(
     private val visibilityService: ResourceVisibilityService,
     private val tenantApi: TenantApi,
     private val crmApi: CrmApi,
+    private val inventoryApi: InventoryApi,
     private val eventPublisher: ApplicationEventPublisher,
 ) {
     @Transactional
@@ -180,24 +182,34 @@ class RecordShareService(
     }
 
     /**
-     * Sanity check that the acting tenant is the owner of the record. Different rules per
-     * resource type because each lives in its own module.
+     * Sanity check that the acting tenant is the owner of the record. Each resource type
+     * lives in its own module so the lookup goes through the module port — never trust the
+     * caller-supplied owner: a tenant could otherwise create a share for a record owned by
+     * a different tenant it can see via cross-tenant visibility.
      */
     private fun verifyOwnership(
         ownerTenantId: UUID,
         resourceType: String,
         resourceId: UUID,
     ) {
+        val rt =
+            try {
+                ResourceType.fromLiteral(resourceType)
+            } catch (ex: IllegalArgumentException) {
+                throw IllegalArgumentException("Unknown resource type: $resourceType")
+            }
         val actualOwner =
-            when (resourceType) {
-                ResourceType.LEADS.literal -> crmApi.findLeadOwnerTenant(resourceId)
-
-                ResourceType.PERSONS.literal -> crmApi.findPersonOwnerTenant(resourceId)
-
-                ResourceType.ORGANIZATIONS.literal -> crmApi.findOrganizationOwnerTenant(resourceId)
-
-                // Other resource types: ownership check deferred; trust the caller.
-                else -> ownerTenantId
+            when (rt) {
+                ResourceType.LEADS -> crmApi.findLeadOwnerTenant(resourceId)
+                ResourceType.PERSONS -> crmApi.findPersonOwnerTenant(resourceId)
+                ResourceType.ORGANIZATIONS -> crmApi.findOrganizationOwnerTenant(resourceId)
+                ResourceType.QUOTES -> crmApi.findQuoteOwnerTenant(resourceId)
+                ResourceType.ACTIVITIES -> crmApi.findActivityOwnerTenant(resourceId)
+                ResourceType.PRODUCTS -> inventoryApi.findProductOwnerTenant(resourceId)
+                ResourceType.WAREHOUSES -> inventoryApi.findWarehouseOwnerTenant(resourceId)
+                ResourceType.PRICELISTS ->
+                    // No pricelist entity wired yet; refuse to share rather than silently trust.
+                    throw IllegalArgumentException("Sharing $resourceType is not yet supported")
             }
         if (actualOwner == null) {
             throw NoSuchElementException("$resourceType $resourceId not found")

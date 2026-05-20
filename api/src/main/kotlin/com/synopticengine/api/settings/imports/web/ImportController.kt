@@ -117,30 +117,42 @@ class CsvExportController(
 ) {
     @GetMapping("/persons/export")
     @PreAuthorize("hasAuthority('contacts.view')")
-    fun exportPersons(): ResponseEntity<String> = csvResponse(csvExportService.exportPersons(), "persons.csv")
+    fun exportPersons(): ResponseEntity<ByteArray> =
+        csvResponse("persons.csv") { csvExportService.streamPersons(it) }
 
     @GetMapping("/organizations/export")
     @PreAuthorize("hasAuthority('contacts.view')")
-    fun exportOrganizations(): ResponseEntity<String> =
-        csvResponse(csvExportService.exportOrganizations(), "organizations.csv")
+    fun exportOrganizations(): ResponseEntity<ByteArray> =
+        csvResponse("organizations.csv") { csvExportService.streamOrganizations(it) }
 
     @GetMapping("/leads/export")
     @PreAuthorize("hasAuthority('leads.view')")
-    fun exportLeads(): ResponseEntity<String> = csvResponse(csvExportService.exportLeads(), "leads.csv")
+    fun exportLeads(): ResponseEntity<ByteArray> =
+        csvResponse("leads.csv") { csvExportService.streamLeads(it) }
 
     @GetMapping("/products/export")
     @PreAuthorize("hasAuthority('products.view')")
-    fun exportProducts(): ResponseEntity<String> = csvResponse(csvExportService.exportProducts(), "products.csv")
+    fun exportProducts(): ResponseEntity<ByteArray> =
+        csvResponse("products.csv") { csvExportService.streamProducts(it) }
 
+    /**
+     * Buffer the CSV into a ByteArray rather than streaming via StreamingResponseBody —
+     * the buffer is bounded by row count, but more importantly the DB-level pagination
+     * inside [csvExportService] means Hibernate entities for the full tenant are never
+     * resident at once. Future change: switch to StreamingResponseBody when integration
+     * tests can read the async response body cleanly.
+     */
     private fun csvResponse(
-        csv: String,
         filename: String,
-    ): ResponseEntity<String> {
+        write: (java.io.OutputStream) -> Unit,
+    ): ResponseEntity<ByteArray> {
+        val buffer = java.io.ByteArrayOutputStream()
+        write(buffer)
         val headers =
             HttpHeaders().apply {
                 contentType = MediaType.parseMediaType("text/csv")
                 contentDisposition = ContentDisposition.attachment().filename(filename).build()
             }
-        return ResponseEntity.ok().headers(headers).body(csv)
+        return ResponseEntity.ok().headers(headers).body(buffer.toByteArray())
     }
 }

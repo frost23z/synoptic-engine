@@ -81,9 +81,15 @@ class LeadService(
     fun kanban(pipelineId: UUID): List<KanbanStageGroup> {
         val stages = stageRepository.findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(pipelineId)
         val scopeIds = scopeResolver.userIdsForCurrentUser()
-        val leads = leadRepository.findAllByPipelineIdAndDeletedAtIsNull(pipelineId)
-        val scoped = if (scopeIds == null) leads else leads.filter { it.userId in scopeIds }
-        val leadsByStage = scoped.groupBy { it.stageId }
+        // Push the scope into the query so a user with INDIVIDUAL/GROUP view doesn't pull
+        // every lead in the pipeline over the wire and discard most of them in memory.
+        val leads =
+            if (scopeIds == null) {
+                leadRepository.findAllByPipelineIdAndDeletedAtIsNull(pipelineId)
+            } else {
+                leadRepository.findAllByPipelineIdScopedAndDeletedAtIsNull(pipelineId, scopeIds)
+            }
+        val leadsByStage = leads.groupBy { it.stageId }
         return stages.map { stage ->
             val stageLeads = leadsByStage[stage.id] ?: emptyList()
             KanbanStageGroup(

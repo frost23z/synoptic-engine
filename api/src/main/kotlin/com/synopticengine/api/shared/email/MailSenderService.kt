@@ -20,20 +20,16 @@ class MailSenderService(
         cc: List<String>? = null,
         bcc: List<String>? = null,
     ) {
-        try {
-            val message = mailSender.createMimeMessage()
-            val helper = MimeMessageHelper(message, true, "UTF-8")
-            helper.setFrom(fromAddress)
-            helper.setTo(to)
-            helper.setSubject(subject)
-            helper.setText(body, true)
-            if (!cc.isNullOrEmpty()) helper.setCc(cc.toTypedArray())
-            if (!bcc.isNullOrEmpty()) helper.setBcc(bcc.toTypedArray())
-            mailSender.send(message)
-            log.info("Email sent to $to with subject: $subject")
-        } catch (e: Exception) {
-            log.error("Failed to send email to $to: ${e.message}")
-        }
+        val message = mailSender.createMimeMessage()
+        val helper = MimeMessageHelper(message, true, "UTF-8")
+        helper.setFrom(fromAddress)
+        helper.setTo(to)
+        helper.setSubject(subject)
+        helper.setText(body, true)
+        if (!cc.isNullOrEmpty()) helper.setCc(cc.toTypedArray())
+        if (!bcc.isNullOrEmpty()) helper.setBcc(bcc.toTypedArray())
+        mailSender.send(message)
+        log.info("Email sent to $to with subject: $subject")
     }
 
     fun sendHtmlEmail(
@@ -41,16 +37,12 @@ class MailSenderService(
         subject: String,
         htmlBody: String,
     ) {
-        try {
-            val message = mailSender.createMimeMessage()
-            val helper = MimeMessageHelper(message, true, "UTF-8")
-            helper.setFrom(fromAddress)
-            helper.setTo(to)
-            helper.setSubject(subject)
-            helper.setText(htmlBody, true)
-            mailSender.send(message)
-        } catch (e: Exception) {
-            log.error("Failed to send HTML email to $to: ${e.message}")
-        }
+        val message = mailSender.createMimeMessage()
+        val helper = MimeMessageHelper(message, true, "UTF-8")
+        helper.setFrom(fromAddress)
+        helper.setTo(to)
+        helper.setSubject(subject)
+        helper.setText(htmlBody, true)
+        mailSender.send(message)
     }
 }
