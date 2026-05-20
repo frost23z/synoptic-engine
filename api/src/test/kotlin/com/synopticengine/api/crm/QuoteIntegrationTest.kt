@@ -171,4 +171,19 @@ class QuoteIntegrationTest : AbstractIntegrationTest() {
         assertTrue(content.isNotEmpty())
         assertTrue(content.all { it["status"] == "accepted" })
     }
+
+    // Side endpoints — previously each lived in its own one-test file, which paid a full
+    // Spring boot for a single smoke. Folded back in here.
+
+    @Test
+    fun `print unknown quote returns 404`() {
+        assertEquals(404, get("/api/quotes/${java.util.UUID.randomUUID()}/print", adminToken).status())
+    }
+
+    @Test
+    fun `lead-products for unknown lead returns empty list`() {
+        val result = get("/api/quotes/lead-products/${java.util.UUID.randomUUID()}", adminToken)
+        assertEquals(200, result.status(), result.response.contentAsString)
+        assertEquals(0, result.bodyAsList()!!.size)
+    }
 }
