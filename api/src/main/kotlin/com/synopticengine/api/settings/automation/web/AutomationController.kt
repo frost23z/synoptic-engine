@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
@@ -135,4 +136,19 @@ class WebhookController(
         automationService.deleteWebhook(id)
         return ResponseEntity.noContent().build()
     }
+
+    @GetMapping("/{id}/deliveries")
+    @PreAuthorize("hasAuthority('automations.view')")
+    fun listDeliveries(
+        @PathVariable id: UUID,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<com.synopticengine.api.shared.web.PageResponse<WebhookDeliveryRunResponse>> =
+        ResponseEntity.ok(
+            automationService.findDeliveriesFor(
+                id,
+                org.springframework.data.domain.PageRequest
+                    .of(page, size),
+            ),
+        )
 }

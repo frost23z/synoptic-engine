@@ -13,8 +13,12 @@ import com.synopticengine.api.support.factories.QuoteFactory
 import com.synopticengine.api.support.factories.TagFactory
 import com.synopticengine.api.support.factories.TenantProvisioner
 import com.synopticengine.api.support.factories.WarehouseFactory
+import jakarta.mail.internet.MimeMessage
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Primary
+import org.springframework.mail.javamail.JavaMailSender
+import org.springframework.mail.javamail.JavaMailSenderImpl
 import org.springframework.test.web.servlet.MockMvc
 import tools.jackson.databind.ObjectMapper
 
@@ -25,6 +29,24 @@ import tools.jackson.databind.ObjectMapper
  */
 @TestConfiguration
 class TestSupportConfig {
+    /**
+     * No-op `JavaMailSender` for integration tests. The 09 P1-3 fix lets SMTP failures
+     * propagate; without overriding the bean, every test that triggers a non-draft
+     * compose / quote-send would explode trying to connect to localhost:1025.
+     */
+    @Bean
+    @Primary
+    fun testMailSender(): JavaMailSender =
+        object : JavaMailSenderImpl() {
+            override fun send(mimeMessage: MimeMessage) {
+                // intentionally a no-op; production wires a real SMTP sender
+            }
+
+            override fun send(vararg mimeMessages: MimeMessage) {
+                // intentionally a no-op
+            }
+        }
+
     @Bean
     fun testHttp(
         mockMvc: MockMvc,

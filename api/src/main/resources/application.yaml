@@ -40,3 +40,7 @@ synoptic:
         password: ${SYNOPTIC_ADMIN_PASSWORD:Admin@123}
     storage:
         root: ${SYNOPTIC_STORAGE_ROOT:./storage}
+    inbound-mail:
+        # HMAC secret shared with the upstream inbound-mail webhook provider
+        # (Postmark / SendGrid / etc.). Leave blank to refuse all inbound deliveries.
+        webhook-secret: ${SYNOPTIC_INBOUND_MAIL_SECRET:}

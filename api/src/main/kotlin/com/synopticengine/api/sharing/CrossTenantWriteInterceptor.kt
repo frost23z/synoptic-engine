@@ -81,6 +81,9 @@ class CrossTenantWriteInterceptor(
             "Person" -> ResourceType.PERSONS
             "Organization" -> ResourceType.ORGANIZATIONS
             "Product" -> ResourceType.PRODUCTS
+            "Quote" -> ResourceType.QUOTES
+            "Warehouse" -> ResourceType.WAREHOUSES
+            "Activity" -> ResourceType.ACTIVITIES
             else -> null
         }
 }

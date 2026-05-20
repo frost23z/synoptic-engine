@@ -19,6 +19,19 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
 
     fun findAllByPipelineIdAndDeletedAtIsNull(pipelineId: UUID): List<Lead>
 
+    @Query(
+        """
+        SELECT l FROM Lead l
+        WHERE l.deletedAt IS NULL
+        AND l.pipelineId = :pipelineId
+        AND l.userId IN :scopeIds
+    """,
+    )
+    fun findAllByPipelineIdScopedAndDeletedAtIsNull(
+        @Param("pipelineId") pipelineId: UUID,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): List<Lead>
+
     fun findAllByPipelineIdAndStageIdAndDeletedAtIsNull(
         pipelineId: UUID,
         stageId: UUID,

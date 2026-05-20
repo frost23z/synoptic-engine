@@ -20,4 +20,9 @@ interface CrossTenantAuditRepository : JpaRepository<CrossTenantAudit, UUID> {
         actorTenantId: UUID,
         pageable: Pageable,
     ): Page<CrossTenantAudit>
+
+    fun findAllByOwnerTenantIdOrderByAtDesc(
+        ownerTenantId: UUID,
+        pageable: Pageable,
+    ): Page<CrossTenantAudit>
 }
