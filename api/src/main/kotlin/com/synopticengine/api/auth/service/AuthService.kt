@@ -1,7 +1,7 @@
 package com.synopticengine.api.auth.service
 
+import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.auth.config.JwtTokenProvider
-import com.synopticengine.api.auth.config.UserPrincipal
 import com.synopticengine.api.auth.domain.PasswordReset
 import com.synopticengine.api.auth.repo.PasswordResetRepository
 import com.synopticengine.api.auth.web.TokenResponse

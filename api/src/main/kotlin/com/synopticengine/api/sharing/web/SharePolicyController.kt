@@ -1,6 +1,6 @@
 package com.synopticengine.api.sharing.web
 
-import com.synopticengine.api.auth.config.UserPrincipal
+import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.sharing.SharingPermissions
 import com.synopticengine.api.sharing.service.TenantSharePolicyService
 import jakarta.validation.Valid

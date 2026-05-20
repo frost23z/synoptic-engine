@@ -1,5 +1,6 @@
 package com.synopticengine.api.auth.config
 
+import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.shared.ActorContext
 import com.synopticengine.api.shared.TenantContext
 import jakarta.servlet.FilterChain

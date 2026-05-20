@@ -1,5 +1,6 @@
 package com.synopticengine.api.auth.config
 
+import com.synopticengine.api.auth.UserPrincipal
 import io.jsonwebtoken.Claims
 import io.jsonwebtoken.JwtException
 import io.jsonwebtoken.Jwts
