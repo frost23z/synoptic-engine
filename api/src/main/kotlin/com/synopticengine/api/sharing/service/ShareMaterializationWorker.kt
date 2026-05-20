@@ -1,5 +1,6 @@
 package com.synopticengine.api.sharing.service
 
+import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.sharing.domain.RelationshipStatus
 import com.synopticengine.api.sharing.domain.ResourceType
 import com.synopticengine.api.sharing.domain.ShareMaterializationOp
@@ -25,6 +26,12 @@ import java.util.UUID
  * ([matchesFilter]) so a JSON-DSL evaluator can drop in later. virtual visibility
  * (materialize=false) is honoured here: such policies skip the materialization step
  * entirely and rely on the RLS / Hibernate filter to evaluate at query time.
+ *
+ * P1-1: every task carries its own `tenantId` (the policy's source tenant, captured
+ * at enqueue time). [drainQueue] runs on `@Scheduled` so there's no request thread —
+ * before each task it sets `TenantContext.runAs(task.tenantId)` so the policy and
+ * relationship lookups, the native owner-record SELECT, and the visibility upserts
+ * all run with a populated tenant context (and the SET LOCAL GUC that depends on it).
  */
 @Component
 class ShareMaterializationWorker(
@@ -40,15 +47,22 @@ class ShareMaterializationWorker(
      * Enqueue a materialization task and execute it synchronously inside the caller's
      * transaction. For low-volume tenants this is the happy path; the [drainQueue]
      * tick handles retry for tasks that fail (e.g. transient DB errors).
+     *
+     * Must be called inside a populated [TenantContext] — the active tenant id is
+     * stamped on the task so [drainQueue] can re-establish it for retries.
      */
     @Transactional
     fun enqueue(
         policyId: UUID,
         op: ShareMaterializationOp,
     ): ShareMaterializationTask {
+        val tenantId =
+            TenantContext.get()
+                ?: error("ShareMaterializationWorker.enqueue called without an active TenantContext")
         val task =
             ShareMaterializationTask().apply {
                 this.policyId = policyId
+                this.tenantId = tenantId
                 this.op = op
             }
         val saved = taskRepository.save(task)
@@ -64,6 +78,11 @@ class ShareMaterializationWorker(
     /**
      * Retry pending / failed tasks. Runs at a long interval — the happy path materializes
      * synchronously in [enqueue]. This loop catches tasks that failed transiently.
+     *
+     * The `@Scheduled` thread has no TenantContext, so we wrap each task in
+     * `TenantContext.runAs(task.tenantId)` to give the inner `@Transactional`
+     * method a populated context (otherwise the Hibernate filter would never apply
+     * and the RLS GUC would never be set).
      */
     @Scheduled(fixedDelayString = "\${synoptic.sharing.materialization-retry-ms:60000}")
     fun drainQueue() {
@@ -72,7 +91,7 @@ class ShareMaterializationWorker(
         log.info("Draining ${pending.size} share materialization task(s)")
         for (task in pending) {
             try {
-                runTask(task)
+                TenantContext.runAs(task.tenantId) { runTask(task) }
             } catch (ex: Exception) {
                 log.error("Failed to materialize task ${task.id} for policy ${task.policyId}", ex)
                 markFailed(task.id!!, ex.message ?: ex::class.java.simpleName)
@@ -80,7 +99,7 @@ class ShareMaterializationWorker(
         }
     }
 
-    /** Public for test use — run a single task synchronously. */
+    /** Public for test use — run a single task synchronously. Caller must establish [TenantContext]. */
     @Transactional
     fun runTask(task: ShareMaterializationTask) {
         task.startedAt = Instant.now()
@@ -130,11 +149,9 @@ class ShareMaterializationWorker(
         val ownerTenantId = rel.sourceTenantId
         val consumerTenantId = rel.targetTenantId
 
-        // Find every active record in the owner tenant. Native query bypasses Hibernate
-        // filter (which scopes to current tenant); we want to walk the OWNER's records.
-        // RLS sees `tenant_id = ownerTenantId` and permits it via the GUC check; the
-        // owner of the policy is the source tenant, which is also the active tenant when
-        // the worker is dispatched as part of the policy-creation transaction.
+        // Walk every active record in the owner tenant. The TenantContext is set to
+        // ownerTenantId (we enqueue from the source tenant; drainQueue restores it),
+        // so the RLS GUC matches and the native query returns the owner's rows.
         @Suppress("UNCHECKED_CAST")
         val ids =
             em
