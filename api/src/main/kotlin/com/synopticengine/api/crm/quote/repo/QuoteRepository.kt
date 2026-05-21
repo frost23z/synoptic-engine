@@ -99,16 +99,22 @@ interface QuoteRepository : JpaRepository<Quote, UUID> {
         pageable: Pageable,
     ): Page<Quote>
 
+    // Native query — Hibernate `@Filter("tenantFilter")` does NOT rewrite native
+    // SQL, and the `quotes` table has no Postgres RLS policy. The tenant_id
+    // predicate here is the only isolation layer; callers must pass
+    // TenantContext.get().
     @Query(
         value = """
             SELECT COUNT(*) FROM quotes
-            WHERE deleted_at IS NULL
+            WHERE tenant_id = :tenantId
+              AND deleted_at IS NULL
               AND created_at >= :start AND created_at < :end
               AND (:hasScope = false OR user_id IN (:scopeIds))
         """,
         nativeQuery = true,
     )
     fun countCreatedInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
