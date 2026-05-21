@@ -5,9 +5,17 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
+import java.time.Instant
 import java.util.UUID
 
 interface OrganizationRepository : JpaRepository<Organization, UUID> {
+    // Tenant-aware load — see EmailRepository.findActiveById docstring.
+    @Query("SELECT o FROM Organization o WHERE o.id = :id AND o.deletedAt IS NULL")
+    fun findActiveById(
+        @Param("id") id: UUID,
+    ): Organization?
+
     fun findAllByDeletedAtIsNull(pageable: Pageable): Page<Organization>
 
     @Query(
@@ -51,4 +59,17 @@ interface OrganizationRepository : JpaRepository<Organization, UUID> {
         createdByIds: Collection<UUID>,
         pageable: Pageable,
     ): Page<Organization>
+
+    @Query(
+        value = """
+            SELECT COUNT(*) FROM organizations
+            WHERE deleted_at IS NULL
+              AND created_at >= :start AND created_at < :end
+        """,
+        nativeQuery = true,
+    )
+    fun countCreatedInRangeNative(
+        @Param("start") start: Instant,
+        @Param("end") end: Instant,
+    ): Long
 }

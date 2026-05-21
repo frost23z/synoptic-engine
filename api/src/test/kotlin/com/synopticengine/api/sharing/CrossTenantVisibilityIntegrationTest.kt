@@ -159,6 +159,37 @@ class CrossTenantVisibilityIntegrationTest : AbstractIntegrationTest() {
         assertEquals(AccessLevel.READ, visibilityFor(child.tenantId, ResourceType.LEADS, leadId))
     }
 
+    @Test
+    fun `policy filterJson materializes only matching resources`() {
+        val source = tenantProvisioner.provision("filter-src")
+        val target = tenantProvisioner.provision("filter-tgt")
+        val visibleLead = leadFactory.id(source.token, title = "Visible lead")
+        val hiddenLead = leadFactory.id(source.token, title = "Hidden lead")
+
+        val relId =
+            post(
+                "/api/relationships",
+                source.token,
+                mapOf("targetTenantId" to target.tenantId.toString(), "type" to "PARENT_CHILD"),
+            ).bodyAsMap()!!["id"] as String
+        patch("/api/relationships/$relId/accept", target.token)
+
+        val create =
+            post(
+                "/api/relationships/$relId/policies",
+                source.token,
+                mapOf(
+                    "resourceType" to "leads",
+                    "accessLevel" to "READ",
+                    "filterJson" to """{"title":"Visible lead"}""",
+                ),
+            )
+        assertEquals(201, create.status(), create.response.contentAsString)
+
+        assertEquals(AccessLevel.READ, visibilityFor(target.tenantId, ResourceType.LEADS, visibleLead))
+        assertEquals(AccessLevel.NONE, visibilityFor(target.tenantId, ResourceType.LEADS, hiddenLead))
+    }
+
     private fun visibilityFor(
         consumerTenantId: UUID,
         resourceType: ResourceType,

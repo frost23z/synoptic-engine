@@ -35,12 +35,14 @@ class SettingsApiImpl(
         }
 
     override fun findEmailTemplateById(id: UUID): EmailTemplateSummary? =
-        emailTemplateRepository.findById(id).orElse(null)?.let {
+        // findActiveById is JPQL so the tenant filter applies; the inherited
+        // findById bypasses it via EntityManager.find().
+        emailTemplateRepository.findActiveById(id)?.let {
             EmailTemplateSummary(id = it.id!!, name = it.name, subject = it.subject, content = it.content)
         }
 
     override fun findWebhookById(id: UUID): WebhookSummary? =
-        webhookRepository.findById(id).orElse(null)?.let {
+        webhookRepository.findActiveById(id)?.let {
             WebhookSummary(id = it.id!!, name = it.name, payloadUrl = it.payloadUrl, isActive = it.isActive)
         }
 
@@ -51,6 +53,7 @@ class SettingsApiImpl(
                 tenantId = form.tenantId,
                 title = form.title,
                 isActive = form.isActive,
+                createLead = form.createLead,
                 isDeleted = form.deletedAt != null,
                 fields =
                     form.fields.map { f ->

@@ -1,5 +1,7 @@
 package com.synopticengine.api.crm.contact.web
 
+import com.synopticengine.api.crm.activity.service.ActivityService
+import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.crm.contact.service.PersonService
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.validation.Valid
@@ -23,9 +25,10 @@ import java.util.UUID
 @RequestMapping($$"${api.base-path}/contacts/persons")
 class PersonController(
     private val personService: PersonService,
+    private val activityService: ActivityService,
 ) {
     @GetMapping
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
     fun listAll(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
@@ -35,7 +38,7 @@ class PersonController(
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
     fun search(
         @RequestParam q: String,
         @RequestParam(defaultValue = "0") page: Int,
@@ -46,13 +49,13 @@ class PersonController(
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('contacts.create')")
+    @PreAuthorize("hasAnyAuthority('contacts.create', 'contacts.persons.create')")
     fun create(
         @Valid @RequestBody request: CreatePersonRequest,
     ): ResponseEntity<PersonResponse> =
@@ -72,7 +75,7 @@ class PersonController(
             )
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdatePersonRequest,
@@ -92,7 +95,7 @@ class PersonController(
         )
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.delete')")
+    @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.persons.delete')")
     fun delete(
         @PathVariable id: UUID,
     ): ResponseEntity<Void> {
@@ -101,7 +104,7 @@ class PersonController(
     }
 
     @PostMapping("/mass-destroy")
-    @PreAuthorize("hasAuthority('contacts.delete')")
+    @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.persons.delete')")
     fun massDestroy(
         @RequestBody request: MassDestroyPersonRequest,
     ): ResponseEntity<Map<String, Any>> {
@@ -111,16 +114,45 @@ class PersonController(
     }
 
     @PostMapping("/{id}/tags")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun attachTag(
         @PathVariable id: UUID,
         @RequestBody request: TagAttachRequest,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.attachTag(id, request.tagId))
 
     @DeleteMapping("/{id}/tags/{tagId}")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun detachTag(
         @PathVariable id: UUID,
         @PathVariable tagId: UUID,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.detachTag(id, tagId))
+
+    @GetMapping("/{id}/activities")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
+    fun getActivities(
+        @PathVariable id: UUID,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<PageResponse<ActivityResponse>> {
+        val pageable = PageRequest.of(page, size, Sort.by("scheduleFrom").descending())
+        return ResponseEntity.ok(
+            activityService.filter(
+                leadId = null,
+                personId = id,
+                organizationId = null,
+                userId = null,
+                type = null,
+                isDone = null,
+                productId = null,
+                warehouseId = null,
+                pageable = pageable,
+            ),
+        )
+    }
+
+    @PostMapping("/merge")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
+    fun merge(
+        @RequestBody request: MergePersonRequest,
+    ): ResponseEntity<MergePersonResponse> = ResponseEntity.ok(personService.merge(request.sourceId, request.targetId))
 }

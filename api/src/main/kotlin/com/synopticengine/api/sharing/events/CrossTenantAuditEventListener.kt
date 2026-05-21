@@ -10,22 +10,17 @@ import org.springframework.stereotype.Component
  * rows. Sibling of [SharingEventLogger]; the logger writes to SLF4J, this writer
  * lands the durable audit trail.
  *
- * **Scope today: cross-tenant EDITs only.**
- * [CrossTenantAuditService.record] enforces `ownerTenantId != actorTenantId` — the
- * audit table exists specifically to track when a non-owner touches a record.
+ * Actions recorded today:
+ *  - **EDIT**   — published by [com.synopticengine.api.sharing.CrossTenantWriteListener]
+ *    from JPA `@PostUpdate` on every shareable entity whose owner tenant differs
+ *    from the current [com.synopticengine.api.shared.TenantContext]. Soft-deletes
+ *    flow through here too because `@SQLDelete` is an UPDATE under the covers.
+ *  - **SHARE / REVOKE** — owner-initiated actions. The actor IS the owner tenant
+ *    in both cases; [CrossTenantAuditService.record] relaxes its same-tenant
+ *    guard for these so the owner's compliance review can see every grant they
+ *    made and every revocation that happened against the consumer.
  *
- * - **EDIT**   — wired via [SharedRecordEditedEvent], which is published by
- *   [com.synopticengine.api.sharing.CrossTenantWriteListener] from JPA
- *   `@PostUpdate` on every shareable entity whose owner tenant differs from the
- *   current [com.synopticengine.api.shared.TenantContext]. Soft-deletes flow
- *   through here too because `@SQLDelete` is an UPDATE under the covers.
- *
- * The other actions defined in [CrossTenantAction] are not yet wired:
- *  - **SHARE / REVOKE** — published as [RecordSharedEvent] / [RecordShareRevokedEvent]
- *    today, but the actor is the owner tenant in both cases, so the
- *    same-tenant guard in [CrossTenantAuditService.record] would reject them.
- *    These actions live in `SharingEventLogger` as SLF4J entries until the
- *    events grow an explicit `actorTenantId`.
+ * Not yet wired:
  *  - **RESHARE** — when a consumer shares a record they received with a third
  *    party. RecordShareService doesn't yet distinguish the consumer-resharing
  *    path from the owner-sharing path; a follow-up should split them.
@@ -53,6 +48,35 @@ class CrossTenantAuditEventListener(
             resourceId = e.resourceId,
             action = CrossTenantAction.EDIT,
             payloadJson = e.fieldDiffJson,
+        )
+    }
+
+    @EventListener
+    fun onRecordShared(e: RecordSharedEvent) {
+        // Owner-side action: actorTenantId == ownerTenantId. The same-tenant
+        // guard in record() is relaxed for SHARE/REVOKE.
+        auditService.record(
+            ownerTenantId = e.ownerTenantId,
+            actorTenantId = e.ownerTenantId,
+            actorUserId = e.sharedBy,
+            resourceType = e.resourceType,
+            resourceId = e.resourceId,
+            action = CrossTenantAction.SHARE,
+            payloadJson =
+                """{"shareId":"${e.shareId}","consumerTenantId":"${e.consumerTenantId}","accessLevel":"${e.accessLevel}"}""",
+        )
+    }
+
+    @EventListener
+    fun onRecordShareRevoked(e: RecordShareRevokedEvent) {
+        auditService.record(
+            ownerTenantId = e.ownerTenantId,
+            actorTenantId = e.revokedByTenantId,
+            actorUserId = e.revokedBy,
+            resourceType = e.resourceType,
+            resourceId = e.resourceId,
+            action = CrossTenantAction.REVOKE,
+            payloadJson = """{"shareId":"${e.shareId}","consumerTenantId":"${e.consumerTenantId}"}""",
         )
     }
 }

@@ -7,6 +7,7 @@ import com.synopticengine.api.crm.CrmApi
 import com.synopticengine.api.crm.DashboardLeadStats
 import com.synopticengine.api.crm.LeadCascadeInfo
 import com.synopticengine.api.crm.LeadCsvRow
+import com.synopticengine.api.crm.LeadRoutingDefaults
 import com.synopticengine.api.crm.OrganizationCsvRow
 import com.synopticengine.api.crm.OrganizationSummary
 import com.synopticengine.api.crm.PersonCsvRow
@@ -23,6 +24,7 @@ import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.domain.LeadStatus
 import com.synopticengine.api.crm.lead.repo.LeadRepository
+import com.synopticengine.api.crm.lead.repo.PipelineRepository
 import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.crm.quote.repo.QuoteRepository
 import com.synopticengine.api.crm.scoping.ScopeResolver
@@ -42,6 +44,7 @@ class CrmApiImpl(
     private val personRepository: PersonRepository,
     private val organizationRepository: OrganizationRepository,
     private val leadRepository: LeadRepository,
+    private val pipelineRepository: PipelineRepository,
     private val stageRepository: StageRepository,
     private val activityRepository: ActivityRepository,
     private val activityParticipantRepository: ActivityParticipantRepository,
@@ -131,6 +134,18 @@ class CrmApiImpl(
         )
     }
 
+    override fun findDefaultLeadRouting(): LeadRoutingDefaults? {
+        val pipeline =
+            pipelineRepository.findAllActive().minWithOrNull(
+                compareBy<com.synopticengine.api.crm.lead.domain.Pipeline> { it.isDefault.not() }
+                    .thenBy { it.createdAt }
+                    .thenBy { it.id },
+            ) ?: return null
+        val stages = stageRepository.findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(pipeline.id!!)
+        val stage = stages.firstOrNull() ?: return null
+        return LeadRoutingDefaults(pipelineId = pipeline.id!!, stageId = stage.id!!)
+    }
+
     override fun getDashboardLeadStats(): DashboardLeadStats {
         val totalLeads = leadRepository.countByDeletedAtIsNull()
         val openLeads = leadRepository.countByStatusAndDeletedAtIsNull(LeadStatus.OPEN)
@@ -183,12 +198,14 @@ class CrmApiImpl(
         activityRepository.findUpcoming(Instant.now(), PageRequest.of(0, limit)).map { it.toSummary() }
 
     override fun findTagById(id: UUID): TagDto? =
-        tagRepository.findById(id).orElse(null)?.let { TagDto(it.id!!, it.name, it.color) }
+        // findActiveById is JPQL so the tenant filter applies; .findById would
+        // have hit EntityManager.find() and returned cross-tenant rows.
+        tagRepository.findActiveById(id)?.let { TagDto(it.id!!, it.name, it.color) }
 
     override fun findTagsByIds(ids: Collection<UUID>): List<TagDto> =
         tagRepository.findAllById(ids).map { TagDto(it.id!!, it.name, it.color) }
 
-    override fun tagExists(id: UUID): Boolean = tagRepository.existsById(id)
+    override fun tagExists(id: UUID): Boolean = tagRepository.findActiveById(id) != null
 
     // Bypasses Hibernate's tenantFilter — sharing.service.RecordShareService needs to
     // see the lead even when it belongs to the owner tenant whose context isn't set

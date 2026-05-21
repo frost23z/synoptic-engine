@@ -59,6 +59,10 @@ class Email :
     var from: Map<String, String>? = null
 
     @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "\"to\"", columnDefinition = "jsonb")
+    var to: List<Map<String, String>>? = null
+
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column
     var sender: Map<String, String>? = null
 

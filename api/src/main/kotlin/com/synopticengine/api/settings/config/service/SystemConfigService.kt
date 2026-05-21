@@ -26,15 +26,18 @@ class SystemConfigService(
     }
 
     fun findByCode(code: String): SystemConfigResponse =
-        (repository.findById(code).orElseThrow { NoSuchElementException("Config not found: $code") }).toResponse()
+        (repository.findByCode(code) ?: throw NoSuchElementException("Config not found: $code")).toResponse()
 
     @Transactional
     fun update(
         code: String,
         value: String?,
     ): SystemConfigResponse {
+        // findByCode runs through the Hibernate tenant filter, so a caller
+        // cannot reach another tenant's config row even if they know the code.
         val config =
-            repository.findById(code).orElseThrow { NoSuchElementException("Config not found: $code") }
+            repository.findByCode(code)
+                ?: throw NoSuchElementException("Config not found: $code")
         config.value = value
         config.updatedAt = Instant.now()
         return repository.save(config).toResponse()

@@ -11,6 +11,8 @@ import org.apache.commons.csv.CSVParser
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import java.io.File
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
@@ -25,6 +27,7 @@ class CsvImportProcessor(
     private val log = LoggerFactory.getLogger(CsvImportProcessor::class.java)
 
     @Async
+    @Transactional
     fun process(importId: UUID) {
         // P1-1: this is @Async; submission happens from DataImportController inside an
         // authenticated request, and TenantPropagatingTaskDecorator carries the tenant
@@ -33,7 +36,10 @@ class CsvImportProcessor(
         TenantContext.get()
             ?: error("CsvImportProcessor.process called without an active TenantContext (importId=$importId)")
 
-        val dataImport = dataImportRepository.findById(importId).orElse(null) ?: return
+        // Use the tenant-aware finder (JPQL) so this async/scheduled path can't
+        // pick up an import row that belongs to a different tenant — relevant if
+        // an attacker ever managed to enqueue a foreign import id.
+        val dataImport = dataImportRepository.findActiveById(importId) ?: return
         dataImport.status = ImportStatus.PROCESSING
         dataImportRepository.save(dataImport)
 
@@ -52,18 +58,13 @@ class CsvImportProcessor(
                 }
 
                 else -> {
-                    dataImport.status = ImportStatus.FAILED
-                    dataImport.errors =
-                        listOf(mapOf("row" to "0", "error" to "Unknown entity type: ${dataImport.entityType}"))
-                    dataImportRepository.save(dataImport)
-                    return
+                    throw IllegalArgumentException("Unknown entity type: ${dataImport.entityType}")
                 }
             }
         } catch (e: Exception) {
             log.error("Import $importId failed: ${e.message}")
-            dataImport.status = ImportStatus.FAILED
-            dataImport.errors = listOf(mapOf("row" to "0", "error" to (e.message ?: "Unknown error")))
-            dataImportRepository.save(dataImport)
+            markFailed(importId, listOf(mapOf("row" to "0", "error" to (e.message ?: "Unknown error"))))
+            throw e
         }
     }
 
@@ -100,7 +101,7 @@ class CsvImportProcessor(
 
         dataImport.successCount = successCount
         dataImport.errorCount = errors.size
-        dataImport.errors = errors.ifEmpty { null }
+        dataImport.errors = errors.takeIf { it.isNotEmpty() }
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
@@ -109,6 +110,7 @@ class CsvImportProcessor(
         val errors = mutableListOf<Map<String, String>>()
         var successCount = 0
         var rowIndex = 1
+        val defaultRouting = crmApi.findDefaultLeadRouting()
 
         parseCsv(dataImport.filePath).use { parser ->
             for (record in parser) {
@@ -119,26 +121,40 @@ class CsvImportProcessor(
                         errors.add(mapOf("row" to rowIndex.toString(), "error" to "title is required"))
                         continue
                     }
-                    val pipelineId =
-                        record
-                            .get("pipelineId")
-                            .ifBlank { null }
-                            ?.let { UUID.fromString(it) }
-                            ?: UUID.fromString("00000000-0000-0000-0000-000000000010")
-                    val stageId =
-                        record
-                            .get("stageId")
-                            .ifBlank { null }
-                            ?.let { UUID.fromString(it) }
-                            ?: UUID.fromString("00000000-0000-0000-0000-000000000011")
+                    val pipelineIdRaw = record.get("pipelineId").ifBlank { null }
+                    val stageIdRaw = record.get("stageId").ifBlank { null }
+                    val pipelineId = pipelineIdRaw?.let { UUID.fromString(it) }
+                    val stageId = stageIdRaw?.let { UUID.fromString(it) }
+                    val resolvedRouting =
+                        when {
+                            pipelineId != null && stageId != null -> {
+                                pipelineId to stageId
+                            }
+
+                            pipelineId == null && stageId == null && defaultRouting != null -> {
+                                defaultRouting.pipelineId to defaultRouting.stageId
+                            }
+
+                            pipelineId == null && stageId == null -> {
+                                throw IllegalArgumentException(
+                                    "pipelineId and stageId are required when no default pipeline/stage is configured",
+                                )
+                            }
+
+                            else -> {
+                                throw IllegalArgumentException(
+                                    "pipelineId and stageId must either both be provided or both omitted",
+                                )
+                            }
+                        }
                     val amount = record.get("amount").ifBlank { null }?.let { BigDecimal(it) }
 
                     crmApi.createLead(
                         title = title,
                         description = record.get("description").ifBlank { null },
                         amount = amount,
-                        pipelineId = pipelineId,
-                        stageId = stageId,
+                        pipelineId = resolvedRouting.first,
+                        stageId = resolvedRouting.second,
                     )
                     successCount++
                 } catch (e: Exception) {
@@ -149,7 +165,7 @@ class CsvImportProcessor(
 
         dataImport.successCount = successCount
         dataImport.errorCount = errors.size
-        dataImport.errors = errors.ifEmpty { null }
+        dataImport.errors = errors.takeIf { it.isNotEmpty() }
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
@@ -184,13 +200,16 @@ class CsvImportProcessor(
 
         dataImport.successCount = successCount
         dataImport.errorCount = errors.size
-        dataImport.errors = errors.ifEmpty { null }
+        dataImport.errors = errors.takeIf { it.isNotEmpty() }
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
 
     fun validate(importId: UUID) {
-        val dataImport = dataImportRepository.findById(importId).orElse(null) ?: return
+        // Use the tenant-aware finder (JPQL) so this async/scheduled path can't
+        // pick up an import row that belongs to a different tenant — relevant if
+        // an attacker ever managed to enqueue a foreign import id.
+        val dataImport = dataImportRepository.findActiveById(importId) ?: return
         val errors = mutableListOf<Map<String, String>>()
         var rowIndex = 1
         try {
@@ -213,7 +232,7 @@ class CsvImportProcessor(
         } catch (e: Exception) {
             errors.add(mapOf("row" to "0", "error" to "File parse error: ${e.message}"))
         }
-        dataImport.errors = if (errors.isEmpty()) dataImport.errors else errors
+        dataImport.errors = if (errors.isEmpty()) null else errors
         dataImport.errorCount = errors.size
         dataImportRepository.save(dataImport)
     }
@@ -228,4 +247,17 @@ class CsvImportProcessor(
                 .setSkipHeaderRecord(true)
                 .build(),
         )
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun markFailed(
+        importId: UUID,
+        errors: List<Map<String, String>>,
+    ) {
+        val dataImport = dataImportRepository.findActiveById(importId) ?: return
+        dataImport.status = ImportStatus.FAILED
+        dataImport.errors = errors
+        dataImport.errorCount = errors.size
+        dataImport.successCount = 0
+        dataImportRepository.save(dataImport)
+    }
 }

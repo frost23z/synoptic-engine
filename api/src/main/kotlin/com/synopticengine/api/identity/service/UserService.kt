@@ -16,7 +16,6 @@ import com.synopticengine.api.shared.config.TenantSession
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
 import java.util.UUID
 
 @Service
@@ -31,14 +30,12 @@ class UserService(
 ) : IdentityApi {
     override fun findById(id: UUID): UserSummary? =
         userRepository
-            .findById(id)
-            .orElse(null)
-            ?.takeIf { it.deletedAt == null }
+            .findActiveById(id)
             ?.toSummary()
 
     override fun findAllActive(): List<UserSummary> = userRepository.findAllByDeletedAtIsNull().map { it.toSummary() }
 
-    override fun existsById(id: UUID): Boolean = userRepository.existsById(id)
+    override fun existsById(id: UUID): Boolean = userRepository.existsActiveById(id)
 
     override fun findCredentialsByEmail(email: String): UserCredentials? =
         userRepository.findActiveByEmailWithRolesAsList(email).firstOrNull()?.toCredentials()
@@ -130,8 +127,41 @@ class UserService(
         }
         ensureNotLastAdmin(user)
         user.isActive = false
-        user.deletedAt = Instant.now()
+        user.deletedAt = java.time.Instant.now()
         userRepository.save(user)
+    }
+
+    @Transactional
+    fun setPassword(
+        id: UUID,
+        newPassword: String,
+    ) {
+        val user = requireUser(id)
+        user.passwordHash = passwordEncoder.encode(newPassword) ?: error("Password encoding failed")
+        userRepository.save(user)
+    }
+
+    @Transactional
+    fun setActiveStatus(
+        ids: List<UUID>,
+        isActive: Boolean,
+    ) {
+        if (isActive) {
+            val tenantId = TenantContext.get() ?: throw IllegalStateException("Tenant context missing")
+            userRepository.reactivateByIds(ids, tenantId)
+            return
+        }
+        val selfId = currentUserId()
+        ids.forEach { id ->
+            val user = requireUser(id)
+            if (id == selfId) {
+                throw IllegalStateException("You cannot deactivate your own account.")
+            }
+            ensureNotLastAdmin(user)
+            user.isActive = false
+            user.deletedAt = java.time.Instant.now()
+            userRepository.save(user)
+        }
     }
 
     @Transactional
@@ -145,7 +175,7 @@ class UserService(
             userRepository.findActiveByIdWithRolesAsList(id).firstOrNull()?.let { user ->
                 if (runCatching { ensureNotLastAdmin(user) }.isSuccess) {
                     user.isActive = false
-                    user.deletedAt = Instant.now()
+                    user.deletedAt = java.time.Instant.now()
                     userRepository.save(user)
                 }
             }
@@ -170,7 +200,7 @@ class UserService(
                 .authentication
                 ?.name
                 ?: return null
-        return userRepository.findByEmail(email)?.id
+        return userRepository.findActiveByEmail(email)?.id
     }
 
     @Transactional
@@ -179,7 +209,7 @@ class UserService(
         encodedPassword: String,
     ) {
         val user =
-            userRepository.findByEmail(email)
+            userRepository.findActiveByEmail(email)
                 ?: throw NoSuchElementException("User not found: $email")
         user.passwordHash = encodedPassword
         userRepository.save(user)
@@ -191,9 +221,14 @@ class UserService(
         return resolveViewContext(userId)
     }
 
+    override fun findFirstActiveUserInGroup(groupId: UUID): UUID? {
+        val tenantId = TenantContext.get() ?: return null
+        return userRepository.findActiveIdsByGroupId(groupId, tenantId).firstOrNull()
+    }
+
     override fun resolveViewContext(requesterId: UUID): ViewContext {
         val user =
-            userRepository.findById(requesterId).orElse(null)
+            userRepository.findActiveById(requesterId)
                 ?: return ViewContext(null)
         return when (user.viewPermission) {
             ViewPermission.ALL, ViewPermission.GLOBAL -> {
@@ -227,8 +262,12 @@ class UserService(
         UserSummary(
             id = id!!,
             email = email,
+            firstName = firstName,
+            lastName = lastName,
             fullName = fullName,
             isActive = isActive,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
         )
 
     private fun User.toCredentials(): UserCredentials {

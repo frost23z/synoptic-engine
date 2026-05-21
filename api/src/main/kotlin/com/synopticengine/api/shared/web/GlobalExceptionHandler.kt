@@ -61,6 +61,11 @@ class GlobalExceptionHandler {
     fun handleMethodNotAllowed(ex: HttpRequestMethodNotSupportedException): ProblemDetail =
         problem(HttpStatus.METHOD_NOT_ALLOWED, "Method ${ex.method} not allowed")
 
+    // 429 — rate-limit / lockout (e.g. LoginAttemptTracker)
+    @ExceptionHandler(RateLimitedException::class)
+    fun handleRateLimited(ex: RateLimitedException): ProblemDetail =
+        problem(HttpStatus.TOO_MANY_REQUESTS, ex.message ?: "Too many requests")
+
     // 400 — malformed JSON, wrong types in request body
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleUnreadableMessage(ex: HttpMessageNotReadableException): ProblemDetail =

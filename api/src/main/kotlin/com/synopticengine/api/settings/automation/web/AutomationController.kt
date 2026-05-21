@@ -116,7 +116,15 @@ class WebhookController(
     ): ResponseEntity<WebhookResponse> =
         ResponseEntity
             .status(HttpStatus.CREATED)
-            .body(automationService.createWebhook(request.name, request.payloadUrl, request.events, request.isActive))
+            .body(
+                automationService.createWebhook(
+                    request.name,
+                    request.payloadUrl,
+                    request.secret,
+                    request.events,
+                    request.isActive,
+                ),
+            )
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('automations.edit')")
@@ -125,7 +133,14 @@ class WebhookController(
         @Valid @RequestBody request: UpdateWebhookRequest,
     ): ResponseEntity<WebhookResponse> =
         ResponseEntity.ok(
-            automationService.updateWebhook(id, request.name, request.payloadUrl, request.events, request.isActive),
+            automationService.updateWebhook(
+                id,
+                request.name,
+                request.payloadUrl,
+                request.secret,
+                request.events,
+                request.isActive,
+            ),
         )
 
     @DeleteMapping("/{id}")

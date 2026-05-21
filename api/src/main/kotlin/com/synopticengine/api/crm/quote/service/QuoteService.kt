@@ -66,10 +66,14 @@ class QuoteService(
         leadId: UUID,
         title: String,
         userId: UUID?,
+        personId: UUID?,
         discount: BigDecimal,
         tax: BigDecimal,
+        adjustment: BigDecimal,
         terms: String?,
         expiredAt: LocalDate?,
+        billingAddress: Map<String, Any?>?,
+        shippingAddress: Map<String, Any?>?,
         items: List<QuoteItemRequest>,
     ): QuoteResponse {
         val quote =
@@ -78,10 +82,14 @@ class QuoteService(
                     this.leadId = leadId
                     this.title = title
                     this.userId = userId
+                    this.personId = personId
                     this.discount = discount
                     this.tax = tax
+                    this.adjustment = adjustment
                     this.terms = terms
                     this.expiredAt = expiredAt
+                    this.billingAddress = billingAddress
+                    this.shippingAddress = shippingAddress
                 },
             )
         items.forEach { req -> quote.items.add(buildItem(quote, req)) }
@@ -96,19 +104,27 @@ class QuoteService(
         id: UUID,
         title: String,
         userId: UUID?,
+        personId: UUID?,
         discount: BigDecimal,
         tax: BigDecimal,
+        adjustment: BigDecimal,
         terms: String?,
         expiredAt: LocalDate?,
+        billingAddress: Map<String, Any?>?,
+        shippingAddress: Map<String, Any?>?,
         items: List<QuoteItemRequest>,
     ): QuoteResponse {
         val quote = requireQuote(id)
         quote.title = title
         quote.userId = userId
+        quote.personId = personId
         quote.discount = discount
         quote.tax = tax
+        quote.adjustment = adjustment
         quote.terms = terms
         quote.expiredAt = expiredAt
+        quote.billingAddress = billingAddress
+        quote.shippingAddress = shippingAddress
         quote.items.clear()
         items.forEach { req -> quote.items.add(buildItem(quote, req)) }
         val saved = quoteRepository.save(quote)
@@ -238,8 +254,12 @@ class QuoteService(
                     this.title = "Copy of ${source.title}"
                     this.discount = source.discount
                     this.tax = source.tax
+                    this.adjustment = source.adjustment
                     this.terms = source.terms
                     this.expiredAt = source.expiredAt
+                    this.personId = source.personId
+                    this.billingAddress = source.billingAddress
+                    this.shippingAddress = source.shippingAddress
                 },
             )
         copy.items.addAll(
@@ -268,17 +288,21 @@ fun Quote.toResponse(): QuoteResponse {
             BigDecimal.ONE.subtract(discount.divide(BigDecimal(100), 10, RoundingMode.HALF_UP)),
         )
     val taxAmount = afterDiscount.multiply(tax.divide(BigDecimal(100), 10, RoundingMode.HALF_UP))
-    val grandTotal = afterDiscount.add(taxAmount).setScale(2, RoundingMode.HALF_UP)
+    val grandTotal = afterDiscount.add(taxAmount).add(adjustment).setScale(2, RoundingMode.HALF_UP)
     return QuoteResponse(
         id = id!!,
         leadId = leadId,
         userId = userId,
+        personId = personId,
         title = title,
         status = status.value,
         discount = discount,
         tax = tax,
+        adjustment = adjustment,
         terms = terms,
         expiredAt = expiredAt,
+        billingAddress = billingAddress,
+        shippingAddress = shippingAddress,
         items = itemResponses,
         subTotal = subTotal.setScale(2, RoundingMode.HALF_UP),
         grandTotal = grandTotal,

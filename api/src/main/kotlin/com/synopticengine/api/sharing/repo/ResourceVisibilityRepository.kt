@@ -43,4 +43,10 @@ interface ResourceVisibilityRepository : JpaRepository<ResourceVisibility, UUID>
         @Param("resourceType") resourceType: String,
         @Param("resourceId") resourceId: UUID,
     ): Int
+
+    @Modifying
+    @Query("DELETE FROM ResourceVisibility v WHERE v.expiresAt IS NOT NULL AND v.expiresAt < :cutoff")
+    fun deleteExpiredBefore(
+        @Param("cutoff") cutoff: java.time.Instant,
+    ): Int
 }

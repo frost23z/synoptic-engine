@@ -88,15 +88,33 @@ class ImportController(
         @PathVariable id: UUID,
     ): ResponseEntity<DataImportResponse> = ResponseEntity.ok(dataImportService.validate(id))
 
+    @PostMapping("/{id}/validate")
+    @PreAuthorize("hasAuthority('imports.edit')")
+    fun validatePost(
+        @PathVariable id: UUID,
+    ): ResponseEntity<DataImportResponse> = ResponseEntity.ok(dataImportService.validate(id))
+
     @GetMapping("/{id}/link")
     @PreAuthorize("hasAuthority('imports.edit')")
     fun link(
         @PathVariable id: UUID,
     ): ResponseEntity<DataImportResponse> = ResponseEntity.ok(dataImportService.link(id))
 
+    @PostMapping("/{id}/link")
+    @PreAuthorize("hasAuthority('imports.edit')")
+    fun linkPost(
+        @PathVariable id: UUID,
+    ): ResponseEntity<DataImportResponse> = ResponseEntity.ok(dataImportService.link(id))
+
     @GetMapping("/{id}/index-data")
     @PreAuthorize("hasAuthority('imports.edit')")
     fun indexData(
+        @PathVariable id: UUID,
+    ): ResponseEntity<DataImportResponse> = ResponseEntity.ok(dataImportService.indexData(id))
+
+    @PostMapping("/{id}/index-data")
+    @PreAuthorize("hasAuthority('imports.edit')")
+    fun indexDataPost(
         @PathVariable id: UUID,
     ): ResponseEntity<DataImportResponse> = ResponseEntity.ok(dataImportService.indexData(id))
 
@@ -117,8 +135,7 @@ class CsvExportController(
 ) {
     @GetMapping("/persons/export")
     @PreAuthorize("hasAuthority('contacts.view')")
-    fun exportPersons(): ResponseEntity<ByteArray> =
-        csvResponse("persons.csv") { csvExportService.streamPersons(it) }
+    fun exportPersons(): ResponseEntity<ByteArray> = csvResponse("persons.csv") { csvExportService.streamPersons(it) }
 
     @GetMapping("/organizations/export")
     @PreAuthorize("hasAuthority('contacts.view')")
@@ -127,8 +144,7 @@ class CsvExportController(
 
     @GetMapping("/leads/export")
     @PreAuthorize("hasAuthority('leads.view')")
-    fun exportLeads(): ResponseEntity<ByteArray> =
-        csvResponse("leads.csv") { csvExportService.streamLeads(it) }
+    fun exportLeads(): ResponseEntity<ByteArray> = csvResponse("leads.csv") { csvExportService.streamLeads(it) }
 
     @GetMapping("/products/export")
     @PreAuthorize("hasAuthority('products.view')")

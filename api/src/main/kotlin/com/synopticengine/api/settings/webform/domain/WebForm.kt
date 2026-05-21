@@ -31,6 +31,24 @@ class WebForm :
     @Column(nullable = false)
     var isActive: Boolean = true
 
+    @Column(nullable = false)
+    var createLead: Boolean = false
+
+    @Column
+    var backgroundColor: String? = null
+
+    @Column(nullable = false)
+    var submitSuccessAction: String = "message"
+
+    @Column(columnDefinition = "TEXT")
+    var submitSuccessMessage: String? = null
+
+    @Column
+    var submitSuccessUrl: String? = null
+
+    @Column(nullable = false)
+    var captchaEnabled: Boolean = false
+
     @Column
     override var deletedAt: Instant? = null
 

@@ -98,9 +98,9 @@ class WebFormSubmissionService(
 
         val leadTitle = pick("lead_title", "title")
         val leadId =
-            if (!leadTitle.isNullOrBlank()) {
+            if (form.createLead) {
                 targetPort.createLeadFromForm(
-                    title = leadTitle,
+                    title = leadTitle ?: "Lead From Web Form",
                     description = pick("description"),
                     amount = pick("amount")?.toBigDecimalOrNull(),
                     personId = personId,

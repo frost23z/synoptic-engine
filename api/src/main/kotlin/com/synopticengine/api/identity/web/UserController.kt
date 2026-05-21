@@ -29,16 +29,12 @@ class UserController(
                 UserResponse(
                     id = it.id,
                     email = it.email,
-                    firstName = it.fullName.split(" ").firstOrNull() ?: "",
-                    lastName =
-                        it.fullName
-                            .split(" ")
-                            .drop(1)
-                            .joinToString(" "),
+                    firstName = it.firstName,
+                    lastName = it.lastName,
                     fullName = it.fullName,
                     isActive = it.isActive,
-                    createdAt = java.time.Instant.EPOCH,
-                    updatedAt = java.time.Instant.EPOCH,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
                 )
             },
         )
@@ -53,16 +49,12 @@ class UserController(
                 UserResponse(
                     id = it.id,
                     email = it.email,
-                    firstName = it.fullName.split(" ").firstOrNull() ?: "",
-                    lastName =
-                        it.fullName
-                            .split(" ")
-                            .drop(1)
-                            .joinToString(" "),
+                    firstName = it.firstName,
+                    lastName = it.lastName,
                     fullName = it.fullName,
                     isActive = it.isActive,
-                    createdAt = java.time.Instant.EPOCH,
-                    updatedAt = java.time.Instant.EPOCH,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
                 )
             },
         )
@@ -125,6 +117,25 @@ class UserController(
         @RequestBody request: MassDeactivateRequest,
     ): ResponseEntity<Void> {
         userService.massDeactivate(request.ids)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/mass-update")
+    @PreAuthorize("hasAuthority('users.edit')")
+    fun massUpdateStatus(
+        @Valid @RequestBody request: UpdateUsersStatusRequest,
+    ): ResponseEntity<Void> {
+        userService.setActiveStatus(request.ids, request.isActive)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PutMapping("/{id}/password")
+    @PreAuthorize("hasAuthority('users.edit')")
+    fun setPassword(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: UpdateUserPasswordRequest,
+    ): ResponseEntity<Void> {
+        userService.setPassword(id, request.password)
         return ResponseEntity.noContent().build()
     }
 }

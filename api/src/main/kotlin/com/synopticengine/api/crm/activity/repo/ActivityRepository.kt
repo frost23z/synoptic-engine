@@ -121,11 +121,9 @@ interface ActivityRepository : JpaRepository<Activity, UUID> {
     /**
      * P3.6: meeting overlap — every scheduled activity whose user/person participant
      * intersects the candidate window, excluding [excludeActivityId] (for the
-     * "update existing meeting" case).
+     * "update existing meeting" case). Native query is used for planner control,
+     * so tenant_id is explicitly filtered to prevent cross-tenant calendar leaks.
      */
-    // Native query — see comment on countCreatedInRangeNative. Without the
-    // tenant_id predicate this would return overlapping meetings across every
-    // tenant in the database, revealing other tenants' calendars.
     @Query(
         value = """
             SELECT DISTINCT a.* FROM activities a

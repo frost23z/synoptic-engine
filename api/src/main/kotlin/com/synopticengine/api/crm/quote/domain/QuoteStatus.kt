@@ -11,11 +11,16 @@ enum class QuoteStatus(
     DRAFT("draft"),
     SENT("sent"),
     ACCEPTED("accepted"),
-    DECLINED("declined"),
+    REJECTED("rejected"),
+    EXPIRED("expired"),
     ;
 
     companion object {
-        fun fromValue(v: String): QuoteStatus = entries.first { it.value == v.lowercase() }
+        fun fromValue(v: String): QuoteStatus {
+            val normalized = v.lowercase()
+            if (normalized == "declined") return REJECTED
+            return entries.first { it.value == normalized }
+        }
     }
 }
 

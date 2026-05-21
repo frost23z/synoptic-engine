@@ -87,20 +87,17 @@ class OrganizationService(
     @Transactional
     fun massDestroy(ids: List<UUID>) {
         ids.forEach { id ->
-            organizationRepository.findById(id).orElse(null)?.let { org ->
-                if (org.deletedAt == null) {
-                    org.deletedAt = Instant.now()
-                    organizationRepository.save(org)
-                }
+            organizationRepository.findActiveById(id)?.let { org ->
+                org.deletedAt = Instant.now()
+                organizationRepository.save(org)
             }
         }
     }
 
+    // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
     private fun requireOrg(id: UUID): Organization =
-        organizationRepository
-            .findById(id)
-            .orElseThrow { NoSuchElementException("Organization not found: $id") }
-            .also { if (it.deletedAt != null) throw NoSuchElementException("Organization not found: $id") }
+        organizationRepository.findActiveById(id)
+            ?: throw NoSuchElementException("Organization not found: $id")
 }
 
 fun Organization.toResponse() =

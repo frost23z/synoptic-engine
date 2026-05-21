@@ -98,3 +98,13 @@ data class MassDestroyPersonRequest(
 data class MassDestroyOrganizationRequest(
     val ids: List<UUID>,
 )
+
+data class MergePersonRequest(
+    val sourceId: UUID,
+    val targetId: UUID,
+)
+
+data class MergePersonResponse(
+    val merged: Boolean,
+    val targetId: UUID,
+)

@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 
 @Service
@@ -13,6 +14,7 @@ class MailSenderService(
 ) {
     private val log = LoggerFactory.getLogger(MailSenderService::class.java)
 
+    @Async("applicationTaskExecutor")
     fun sendEmail(
         to: String,
         subject: String,
@@ -32,6 +34,7 @@ class MailSenderService(
         log.info("Email sent to $to with subject: $subject")
     }
 
+    @Async("applicationTaskExecutor")
     fun sendHtmlEmail(
         to: String,
         subject: String,

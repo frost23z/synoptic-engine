@@ -41,6 +41,7 @@ class WebFormIntegrationTest : AbstractIntegrationTest() {
         val body = createForm()
         assertNotNull(body["id"])
         assertEquals(true, body["isActive"])
+        assertEquals(false, body["createLead"])
         assertTrue((body["fields"] as List<*>).isEmpty())
     }
 
@@ -89,6 +90,7 @@ class WebFormIntegrationTest : AbstractIntegrationTest() {
                 mapOf(
                     "title" to "Updated Form",
                     "isActive" to false,
+                    "createLead" to true,
                     "fields" to
                         listOf(mapOf("attributeId" to attrId.toString(), "sortOrder" to 1, "isRequired" to false)),
                 ),
@@ -97,6 +99,7 @@ class WebFormIntegrationTest : AbstractIntegrationTest() {
         val body = result.bodyAsMap()!!
         assertEquals("Updated Form", body["title"])
         assertEquals(false, body["isActive"])
+        assertEquals(true, body["createLead"])
         assertEquals(1, (body["fields"] as List<*>).size)
     }
 

@@ -95,6 +95,7 @@ class ActivityService(
         additional: String? = null,
     ): ActivityResponse {
         validateSchedule(type, scheduleFrom, scheduleTo)
+        assertNoMeetingOverlap(type, scheduleFrom, scheduleTo, userId, personId, null)
         return activityRepository
             .save(
                 Activity().apply {
@@ -136,6 +137,7 @@ class ActivityService(
         additional: String? = null,
     ): ActivityResponse {
         validateSchedule(type, scheduleFrom, scheduleTo)
+        assertNoMeetingOverlap(type, scheduleFrom, scheduleTo, userId, personId, id)
         val activity = requireActivity(id)
         activity.title = title
         activity.type = type
@@ -165,6 +167,28 @@ class ActivityService(
         }
         if (from != null && to != null && to.isBefore(from)) {
             throw IllegalArgumentException("scheduleTo must be on or after scheduleFrom")
+        }
+    }
+
+    private fun assertNoMeetingOverlap(
+        type: ActivityType,
+        from: Instant?,
+        to: Instant?,
+        userId: UUID?,
+        personId: UUID?,
+        excludeActivityId: UUID?,
+    ) {
+        if (type != ActivityType.MEETING || from == null || to == null) return
+        val overlaps =
+            checkOverlap(
+                start = from,
+                end = to,
+                userIds = userId?.let(::listOf) ?: emptyList(),
+                personIds = personId?.let(::listOf) ?: emptyList(),
+                excludeActivityId = excludeActivityId,
+            )
+        if (overlaps.isNotEmpty()) {
+            throw IllegalStateException("Meeting schedule overlaps with an existing meeting")
         }
     }
 

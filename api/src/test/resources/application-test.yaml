@@ -1,3 +1,7 @@
 synoptic:
     inbound-mail:
         webhook-secret: test-inbound-mail-secret
+spring:
+    datasource:
+        hikari:
+            connection-init-sql: SET ROLE synoptic_app

@@ -12,8 +12,10 @@ import jakarta.persistence.OneToMany
 import jakarta.persistence.OrderBy
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
+import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.SQLDelete
 import org.hibernate.annotations.SQLRestriction
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 
 @Entity
@@ -37,8 +39,24 @@ class Attribute :
     @Column(nullable = false)
     var isUserDefined: Boolean = true
 
+    @Column(nullable = false)
+    var isRequired: Boolean = false
+
+    @Column(nullable = false)
+    var isUnique: Boolean = false
+
+    @Column(nullable = false)
+    var quickAdd: Boolean = false
+
     @Column
     var lookup: String? = null
+
+    @Column
+    var lookupType: String? = null
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var validationRules: String = "{}"
 
     @Column(nullable = false)
     var entityType: String = ""
