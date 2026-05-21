@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
+import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
 import tools.jackson.databind.ObjectMapper
@@ -26,6 +27,7 @@ import java.util.UUID
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, TestSupportConfig::class)
+@ActiveProfiles("test")
 @Tag("integration")
 abstract class AbstractIntegrationTest {
     @Autowired protected lateinit var mockMvc: MockMvc
