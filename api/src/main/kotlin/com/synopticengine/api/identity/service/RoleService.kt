@@ -59,8 +59,11 @@ class RoleService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!roleRepository.existsById(id)) throw NoSuchElementException("Role not found: $id")
-        roleRepository.deleteById(id)
+        // Load via the tenant-aware finder; then delete the entity (not by id)
+        // so the filter has actually run and we cannot delete a role from
+        // another tenant.
+        val role = requireRole(id)
+        roleRepository.delete(role)
     }
 
     private fun resolvePermissions(names: Set<String>): List<Permission> {
@@ -68,10 +71,12 @@ class RoleService(
         return permissionRepository.findAllByKeyIn(names)
     }
 
+    // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
+    // `@Filter("tenantFilter")` (EntityManager.find() fast path); the
+    // findActiveById JPQL on RoleRepository does not, so cross-tenant fetches
+    // return null and surface as 404 at the controller.
     private fun requireRole(id: UUID): Role =
-        roleRepository
-            .findById(id)
-            .orElseThrow { NoSuchElementException("Role not found: $id") }
+        roleRepository.findActiveById(id) ?: throw NoSuchElementException("Role not found: $id")
 }
 
 fun Role.toResponse() =

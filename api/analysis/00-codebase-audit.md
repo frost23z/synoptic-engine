@@ -38,6 +38,7 @@ and are listed first below.
 | C6 | `identity/repo/UserRepository.kt:44–53` | `findGroupMemberIds` is a native query against `user_groups` with no tenant filter. Used to resolve `ViewContext` for "same group" view permission. | A user in group X in tenant A also sees user-IDs of unrelated tenant-B users who happen to share a `group_id` UUID — which won't collide in practice, BUT the query also has no constraint that the joined `user_groups` row's user lives in the current tenant. |
 | C7 | `auth/service/AuthService.kt:28–29` + `identity/service/UserService.kt:42–43` | Login calls `findCredentialsByEmail` which uses JPQL with no tenant filter (TenantContext is null at login). If a future migration relaxes the `UNIQUE (email)` constraint to `(email, tenant_id)` to enable B2B multi-tenant signups, the **first** matching row wins silently → cross-tenant credential collision. | Latent today (current schema enforces global unique email) but actively prevents multi-tenant signup which is the stated product goal. |
 | C8 | V008 seed migration | Not idempotent — re-running on an existing DB will violate PKs / produce duplicate `lead_sources` (uses `gen_random_uuid()` instead of fixed IDs). | `flyway repair` / re-baseline scenarios will break. **Severity revised**: Flyway only ever runs each migration once based on `flyway_schema_history`, so practical impact is limited to dev-environment re-baseline and rare ops scenarios. Treat as **MEDIUM**, not blocker. |
+| C9 | Systemic IDOR via `JpaRepository.findById` / `existsById` in service layer | Hibernate's `@Filter("tenantFilter")` only rewrites HQL/JPQL/Criteria. Primary-key loads via `EntityManager.find()` (the path used by `JpaRepository.findById`, `existsById`, `getReferenceById`) **bypass the filter entirely**. Many services (`EmailService.findById` + 8 other call sites; `PersonService.requirePerson`; `UserService.requireUser` + `massDeactivate`; `RoleService.requireRole` + `delete`; `TagService` 3×; `AutomationService` 6×; `DataImportService` 8×; `AttributeService` 3×; `WebFormService`; `EmailTemplateService` 2×; `OrganizationService`; `LeadSourceService` 4×; `DataGridFilterService`; `SettingsApiImpl` 2×) use `findById`/`existsById` for the post-load tenant scope check. Outcome: `GET /<entity>/{id}` for another tenant's resource returns 200 OK with the row, instead of 404. **Mitigated in production** by Postgres RLS (now extended in V011) once the app runs as a `NOBYPASSRLS` role, but the test suite runs as BYPASSRLS=true so the test layer would not catch it. Defense-in-depth requires both layers. |
 
 ### 1.2 Verified HIGH-priority gaps
 
@@ -461,7 +462,37 @@ containing this revision).
 | `identity/repo/UserRepository.kt` | `findGroupMemberIds` now joins `users` and filters by `tenant_id` (C6). |
 | `identity/service/UserService.kt` | Passes tenant when resolving GROUP view scope. |
 
-### V011 + regression tests (this PR)
+### PR #27 — IDOR fix on email + person/user/role + regression tests
+
+Discovered when running PR #26's `EmailTenantIsolationIntegrationTest` in a
+local environment: the get-by-id assertion failed because
+`EmailService.findById` used `JpaRepository.findById(id)`, which goes through
+`EntityManager.find()` and bypasses Hibernate's `@Filter("tenantFilter")`
+(the filter is a query rewriter; it does not see primary-key loads). Same
+pattern across other services, see new finding **C9**.
+
+Fixed in this PR (consistent `findActiveById` pattern via JPQL):
+
+| File | Change |
+|------|--------|
+| `crm/email/repo/EmailRepository.kt` | Added `findActiveById(id)` + `existsActiveById(id)` (JPQL). |
+| `crm/email/service/EmailService.kt` | All `findById` / `existsById` / `deleteById` call sites (9 of them) routed through `requireEmail` / `findActiveById`. `delete` now loads first then calls `delete(entity)` so the `@SQLDelete` soft-delete trigger fires under the filter. |
+| `crm/contact/service/PersonService.kt` | `requirePerson` now uses `personRepository.findActiveById` (JPQL) instead of `findById`. |
+| `identity/repo/RoleRepository.kt` | Added `findActiveById(id)` JPQL. |
+| `identity/service/RoleService.kt` | `requireRole` uses `findActiveById`; `delete(id)` loads-then-deletes via the entity, not `deleteById`. |
+| `identity/service/UserService.kt` | `requireUser` uses `findActiveByIdWithRolesAsList(id).firstOrNull()` (already JPQL); `massDeactivate` no longer routes through `findById`. |
+| `test/.../crm/PersonTenantIsolationIntegrationTest.kt` | New regression — Tenant B fetching Tenant A's person id must not return 200. |
+
+**Still pending** (same pattern across services not touched in this PR — tracked under C9):
+
+`TagService` (3 sites), `AutomationService` (6 sites), `DataImportService`
+(8 sites), `AttributeService` (3 sites), `WebFormService`,
+`EmailTemplateService` (2 sites), `OrganizationService.update` path,
+`LeadSourceService` (4 sites), `DataGridFilterService`, `SettingsApiImpl`
+(2 sites), `CrmWorkflowTargetAdapter.findTag`, `UserService.existsById`
+(IdentityApi contract — needs a tenant-aware variant).
+
+### V011 + regression tests
 
 - `db/migration/V011__rls_baseline.sql` — enables Postgres RLS on every
   remaining BaseEntity-backed table (33 tables). Sharable resource families

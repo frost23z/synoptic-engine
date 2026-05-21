@@ -36,8 +36,7 @@ class EmailService(
         return PageResponse.of(emailRepository.findByFolder(tenantId, folder, pageable)) { it.toResponse() }
     }
 
-    fun findById(id: UUID): EmailResponse =
-        emailRepository.findById(id).orElseThrow { NoSuchElementException("Email not found: $id") }.toResponse()
+    fun findById(id: UUID): EmailResponse = requireEmail(id).toResponse()
 
     @Transactional
     fun compose(
@@ -194,8 +193,11 @@ class EmailService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!emailRepository.existsById(id)) throw NoSuchElementException("Email not found: $id")
-        emailRepository.deleteById(id)
+        // Load through the tenant-aware finder, then delegate to JpaRepository.delete(entity)
+        // so the @SQLDelete soft-delete trigger fires. `deleteById(id)` would
+        // skip the filter and let one tenant soft-delete another's email.
+        val email = requireEmail(id)
+        emailRepository.delete(email)
     }
 
     @Transactional
@@ -204,7 +206,7 @@ class EmailService(
         isRead: Boolean,
     ) {
         ids.forEach { id ->
-            emailRepository.findById(id).ifPresent { email ->
+            emailRepository.findActiveById(id)?.let { email ->
                 email.isRead = isRead
                 emailRepository.save(email)
             }
@@ -217,7 +219,7 @@ class EmailService(
         folder: String,
     ) {
         ids.forEach { id ->
-            emailRepository.findById(id).ifPresent { email ->
+            emailRepository.findActiveById(id)?.let { email ->
                 email.folders = listOf(folder)
                 emailRepository.save(email)
             }
@@ -227,7 +229,7 @@ class EmailService(
     @Transactional
     fun massDestroy(ids: List<UUID>) {
         ids.forEach { id ->
-            if (emailRepository.existsById(id)) emailRepository.deleteById(id)
+            emailRepository.findActiveById(id)?.let { email -> emailRepository.delete(email) }
         }
     }
 
@@ -236,10 +238,7 @@ class EmailService(
         emailId: UUID,
         tagId: UUID,
     ): EmailResponse {
-        val email =
-            emailRepository
-                .findById(emailId)
-                .orElseThrow { NoSuchElementException("Email not found: $emailId") }
+        val email = requireEmail(emailId)
         val tag =
             tagRepository
                 .findById(tagId)
@@ -253,10 +252,7 @@ class EmailService(
         emailId: UUID,
         tagId: UUID,
     ): EmailResponse {
-        val email =
-            emailRepository
-                .findById(emailId)
-                .orElseThrow { NoSuchElementException("Email not found: $emailId") }
+        val email = requireEmail(emailId)
         email.tags.removeIf { it.id == tagId }
         return emailRepository.save(email).toResponse()
     }
@@ -307,8 +303,13 @@ class EmailService(
         return email.toResponse()
     }
 
+    // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
+    // `@Filter("tenantFilter")` because it goes through `EntityManager.find()`
+    // rather than a query. `findActiveById` uses JPQL so the filter applies
+    // and cross-tenant fetches return null (→ 404 at the controller layer)
+    // instead of leaking another tenant's row.
     private fun requireEmail(id: UUID): Email =
-        emailRepository.findById(id).orElseThrow { NoSuchElementException("Email not found: $id") }
+        emailRepository.findActiveById(id) ?: throw NoSuchElementException("Email not found: $id")
 }
 
 fun Email.toResponse() =
