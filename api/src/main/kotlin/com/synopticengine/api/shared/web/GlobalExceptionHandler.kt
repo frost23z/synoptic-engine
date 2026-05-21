@@ -1,5 +1,6 @@
 package com.synopticengine.api.shared.web
 
+import com.synopticengine.api.auth.service.LoginLockedOutException
 import jakarta.persistence.OptimisticLockException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
@@ -60,6 +61,11 @@ class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
     fun handleMethodNotAllowed(ex: HttpRequestMethodNotSupportedException): ProblemDetail =
         problem(HttpStatus.METHOD_NOT_ALLOWED, "Method ${ex.method} not allowed")
+
+    // 429 — repeated login failures locked out by LoginAttemptTracker
+    @ExceptionHandler(LoginLockedOutException::class)
+    fun handleLockedOut(ex: LoginLockedOutException): ProblemDetail =
+        problem(HttpStatus.TOO_MANY_REQUESTS, ex.message ?: "Too many login attempts")
 
     // 400 — malformed JSON, wrong types in request body
     @ExceptionHandler(HttpMessageNotReadableException::class)
