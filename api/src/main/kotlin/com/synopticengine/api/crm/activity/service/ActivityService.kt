@@ -11,6 +11,7 @@ import com.synopticengine.api.crm.activity.web.ActivityFileResponse
 import com.synopticengine.api.crm.activity.web.ActivityParticipantResponse
 import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.crm.scoping.ScopeResolver
+import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.storage.StorageService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
@@ -342,8 +343,13 @@ class ActivityService(
             throw IllegalArgumentException("end must be on or after start")
         }
         if (userIds.isEmpty() && personIds.isEmpty()) return emptyList()
+        // Native query — pass tenant explicitly. The `activities` table is not
+        // RLS-protected, so the tenant predicate inside the query is the only
+        // isolation layer.
+        val tenantId = TenantContext.get() ?: error("TenantContext not set; meeting overlap requires authentication")
         return activityRepository
             .findOverlappingMeetings(
+                tenantId,
                 start,
                 end,
                 userIds.toTypedArray(),

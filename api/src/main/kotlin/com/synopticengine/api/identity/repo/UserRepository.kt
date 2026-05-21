@@ -4,6 +4,7 @@ import com.synopticengine.api.identity.domain.User
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 interface UserRepository :
@@ -41,16 +42,25 @@ interface UserRepository :
 
     fun findAllByDeletedAtIsNull(): List<User>
 
+    // Native query — Hibernate `@Filter("tenantFilter")` does not rewrite native
+    // SQL. `user_groups` is a join table without `tenant_id`; tenant boundary
+    // is enforced by joining `users` and matching on the caller's tenant.
     @Query(
         value = """
         SELECT DISTINCT ug2.user_id
         FROM user_groups ug1
         JOIN user_groups ug2 ON ug1.group_id = ug2.group_id
+        JOIN users u ON u.id = ug2.user_id
         WHERE ug1.user_id = :userId
+          AND u.tenant_id = :tenantId
+          AND u.deleted_at IS NULL
     """,
         nativeQuery = true,
     )
-    fun findGroupMemberIds(userId: UUID): List<UUID>
+    fun findGroupMemberIds(
+        @Param("userId") userId: UUID,
+        @Param("tenantId") tenantId: UUID,
+    ): List<UUID>
 
     @Query(
         """
