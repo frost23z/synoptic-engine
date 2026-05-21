@@ -173,11 +173,13 @@ class PersonService(
         return personRepository.save(person).toResponse()
     }
 
+    // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
+    // `@Filter("tenantFilter")` because it goes through `EntityManager.find()`
+    // rather than a query — a person from another tenant would otherwise leak
+    // out as a 200 OK on `GET /persons/{id}`. `findActiveById` uses JPQL so the
+    // filter applies and cross-tenant fetches return null (→ 404).
     private fun requirePerson(id: UUID): Person =
-        personRepository
-            .findById(id)
-            .orElseThrow { NoSuchElementException("Person not found: $id") }
-            .also { if (it.deletedAt != null) throw NoSuchElementException("Person not found: $id") }
+        personRepository.findActiveById(id) ?: throw NoSuchElementException("Person not found: $id")
 
     private fun Person.toResponse(): PersonResponse {
         val emailEntries = readEntries(emails)

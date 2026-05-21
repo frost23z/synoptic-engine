@@ -139,8 +139,11 @@ class UserService(
         val selfId = currentUserId()
         val toDeactivate = ids.filter { it != selfId }
         toDeactivate.forEach { id ->
-            userRepository.findById(id).ifPresent { user ->
-                if (user.deletedAt == null && runCatching { ensureNotLastAdmin(user) }.isSuccess) {
+            // findActiveByIdWithRolesAsList runs JPQL, so the tenant filter
+            // applies and a caller cannot mass-deactivate users from another
+            // tenant by passing their UUIDs.
+            userRepository.findActiveByIdWithRolesAsList(id).firstOrNull()?.let { user ->
+                if (runCatching { ensureNotLastAdmin(user) }.isSuccess) {
                     user.isActive = false
                     user.deletedAt = Instant.now()
                     userRepository.save(user)
@@ -212,11 +215,13 @@ class UserService(
         }
     }
 
+    // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
+    // `@Filter("tenantFilter")` (EntityManager.find() fast path); the
+    // findActiveByIdWithRolesAsList JPQL query does not, so cross-tenant
+    // fetches return empty here and surface as 404 at the controller.
     private fun requireUser(id: UUID): User =
-        userRepository
-            .findById(id)
-            .orElseThrow { NoSuchElementException("User not found: $id") }
-            .also { if (it.deletedAt != null) throw NoSuchElementException("User not found: $id") }
+        userRepository.findActiveByIdWithRolesAsList(id).firstOrNull()
+            ?: throw NoSuchElementException("User not found: $id")
 
     private fun User.toSummary() =
         UserSummary(
