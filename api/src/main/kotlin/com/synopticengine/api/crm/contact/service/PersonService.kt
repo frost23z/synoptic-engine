@@ -158,7 +158,7 @@ class PersonService(
         tagId: UUID,
     ): PersonResponse {
         val person = requirePerson(personId)
-        val tag = tagRepository.findById(tagId).orElseThrow { NoSuchElementException("Tag not found: $tagId") }
+        val tag = tagRepository.findActiveById(tagId) ?: throw NoSuchElementException("Tag not found: $tagId")
         person.tags.add(tag)
         return personRepository.save(person).toResponse()
     }
