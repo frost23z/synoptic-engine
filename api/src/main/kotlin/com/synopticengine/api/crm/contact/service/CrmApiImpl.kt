@@ -183,12 +183,14 @@ class CrmApiImpl(
         activityRepository.findUpcoming(Instant.now(), PageRequest.of(0, limit)).map { it.toSummary() }
 
     override fun findTagById(id: UUID): TagDto? =
-        tagRepository.findById(id).orElse(null)?.let { TagDto(it.id!!, it.name, it.color) }
+        // findActiveById is JPQL so the tenant filter applies; .findById would
+        // have hit EntityManager.find() and returned cross-tenant rows.
+        tagRepository.findActiveById(id)?.let { TagDto(it.id!!, it.name, it.color) }
 
     override fun findTagsByIds(ids: Collection<UUID>): List<TagDto> =
         tagRepository.findAllById(ids).map { TagDto(it.id!!, it.name, it.color) }
 
-    override fun tagExists(id: UUID): Boolean = tagRepository.existsById(id)
+    override fun tagExists(id: UUID): Boolean = tagRepository.findActiveById(id) != null
 
     // Bypasses Hibernate's tenantFilter — sharing.service.RecordShareService needs to
     // see the lead even when it belongs to the owner tenant whose context isn't set

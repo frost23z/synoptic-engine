@@ -30,11 +30,10 @@ class DataImportService(
 
     fun findAll(): List<DataImportResponse> = dataImportRepository.findAll().map { it.toResponse() }
 
-    fun findById(id: UUID): DataImportResponse =
-        dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }.toResponse()
+    fun findById(id: UUID): DataImportResponse = requireImport(id).toResponse()
 
     fun getStats(id: UUID): DataImportStatsResponse {
-        val imp = dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }
+        val imp = requireImport(id)
         return DataImportStatsResponse(
             id = imp.id!!,
             status = imp.status,
@@ -66,7 +65,7 @@ class DataImportService(
 
     @Transactional
     fun startImport(id: UUID): DataImportResponse {
-        val imp = dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }
+        val imp = requireImport(id)
         if (imp.status != ImportStatus.PENDING) {
             throw IllegalStateException("Import is not in PENDING state")
         }
@@ -76,35 +75,32 @@ class DataImportService(
 
     @Transactional
     fun delete(id: UUID) {
-        val imp = dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }
+        val imp = requireImport(id)
         Files.deleteIfExists(Paths.get(imp.filePath))
-        dataImportRepository.deleteById(id)
+        dataImportRepository.delete(imp)
     }
 
     @Transactional
     fun validate(id: UUID): DataImportResponse {
-        val imp = dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }
+        val imp = requireImport(id)
         if (imp.status != ImportStatus.PENDING) throw IllegalStateException("Import must be PENDING to validate")
         csvImportProcessor.validate(imp.id!!)
-        return dataImportRepository.findById(id).get().toResponse()
+        return requireImport(id).toResponse()
     }
 
     @Transactional
-    fun link(id: UUID): DataImportResponse {
-        val imp = dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }
-        return imp.toResponse()
-    }
+    fun link(id: UUID): DataImportResponse = requireImport(id).toResponse()
 
     @Transactional
     fun indexData(id: UUID): DataImportResponse {
-        val imp = dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }
+        val imp = requireImport(id)
         if (imp.status != ImportStatus.PENDING) throw IllegalStateException("Import must be PENDING to process")
         csvImportProcessor.process(imp.id!!)
-        return dataImportRepository.findById(id).get().toResponse()
+        return requireImport(id).toResponse()
     }
 
     fun downloadErrorsCsv(id: UUID): String {
-        val imp = dataImportRepository.findById(id).orElseThrow { NoSuchElementException("Import not found: $id") }
+        val imp = requireImport(id)
         val writer = StringWriter()
         CSVPrinter(
             writer,
@@ -119,6 +115,10 @@ class DataImportService(
         }
         return writer.toString()
     }
+
+    // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
+    private fun requireImport(id: UUID): DataImport =
+        dataImportRepository.findActiveById(id) ?: throw NoSuchElementException("Import not found: $id")
 }
 
 fun DataImport.toResponse() =

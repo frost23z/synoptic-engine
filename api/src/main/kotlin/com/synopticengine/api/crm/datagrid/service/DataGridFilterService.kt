@@ -57,15 +57,17 @@ class DataGridFilterService(
         id: UUID,
         userId: UUID,
     ) {
-        requireFilter(id, userId)
-        repository.deleteById(id)
+        val filter = requireFilter(id, userId)
+        repository.delete(filter)
     }
 
+    // Tenant-aware load (JPQL); the user-id check is the additional per-user
+    // authorization on top of tenant scoping.
     private fun requireFilter(
         id: UUID,
         userId: UUID,
     ): DataGridSavedFilter {
-        val filter = repository.findById(id).orElseThrow { NoSuchElementException("Filter not found: $id") }
+        val filter = repository.findActiveById(id) ?: throw NoSuchElementException("Filter not found: $id")
         if (filter.userId != userId) throw IllegalArgumentException("Filter not found: $id")
         return filter
     }

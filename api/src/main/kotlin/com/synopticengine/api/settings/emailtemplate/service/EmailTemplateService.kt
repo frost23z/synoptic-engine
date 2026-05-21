@@ -14,12 +14,7 @@ class EmailTemplateService(
 ) {
     fun findAll(): List<EmailTemplateResponse> = emailTemplateRepository.findAll().map { it.toResponse() }
 
-    fun findById(id: UUID): EmailTemplateResponse =
-        emailTemplateRepository
-            .findById(id)
-            .orElseThrow {
-                NoSuchElementException("Email template not found: $id")
-            }.toResponse()
+    fun findById(id: UUID): EmailTemplateResponse = requireTemplate(id).toResponse()
 
     @Transactional
     fun create(
@@ -50,10 +45,7 @@ class EmailTemplateService(
         subject: String,
         content: String,
     ): EmailTemplateResponse {
-        val template =
-            emailTemplateRepository.findById(id).orElseThrow {
-                NoSuchElementException("Email template not found: $id")
-            }
+        val template = requireTemplate(id)
         if (template.isPredefined) throw IllegalStateException("Cannot modify predefined templates")
         if (emailTemplateRepository.existsByNameAndIdNot(
                 name,
@@ -70,13 +62,15 @@ class EmailTemplateService(
 
     @Transactional
     fun delete(id: UUID) {
-        val template =
-            emailTemplateRepository.findById(id).orElseThrow {
-                NoSuchElementException("Email template not found: $id")
-            }
+        val template = requireTemplate(id)
         if (template.isPredefined) throw IllegalStateException("Cannot delete predefined templates")
-        emailTemplateRepository.deleteById(id)
+        emailTemplateRepository.delete(template)
     }
+
+    // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
+    private fun requireTemplate(id: UUID): EmailTemplate =
+        emailTemplateRepository.findActiveById(id)
+            ?: throw NoSuchElementException("Email template not found: $id")
 }
 
 fun EmailTemplate.toResponse() =

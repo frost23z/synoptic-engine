@@ -92,8 +92,7 @@ class AttributeService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!attributeRepository.existsById(id)) throw NoSuchElementException("Attribute not found: $id")
-        attributeRepository.deleteById(id)
+        attributeRepository.delete(requireAttr(id))
     }
 
     @Transactional
@@ -124,10 +123,8 @@ class AttributeService(
     ): AttributeOptionResponse {
         requireAttr(attributeId)
         val option =
-            optionRepository
-                .findById(
-                    optionId,
-                ).orElseThrow { NoSuchElementException("Option not found: $optionId") }
+            optionRepository.findActiveById(optionId)
+                ?: throw NoSuchElementException("Option not found: $optionId")
         option.adminName = adminName
         option.sortOrder = sortOrder
         return optionRepository.save(option).toResponse()
@@ -139,8 +136,10 @@ class AttributeService(
         optionId: UUID,
     ) {
         requireAttr(attributeId)
-        if (!optionRepository.existsById(optionId)) throw NoSuchElementException("Option not found: $optionId")
-        optionRepository.deleteById(optionId)
+        val option =
+            optionRepository.findActiveById(optionId)
+                ?: throw NoSuchElementException("Option not found: $optionId")
+        optionRepository.delete(option)
     }
 
     @Transactional
@@ -175,7 +174,7 @@ class AttributeService(
         sortOrder: Int?,
     ) {
         ids.forEach { id ->
-            attributeRepository.findById(id).ifPresent { attr ->
+            attributeRepository.findActiveById(id)?.let { attr ->
                 if (adminName != null) attr.adminName = adminName
                 if (sortOrder != null) attr.sortOrder = sortOrder
                 attributeRepository.save(attr)
@@ -186,7 +185,7 @@ class AttributeService(
     @Transactional
     fun massDestroy(ids: List<UUID>) {
         ids.forEach { id ->
-            val attr = attributeRepository.findById(id).orElse(null) ?: return@forEach
+            val attr = attributeRepository.findActiveById(id) ?: return@forEach
             if (!attr.isUserDefined) {
                 throw IllegalArgumentException("Cannot delete system attribute: ${attr.code}")
             }
@@ -231,8 +230,9 @@ class AttributeService(
         return sb.toString()
     }
 
+    // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
     private fun requireAttr(id: UUID): Attribute =
-        attributeRepository.findById(id).orElseThrow { NoSuchElementException("Attribute not found: $id") }
+        attributeRepository.findActiveById(id) ?: throw NoSuchElementException("Attribute not found: $id")
 }
 
 fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =

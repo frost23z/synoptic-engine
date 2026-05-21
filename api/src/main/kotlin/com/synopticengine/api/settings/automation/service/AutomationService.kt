@@ -30,8 +30,7 @@ class AutomationService(
 
     fun findAllWorkflows(): List<WorkflowResponse> = workflowRepository.findAll().map { it.toResponse() }
 
-    fun findWorkflowById(id: UUID): WorkflowResponse =
-        workflowRepository.findById(id).orElseThrow { NoSuchElementException("Workflow not found: $id") }.toResponse()
+    fun findWorkflowById(id: UUID): WorkflowResponse = requireWorkflow(id).toResponse()
 
     @Transactional
     fun createWorkflow(
@@ -67,7 +66,7 @@ class AutomationService(
         isActive: Boolean,
         conditionType: String = "and",
     ): WorkflowResponse {
-        val workflow = workflowRepository.findById(id).orElseThrow { NoSuchElementException("Workflow not found: $id") }
+        val workflow = requireWorkflow(id)
         workflow.name = name
         workflow.description = description
         workflow.eventName = eventName
@@ -80,15 +79,18 @@ class AutomationService(
 
     @Transactional
     fun deleteWorkflow(id: UUID) {
-        if (!workflowRepository.existsById(id)) throw NoSuchElementException("Workflow not found: $id")
-        workflowRepository.deleteById(id)
+        // Load through the tenant-aware finder then delete the entity so the
+        // filter actually runs before the soft-delete trigger fires.
+        workflowRepository.delete(requireWorkflow(id))
     }
 
     fun listRuns(
         workflowId: UUID,
         pageable: Pageable,
     ): PageResponse<WorkflowActionRunResponse> {
-        if (!workflowRepository.existsById(workflowId)) throw NoSuchElementException("Workflow not found: $workflowId")
+        // requireWorkflow throws 404 (not found) when the caller doesn't own the
+        // workflow, which is the right behaviour for cross-tenant probes.
+        requireWorkflow(workflowId)
         return PageResponse.of(
             actionRunRepository.findAllByWorkflowIdOrderByCreatedAtDesc(workflowId, pageable),
         ) { it.toResponse() }
@@ -98,8 +100,7 @@ class AutomationService(
 
     fun findAllWebhooks(): List<WebhookResponse> = webhookRepository.findAll().map { it.toResponse() }
 
-    fun findWebhookById(id: UUID): WebhookResponse =
-        webhookRepository.findById(id).orElseThrow { NoSuchElementException("Webhook not found: $id") }.toResponse()
+    fun findWebhookById(id: UUID): WebhookResponse = requireWebhook(id).toResponse()
 
     @Transactional
     fun createWebhook(
@@ -126,7 +127,7 @@ class AutomationService(
         events: List<String>,
         isActive: Boolean,
     ): WebhookResponse {
-        val webhook = webhookRepository.findById(id).orElseThrow { NoSuchElementException("Webhook not found: $id") }
+        val webhook = requireWebhook(id)
         webhook.name = name
         webhook.payloadUrl = payloadUrl
         webhook.events = events
@@ -136,21 +137,26 @@ class AutomationService(
 
     @Transactional
     fun deleteWebhook(id: UUID) {
-        if (!webhookRepository.existsById(id)) throw NoSuchElementException("Webhook not found: $id")
-        webhookRepository.deleteById(id)
+        webhookRepository.delete(requireWebhook(id))
     }
 
     fun findDeliveriesFor(
         webhookId: UUID,
         pageable: Pageable,
     ): PageResponse<WebhookDeliveryRunResponse> {
-        if (!webhookRepository.existsById(webhookId)) {
-            throw NoSuchElementException("Webhook not found: $webhookId")
-        }
+        requireWebhook(webhookId)
         return PageResponse.of(
             webhookDeliveryRunRepository.findAllByWebhookIdOrderByCreatedAtDesc(webhookId, pageable),
         ) { it.toResponse() }
     }
+
+    // Tenant-aware loads. JpaRepository.findById bypasses Hibernate's tenant
+    // filter (it hits EntityManager.find()); JPQL findActiveById does not.
+    private fun requireWorkflow(id: UUID): Workflow =
+        workflowRepository.findActiveById(id) ?: throw NoSuchElementException("Workflow not found: $id")
+
+    private fun requireWebhook(id: UUID): Webhook =
+        webhookRepository.findActiveById(id) ?: throw NoSuchElementException("Webhook not found: $id")
 }
 
 fun Workflow.toResponse() =

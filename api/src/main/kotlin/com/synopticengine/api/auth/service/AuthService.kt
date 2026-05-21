@@ -8,10 +8,13 @@ import com.synopticengine.api.auth.web.TokenResponse
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.shared.email.MailSenderService
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.security.SecureRandom
+import java.util.Base64
 
 @Service
 class AuthService(
@@ -20,20 +23,31 @@ class AuthService(
     private val passwordEncoder: PasswordEncoder,
     private val passwordResetRepository: PasswordResetRepository,
     private val mailSenderService: MailSenderService,
+    private val loginAttemptTracker: LoginAttemptTracker,
+    @Value("\${synoptic.auth.password-reset.ttl-minutes:15}") private val resetTtlMinutes: Long,
 ) {
     fun login(
         email: String,
         password: String,
+        clientIp: String? = null,
     ): TokenResponse {
-        val credentials =
-            identityApi.findCredentialsByEmail(email)
-                ?: throw IllegalArgumentException("Invalid email or password")
+        // H6 — lockout check BEFORE we even hit the credential lookup. Stops
+        // brute-force from being limited only by SMTP / DB throughput.
+        loginAttemptTracker.assertNotLocked(email, clientIp)
+
+        val credentials = identityApi.findCredentialsByEmail(email)
+        if (credentials == null) {
+            loginAttemptTracker.recordFailure(email, clientIp)
+            throw IllegalArgumentException("Invalid email or password")
+        }
 
         if (!passwordEncoder.matches(password, credentials.passwordHash)) {
+            loginAttemptTracker.recordFailure(email, clientIp)
             throw IllegalArgumentException("Invalid email or password")
         }
 
         credentials.requireActive()
+        loginAttemptTracker.recordSuccess(email, clientIp)
 
         return buildTokenResponse(credentials)
     }
@@ -86,14 +100,16 @@ class AuthService(
     @Transactional
     fun forgotPassword(email: String) {
         identityApi.findCredentialsByEmail(email) ?: return // silent: don't reveal if email exists
-        val token =
-            java.util.UUID
-                .randomUUID()
-                .toString()
+        // H7 — token sent to user is high-entropy random; stored hash is BCrypt.
+        // A read-only leak of `user_password_resets` (e.g. backup snapshot)
+        // therefore cannot be replayed to take over the account.
+        val plaintextToken = generateResetToken()
+        val tokenHash = passwordEncoder.encode(plaintextToken)
+            ?: throw IllegalStateException("Token encoding failed")
         passwordResetRepository.save(
             PasswordReset().apply {
                 this.email = email
-                this.token = token
+                this.token = tokenHash
             },
         )
         // Send inside the transaction so SMTP failures roll back the unused token row —
@@ -101,7 +117,7 @@ class AuthService(
         mailSenderService.sendEmail(
             to = email,
             subject = "Password Reset",
-            body = "Your password reset token: $token\n\nThis token expires in 60 minutes.",
+            body = "Your password reset token: $plaintextToken\n\nThis token expires in $resetTtlMinutes minutes.",
         )
     }
 
@@ -111,15 +127,33 @@ class AuthService(
         email: String,
         newPassword: String,
     ) {
+        // H7 — the stored row is keyed by email (one outstanding reset per
+        // email at a time). Compare the supplied plaintext against the BCrypt
+        // hash; constant-time inside passwordEncoder.matches.
         val reset =
-            passwordResetRepository.findByToken(token)
+            passwordResetRepository.findById(email).orElse(null)
                 ?: throw IllegalArgumentException("Invalid or expired token")
-        if (reset.email != email) throw IllegalArgumentException("Invalid or expired token")
-        if (reset.isExpired()) throw IllegalArgumentException("Token has expired. Please request a new password reset.")
+        if (!passwordEncoder.matches(token, reset.token)) {
+            throw IllegalArgumentException("Invalid or expired token")
+        }
+        if (reset.isExpired(resetTtlMinutes)) {
+            throw IllegalArgumentException("Token has expired. Please request a new password reset.")
+        }
         val encodedPassword =
             passwordEncoder.encode(newPassword)
                 ?: throw IllegalStateException("Password encoding failed")
         identityApi.updatePassword(email, encodedPassword)
         passwordResetRepository.deleteByEmail(email)
+    }
+
+    private fun generateResetToken(): String {
+        // 32 bytes = 256 bits of entropy; URL-safe Base64 so it survives copy-paste.
+        val bytes = ByteArray(32)
+        secureRandom.nextBytes(bytes)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    }
+
+    companion object {
+        private val secureRandom = SecureRandom()
     }
 }

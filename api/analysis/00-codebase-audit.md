@@ -462,6 +462,19 @@ containing this revision).
 | `identity/repo/UserRepository.kt` | `findGroupMemberIds` now joins `users` and filters by `tenant_id` (C6). |
 | `identity/service/UserService.kt` | Passes tenant when resolving GROUP view scope. |
 
+### Hardening batch (current branch) — finish IDOR sweep + sharing + auth + SystemConfig + indexes
+
+A single multi-commit branch that closes most of the audit's
+CRITICAL/HIGH backlog in one pass:
+
+| Commit | Audit refs | Summary |
+|--------|------------|---------|
+| `fix(api): finish IDOR sweep across remaining services` | C9 | 29 files; switched every remaining `findById` / `existsById` site in 14 services to a tenant-aware `findActiveById` JPQL finder, plus added the same method to 9 more repositories. Deletes load-then-`delete(entity)` so the filter runs before the SQL. |
+| `feat(sharing): crash-safe materialization + SHARE/REVOKE audit + expiry cleanup` | H2, H3, H4 | `ShareMaterializationWorker.runTask` wrapped in try-finally so `finishedAt` is always set. `CrossTenantAuditEventListener` now logs `SHARE` and `REVOKE` (guard in service relaxed for owner-side actions). New `ShareExpiryCleanupWorker` daily-cron prunes expired rows from `record_shares` + `resource_visibility` past a configurable grace window. |
+| `feat(auth): login lockout + hashed reset tokens + secrets guard` | H6, H7, H11 | New `LoginAttemptTracker` (in-memory, per `(email, IP)` ; configurable thresholds; throws `LoginLockedOutException` → 429). `AuthService.forgotPassword` issues 256-bit URL-safe Base64 token, stores BCrypt hash, shortened TTL (15 min default). `SecretsGuard` `@PostConstruct` refuses to start on non-dev profiles when JWT secret or admin password is at default. |
+| `fix(settings): SystemConfig per-tenant primary key + seeding listener` | H9 | V012 promotes `system_configs` PK from `(code)` to `(tenant_id, code)`. JPA entity gains `tenantId` field + `@IdClass` + Hibernate `@Filter("tenantFilter")` + `@PrePersist`. `SystemConfigTenantInitListener` copies catalogue from seed tenant on every `TenantProvisionedEvent`. |
+| `feat(db): missing composite (tenant_id, …) indexes` (V013) | 6.1 | Composite indexes for hot list/join paths on activities, emails, quotes, product_inventories, warehouse_locations, datagrid_saved_filters, attribute_values, attribute_options. All `IF NOT EXISTS`. |
+
 ### PR #27 — IDOR fix on email + person/user/role + regression tests
 
 Discovered when running PR #26's `EmailTenantIsolationIntegrationTest` in a
@@ -517,39 +530,51 @@ Fixed in this PR (consistent `findActiveById` pattern via JPQL):
 
 ## 10. Recommended priority queue
 
-Order to tackle, smallest-first within each band.
+Status after PR #25, PR #26, PR #27, and the hardening batch
+(this branch):
 
-**Band A — Multi-tenant correctness (1–2 days):**
-1. Add `tenant_id = :tenantId` filter to all native queries listed in 3.1 — pass `TenantContext.get()` from each calling service. C1–C6.
-2. Migration V011: enable RLS on every BaseEntity-backed table (template + bulk apply).
-3. Make V008 idempotent. C8.
-4. Add regression integration test for `EmailRepository.findByFolder` cross-tenant.
+**Band A — Multi-tenant correctness:** ✅ Done.
+1. ~~Native-query tenant predicates (C1–C6)~~ — PR #25.
+2. ~~V011 RLS baseline~~ — PR #26.
+3. V008 idempotency (C8) — DEFERRED (severity revised to MEDIUM; Flyway only runs once).
+4. ~~Cross-tenant regression tests~~ — PR #26 + #27.
+5. ~~Systemic IDOR via `findById`~~ — PR #27 (Email/Person/User/Role) + hardening batch (everywhere else).
 
-**Band B — Sharing module hardening (1 day):**
-5. Try-finally in `ShareMaterializationWorker.runTask` + idempotent upsert. H4.
-6. Log SHARE / REVOKE actions to `cross_tenant_audit`. H2.
-7. Daily `@Scheduled` cleanup of expired `record_shares` / `resource_visibility`. H3.
+**Band B — Sharing module hardening:** ✅ Done in hardening batch.
+6. ~~Crash-safe `ShareMaterializationWorker.runTask`~~ — H4.
+7. ~~SHARE/REVOKE in `cross_tenant_audit`~~ — H2.
+8. ~~Daily expiry cleanup~~ — H3 (`ShareExpiryCleanupWorker`).
 
-**Band C — Auth hardening (1 day):**
-8. Refresh-token rotation + family revocation. H5.
-9. Login rate limit + lockout. H6.
-10. Hash password-reset tokens; shorten TTL; rate-limit forgot-password. H7.
-11. Fail-fast on default JWT secret / default admin password in non-dev profiles. H11.
+Still open:
+- Idempotent upsert in the worker (ON CONFLICT DO UPDATE) — the try-finally
+  fixes the visible-state-after-crash issue, but two workers racing on the
+  same task can still hit the unique constraint. Lower priority once the
+  retry loop is short.
 
-**Band D — Schema cleanups (1 day):**
-12. Composite `(tenant_id, …)` indexes per 6.1.
-13. Soft-delete consistency cleanup per 6.3.
-14. Cross-tenant FK triggers per 6.4.
+**Band C — Auth hardening:** Partial — done in hardening batch except
+refresh-token rotation.
+9. Refresh-token rotation + family revocation (H5) — OPEN.
+10. ~~Login rate limit + lockout~~ — H6.
+11. ~~Hash password-reset tokens, shorten TTL~~ — H7.
+12. ~~Fail-fast on default secrets~~ — H11 (`SecretsGuard`).
 
-**Band E — Krayin parity catch-up (1 week):**
-15. Lead rotting query + dashboard surface.
-16. Lead → person conversion endpoint.
-17. Contact merge endpoint.
-18. Email template variable substitution (Handlebars or similar).
-19. Web-form CAPTCHA.
-20. CSV import transactional rollback.
-21. Workflow actions: assign-user, assign-stage, assign-group.
-22. Make `SystemConfig` tenant-scoped. H9.
+Still open:
+- Rate-limit `/auth/forgot-password` (H7 partial — login is done, forgot-password isn't).
+
+**Band D — Schema cleanups:** Mostly done.
+13. ~~Composite `(tenant_id, …)` indexes~~ — V013.
+14. Soft-delete consistency cleanup (6.3) — OPEN.
+15. Cross-tenant FK triggers (6.4) — OPEN.
+
+**Band E — Krayin parity catch-up (still 1 week of work):**
+16. Lead rotting query + dashboard surface.
+17. Lead → person conversion endpoint.
+18. Contact merge endpoint.
+19. Email template variable substitution (Handlebars or similar).
+20. Web-form CAPTCHA.
+21. CSV import transactional rollback.
+22. Workflow actions: assign-user, assign-stage, assign-group.
+23. ~~Make `SystemConfig` tenant-scoped (H9)~~ — done in hardening batch.
 
 **Band F — Long tail (ongoing):**
 - Custom-attribute validation/required/unique/lookup.
@@ -557,6 +582,7 @@ Order to tackle, smallest-first within each band.
 - Inventory movements ledger.
 - Marketing campaign execution.
 - `event_publication` retention.
+- TestcontainersConfiguration: non-superuser DB role so V011 RLS actually fires in CI.
 
 ---
 

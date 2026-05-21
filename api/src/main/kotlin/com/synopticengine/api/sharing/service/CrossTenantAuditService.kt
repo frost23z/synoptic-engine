@@ -27,10 +27,19 @@ class CrossTenantAuditService(
         action: CrossTenantAction,
         payloadJson: String? = null,
     ): CrossTenantAudit {
-        // Guard: only log when the actor crosses the tenant boundary. Same-tenant
-        // actions are covered by Spring Modulith's regular audit.
-        require(ownerTenantId != actorTenantId) {
-            "CrossTenantAuditService.record() called for same-tenant action: $action on $resourceType/$resourceId"
+        // Guard: cross-tenant mutations (EDIT / DELETE / COMMENT / RESHARE) must
+        // come from a non-owner actor — that's the invariant the table was
+        // originally designed to record. Owner-side actions (SHARE / REVOKE)
+        // legitimately happen with actorTenantId == ownerTenantId; we still
+        // want them in the audit log so the owner's compliance review can see
+        // every grant they made. VIEW is admitted on both sides (still unused).
+        val sameTenantAllowed = action == CrossTenantAction.SHARE ||
+            action == CrossTenantAction.REVOKE ||
+            action == CrossTenantAction.VIEW
+        if (!sameTenantAllowed) {
+            require(ownerTenantId != actorTenantId) {
+                "CrossTenantAuditService.record() called for same-tenant action: $action on $resourceType/$resourceId"
+            }
         }
         val row =
             CrossTenantAudit().apply {

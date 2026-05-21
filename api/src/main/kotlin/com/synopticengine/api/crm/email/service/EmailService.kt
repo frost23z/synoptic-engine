@@ -74,7 +74,10 @@ class EmailService(
         // Attach any pre-uploaded files (e.g. from a separate /api/mail/attachments
         // staging endpoint — out of scope for this PR) by id.
         attachmentIds.forEach { aid ->
-            attachmentRepository.findById(aid).ifPresent { a ->
+            // findActiveById is JPQL so the tenant filter applies; the
+            // caller-supplied attachment id can therefore not refer to a
+            // different tenant's pre-staged file.
+            attachmentRepository.findActiveById(aid)?.let { a ->
                 a.email = email
                 a.emailId = email.id!!
                 attachmentRepository.save(a)
