@@ -80,16 +80,22 @@ interface ActivityRepository : JpaRepository<Activity, UUID> {
         pageable: Pageable,
     ): List<Activity>
 
+    // Native query — Hibernate `@Filter("tenantFilter")` does NOT rewrite native
+    // SQL, and the `activities` table has no Postgres RLS policy. The tenant_id
+    // predicate here is the only isolation layer; callers must pass
+    // TenantContext.get().
     @Query(
         value = """
             SELECT COUNT(*) FROM activities
-            WHERE deleted_at IS NULL
+            WHERE tenant_id = :tenantId
+              AND deleted_at IS NULL
               AND created_at >= :start AND created_at < :end
               AND (:hasScope = false OR user_id IN (:scopeIds))
         """,
         nativeQuery = true,
     )
     fun countCreatedInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
@@ -117,11 +123,15 @@ interface ActivityRepository : JpaRepository<Activity, UUID> {
      * intersects the candidate window, excluding [excludeActivityId] (for the
      * "update existing meeting" case).
      */
+    // Native query — see comment on countCreatedInRangeNative. Without the
+    // tenant_id predicate this would return overlapping meetings across every
+    // tenant in the database, revealing other tenants' calendars.
     @Query(
         value = """
             SELECT DISTINCT a.* FROM activities a
             LEFT JOIN activity_participants ap ON ap.activity_id = a.id
-            WHERE a.deleted_at IS NULL
+            WHERE a.tenant_id = :tenantId
+              AND a.deleted_at IS NULL
               AND a.type = 'MEETING'
               AND a.schedule_from IS NOT NULL
               AND a.schedule_to IS NOT NULL
@@ -136,6 +146,7 @@ interface ActivityRepository : JpaRepository<Activity, UUID> {
         nativeQuery = true,
     )
     fun findOverlappingMeetings(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("userIds") userIds: Array<UUID>,
