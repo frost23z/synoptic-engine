@@ -31,7 +31,10 @@ class EmailService(
     fun findByFolder(
         folder: String,
         pageable: Pageable,
-    ): PageResponse<EmailResponse> = PageResponse.of(emailRepository.findByFolder(folder, pageable)) { it.toResponse() }
+    ): PageResponse<EmailResponse> {
+        val tenantId = TenantContext.get() ?: error("TenantContext not set; /mail requires authentication")
+        return PageResponse.of(emailRepository.findByFolder(tenantId, folder, pageable)) { it.toResponse() }
+    }
 
     fun findById(id: UUID): EmailResponse =
         emailRepository.findById(id).orElseThrow { NoSuchElementException("Email not found: $id") }.toResponse()

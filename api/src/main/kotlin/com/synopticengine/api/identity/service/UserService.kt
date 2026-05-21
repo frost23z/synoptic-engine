@@ -11,6 +11,7 @@ import com.synopticengine.api.identity.repo.PermissionRepository
 import com.synopticengine.api.identity.repo.RoleRepository
 import com.synopticengine.api.identity.repo.UserRepository
 import com.synopticengine.api.identity.web.UserDetailResponse
+import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.config.TenantSession
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -197,7 +198,11 @@ class UserService(
             }
 
             ViewPermission.GROUP -> {
-                val ids = userRepository.findGroupMemberIds(requesterId).toSet()
+                // `findGroupMemberIds` is a native query that joins through
+                // user_groups; the tenant predicate is the only isolation layer
+                // because Hibernate's `@Filter` does not rewrite native SQL.
+                val tenantId = TenantContext.get() ?: user.tenantId
+                val ids = userRepository.findGroupMemberIds(requesterId, tenantId).toSet()
                 ViewContext(ids.ifEmpty { setOf(requesterId) })
             }
 

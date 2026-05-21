@@ -18,6 +18,7 @@ import com.synopticengine.api.crm.lead.repo.LeadTypeRepository
 import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.crm.quote.repo.QuoteRepository
 import com.synopticengine.api.crm.scoping.ScopeResolver
+import com.synopticengine.api.shared.TenantContext
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -46,6 +47,7 @@ class DashboardStatsService(
             // User has no view scope → everything is zero.
             return OverAllStatsResponse(zero, zero, zero, zero)
         }
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val leadsCurrent =
             leadRepository.countCreatedInRangeNative(range.startInstant, range.endInstant, sb.hasScope, sb.ids).toInt()
@@ -55,17 +57,17 @@ class DashboardStatsService(
                 .toInt()
         val activitiesCurrent =
             activityRepository
-                .countCreatedInRangeNative(range.startInstant, range.endInstant, sb.hasScope, sb.ids)
+                .countCreatedInRangeNative(tenantId, range.startInstant, range.endInstant, sb.hasScope, sb.ids)
                 .toInt()
         val activitiesPrevious =
             activityRepository
-                .countCreatedInRangeNative(range.previousStartInstant, range.previousEndInstant, sb.hasScope, sb.ids)
+                .countCreatedInRangeNative(tenantId, range.previousStartInstant, range.previousEndInstant, sb.hasScope, sb.ids)
                 .toInt()
         val quotesCurrent =
-            quoteRepository.countCreatedInRangeNative(range.startInstant, range.endInstant, sb.hasScope, sb.ids).toInt()
+            quoteRepository.countCreatedInRangeNative(tenantId, range.startInstant, range.endInstant, sb.hasScope, sb.ids).toInt()
         val quotesPrevious =
             quoteRepository
-                .countCreatedInRangeNative(range.previousStartInstant, range.previousEndInstant, sb.hasScope, sb.ids)
+                .countCreatedInRangeNative(tenantId, range.previousStartInstant, range.previousEndInstant, sb.hasScope, sb.ids)
                 .toInt()
         // Persons aren't user-scoped today (CRM-wide list); count as-is.
         val personsCurrent =
@@ -334,6 +336,12 @@ class DashboardStatsService(
         } else {
             ScopeBinding(hasScope = true, ids = scope)
         }
+
+    // Native dashboard queries against `activities` and `quotes` need an explicit
+    // tenant predicate because those tables are not RLS-protected (V007 only
+    // enables RLS on leads/orgs/persons/products).
+    private fun requireTenant(): UUID =
+        TenantContext.get() ?: error("TenantContext not set; dashboard endpoints require authentication")
 
     private data class ScopeBinding(
         val hasScope: Boolean,

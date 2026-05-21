@@ -5,24 +5,31 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 interface EmailRepository : JpaRepository<Email, UUID> {
-    // Native query — @SQLRestriction is bypassed for native SQL, so the
-    // deleted_at filter has to be explicit.
+    // Native query — @SQLRestriction and Hibernate `@Filter("tenantFilter")` are
+    // both bypassed for native SQL, and the `emails` table is not covered by
+    // Postgres RLS (V007 only enables RLS on leads/orgs/persons/products). The
+    // tenant_id predicate here is therefore the only isolation layer; callers
+    // must pass TenantContext.get().
     @Query(
         nativeQuery = true,
         value =
             "SELECT * FROM emails " +
-                "WHERE folders @> jsonb_build_array(cast(:folder as text)) " +
+                "WHERE tenant_id = :tenantId " +
+                "AND folders @> jsonb_build_array(cast(:folder as text)) " +
                 "AND deleted_at IS NULL",
         countQuery =
             "SELECT count(*) FROM emails " +
-                "WHERE folders @> jsonb_build_array(cast(:folder as text)) " +
+                "WHERE tenant_id = :tenantId " +
+                "AND folders @> jsonb_build_array(cast(:folder as text)) " +
                 "AND deleted_at IS NULL",
     )
     fun findByFolder(
-        folder: String,
+        @Param("tenantId") tenantId: UUID,
+        @Param("folder") folder: String,
         pageable: Pageable,
     ): Page<Email>
 }
