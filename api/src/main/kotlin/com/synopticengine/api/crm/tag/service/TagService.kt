@@ -14,8 +14,7 @@ class TagService(
 ) {
     fun findAll(): List<TagResponse> = tagRepository.findAll().map { it.toResponse() }
 
-    fun findById(id: UUID): TagResponse =
-        tagRepository.findById(id).orElseThrow { NoSuchElementException("Tag not found: $id") }.toResponse()
+    fun findById(id: UUID): TagResponse = requireTag(id).toResponse()
 
     fun search(q: String): List<TagResponse> =
         tagRepository.findAllByNameContainingIgnoreCase(q).map { it.toResponse() }
@@ -41,7 +40,7 @@ class TagService(
         name: String,
         color: String?,
     ): TagResponse {
-        val tag = tagRepository.findById(id).orElseThrow { NoSuchElementException("Tag not found: $id") }
+        val tag = requireTag(id)
         if (tagRepository.existsByNameAndIdNot(name, id)) throw IllegalStateException("Tag name already in use: $name")
         tag.name = name
         tag.color = color
@@ -50,16 +49,21 @@ class TagService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!tagRepository.existsById(id)) throw NoSuchElementException("Tag not found: $id")
-        tagRepository.deleteById(id)
+        // Load through the tenant-aware finder then delete the entity (not by id)
+        // so the filter actually runs before the DELETE.
+        tagRepository.delete(requireTag(id))
     }
 
     @Transactional
     fun massDestroy(ids: List<UUID>) {
         ids.forEach { id ->
-            if (tagRepository.existsById(id)) tagRepository.deleteById(id)
+            tagRepository.findActiveById(id)?.let { tagRepository.delete(it) }
         }
     }
+
+    // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
+    private fun requireTag(id: UUID): Tag =
+        tagRepository.findActiveById(id) ?: throw NoSuchElementException("Tag not found: $id")
 }
 
 fun Tag.toResponse() =

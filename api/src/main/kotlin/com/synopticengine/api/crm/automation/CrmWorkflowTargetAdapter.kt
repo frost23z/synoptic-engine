@@ -196,7 +196,9 @@ class CrmWorkflowTargetAdapter(
         tagName: String?,
     ): Tag? {
         if (tagId != null) {
-            return tagRepository.findById(tagId).orElse(null)
+            // Tenant-aware JPQL load — the inherited findById bypasses
+            // Hibernate's tenant filter.
+            return tagRepository.findActiveById(tagId)
         }
         if (tagName.isNullOrBlank()) return null
         val existing = tagRepository.findAllByNameContainingIgnoreCase(tagName).firstOrNull { it.name == tagName }

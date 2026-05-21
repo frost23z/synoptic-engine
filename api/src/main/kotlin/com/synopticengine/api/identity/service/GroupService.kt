@@ -14,11 +14,7 @@ class GroupService(
 ) {
     fun findAll(): List<GroupResponse> = groupRepository.findAll().map { it.toResponse() }
 
-    fun findById(id: UUID): GroupResponse =
-        groupRepository
-            .findById(id)
-            .orElseThrow { NoSuchElementException("Group not found: $id") }
-            .toResponse()
+    fun findById(id: UUID): GroupResponse = requireGroup(id).toResponse()
 
     @Transactional
     fun create(
@@ -41,10 +37,7 @@ class GroupService(
         name: String,
         description: String?,
     ): GroupResponse {
-        val group =
-            groupRepository
-                .findById(id)
-                .orElseThrow { NoSuchElementException("Group not found: $id") }
+        val group = requireGroup(id)
         if (groupRepository.existsByNameAndIdNot(
                 name,
                 id,
@@ -59,9 +52,12 @@ class GroupService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!groupRepository.existsById(id)) throw NoSuchElementException("Group not found: $id")
-        groupRepository.deleteById(id)
+        groupRepository.delete(requireGroup(id))
     }
+
+    // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
+    private fun requireGroup(id: UUID): Group =
+        groupRepository.findActiveById(id) ?: throw NoSuchElementException("Group not found: $id")
 }
 
 fun Group.toResponse() =

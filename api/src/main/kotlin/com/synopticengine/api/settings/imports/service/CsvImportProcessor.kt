@@ -33,7 +33,10 @@ class CsvImportProcessor(
         TenantContext.get()
             ?: error("CsvImportProcessor.process called without an active TenantContext (importId=$importId)")
 
-        val dataImport = dataImportRepository.findById(importId).orElse(null) ?: return
+        // Use the tenant-aware finder (JPQL) so this async/scheduled path can't
+        // pick up an import row that belongs to a different tenant — relevant if
+        // an attacker ever managed to enqueue a foreign import id.
+        val dataImport = dataImportRepository.findActiveById(importId) ?: return
         dataImport.status = ImportStatus.PROCESSING
         dataImportRepository.save(dataImport)
 
@@ -190,7 +193,10 @@ class CsvImportProcessor(
     }
 
     fun validate(importId: UUID) {
-        val dataImport = dataImportRepository.findById(importId).orElse(null) ?: return
+        // Use the tenant-aware finder (JPQL) so this async/scheduled path can't
+        // pick up an import row that belongs to a different tenant — relevant if
+        // an attacker ever managed to enqueue a foreign import id.
+        val dataImport = dataImportRepository.findActiveById(importId) ?: return
         val errors = mutableListOf<Map<String, String>>()
         var rowIndex = 1
         try {

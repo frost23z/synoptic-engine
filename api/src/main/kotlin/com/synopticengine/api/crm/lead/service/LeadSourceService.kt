@@ -29,10 +29,8 @@ class LeadSourceService(
         name: String,
     ): LeadSourceResponse {
         val source =
-            leadSourceRepository
-                .findById(
-                    id,
-                ).orElseThrow { NoSuchElementException("Lead source not found: $id") }
+            leadSourceRepository.findActiveById(id)
+                ?: throw NoSuchElementException("Lead source not found: $id")
         if (leadSourceRepository.existsByNameAndIdNot(
                 name,
                 id,
@@ -46,8 +44,10 @@ class LeadSourceService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!leadSourceRepository.existsById(id)) throw NoSuchElementException("Lead source not found: $id")
-        leadSourceRepository.deleteById(id)
+        val source =
+            leadSourceRepository.findActiveById(id)
+                ?: throw NoSuchElementException("Lead source not found: $id")
+        leadSourceRepository.delete(source)
     }
 }
 
@@ -69,7 +69,9 @@ class LeadTypeService(
         id: UUID,
         name: String,
     ): LeadTypeResponse {
-        val type = leadTypeRepository.findById(id).orElseThrow { NoSuchElementException("Lead type not found: $id") }
+        val type =
+            leadTypeRepository.findActiveById(id)
+                ?: throw NoSuchElementException("Lead type not found: $id")
         if (leadTypeRepository.existsByNameAndIdNot(
                 name,
                 id,
@@ -83,8 +85,10 @@ class LeadTypeService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!leadTypeRepository.existsById(id)) throw NoSuchElementException("Lead type not found: $id")
-        leadTypeRepository.deleteById(id)
+        val type =
+            leadTypeRepository.findActiveById(id)
+                ?: throw NoSuchElementException("Lead type not found: $id")
+        leadTypeRepository.delete(type)
     }
 }
 

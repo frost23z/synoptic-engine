@@ -2,6 +2,9 @@ package com.synopticengine.api.sharing.repo
 
 import com.synopticengine.api.sharing.domain.RecordShare
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import java.util.UUID
 
@@ -21,4 +24,10 @@ interface RecordShareRepository : JpaRepository<RecordShare, UUID> {
     ): RecordShare?
 
     fun findAllByConsumerTenantId(consumerTenantId: UUID): List<RecordShare>
+
+    @Modifying
+    @Query("DELETE FROM RecordShare r WHERE r.expiresAt IS NOT NULL AND r.expiresAt < :cutoff")
+    fun deleteExpiredBefore(
+        @Param("cutoff") cutoff: java.time.Instant,
+    ): Int
 }

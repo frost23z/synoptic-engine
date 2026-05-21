@@ -253,7 +253,7 @@ class LeadService(
         tagId: UUID,
     ): LeadResponse {
         val lead = requireLead(leadId)
-        val tag = tagRepository.findById(tagId).orElseThrow { NoSuchElementException("Tag not found: $tagId") }
+        val tag = tagRepository.findActiveById(tagId) ?: throw NoSuchElementException("Tag not found: $tagId")
         lead.tags.add(tag)
         return leadRepository.save(lead).toResponse()
     }

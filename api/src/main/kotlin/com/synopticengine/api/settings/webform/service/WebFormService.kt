@@ -92,8 +92,10 @@ class WebFormService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!webFormRepository.existsById(id)) throw NoSuchElementException("Web form not found: $id")
-        webFormRepository.deleteById(id)
+        // Load via the tenant-aware JPQL finder so cross-tenant deletes 404.
+        val form = webFormRepository.findByIdWithFields(id)
+            ?: throw NoSuchElementException("Web form not found: $id")
+        webFormRepository.delete(form)
     }
 }
 
