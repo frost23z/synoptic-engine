@@ -11,8 +11,9 @@ import kotlin.test.assertEquals
 /**
  * The inbound-parse endpoint is public (no JWT) but signed: every request must include
  * `X-Synoptic-Signature` = `hex(HMAC_SHA256(secret, body))`. The shared secret is
- * configured via `synoptic.inbound-mail.webhook-secret` — `src/test/resources/application.yaml`
- * sets it to `test-inbound-mail-secret` for this suite.
+ * configured via `synoptic.inbound-mail.webhook-secret` — `src/test/resources/application-test.yaml`
+ * sets it to `test-inbound-mail-secret` for this suite (the `test` profile activated by
+ * `AbstractIntegrationTest` overlays the main config).
  */
 class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
     private val testSecret = "test-inbound-mail-secret"
