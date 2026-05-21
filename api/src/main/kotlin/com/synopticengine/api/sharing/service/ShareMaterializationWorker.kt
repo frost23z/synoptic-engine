@@ -99,24 +99,35 @@ class ShareMaterializationWorker(
         }
     }
 
-    /** Public for test use — run a single task synchronously. Caller must establish [TenantContext]. */
+    /**
+     * Public for test use — run a single task synchronously. Caller must establish [TenantContext].
+     *
+     * Wrapped in try-finally: `finishedAt` is **always** set, even when the body throws
+     * after `startedAt` was already stamped. Without this guarantee a crashed task
+     * would re-enter `drainQueue()`'s "pending" set forever; the unique constraint on
+     * `resource_visibility` would then bite on the second attempt and the whole task
+     * would roll back partial work. The [enqueue] catch-block and [drainQueue]'s
+     * per-task catch are still in place; they preserve the original exception while
+     * `markFailed` records the error message after this method has exited.
+     */
     @Transactional
     fun runTask(task: ShareMaterializationTask) {
         task.startedAt = Instant.now()
-        val policy = policyRepository.findById(task.policyId).orElse(null)
-        if (policy == null) {
-            // policy was hard-deleted before the worker got to it — treat as revoke
-            visibilityService.deleteBySource(VisibilitySource.POLICY, task.policyId)
+        try {
+            val policy = policyRepository.findById(task.policyId).orElse(null)
+            if (policy == null) {
+                // policy was hard-deleted before the worker got to it — treat as revoke
+                visibilityService.deleteBySource(VisibilitySource.POLICY, task.policyId)
+                return
+            }
+            when (task.op) {
+                ShareMaterializationOp.INSERT, ShareMaterializationOp.UPDATE -> materializePolicy(policy.id!!)
+                ShareMaterializationOp.DELETE, ShareMaterializationOp.REVOKE -> unmaterializePolicy(policy.id!!)
+            }
+        } finally {
             task.finishedAt = Instant.now()
             taskRepository.save(task)
-            return
         }
-        when (task.op) {
-            ShareMaterializationOp.INSERT, ShareMaterializationOp.UPDATE -> materializePolicy(policy.id!!)
-            ShareMaterializationOp.DELETE, ShareMaterializationOp.REVOKE -> unmaterializePolicy(policy.id!!)
-        }
-        task.finishedAt = Instant.now()
-        taskRepository.save(task)
     }
 
     private fun materializePolicy(policyId: UUID) {
