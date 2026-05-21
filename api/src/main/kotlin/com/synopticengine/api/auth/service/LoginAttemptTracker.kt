@@ -1,5 +1,6 @@
 package com.synopticengine.api.auth.service
 
+import com.synopticengine.api.shared.web.RateLimitedException
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.time.Duration
@@ -36,7 +37,7 @@ class LoginAttemptTracker(
     private val states = ConcurrentHashMap<String, State>()
 
     /**
-     * Throws [LoginLockedOutException] when the caller is currently locked.
+     * Throws [RateLimitedException] when the caller is currently locked.
      * Call this BEFORE attempting the credential check so brute-force callers
      * can't even reach the password verifier.
      */
@@ -48,7 +49,7 @@ class LoginAttemptTracker(
         val lockedUntil = state.lockedUntil ?: return
         val now = Instant.now()
         if (now.isBefore(lockedUntil)) {
-            throw LoginLockedOutException(
+            throw RateLimitedException(
                 "Too many failed login attempts. Try again in ${Duration.between(now, lockedUntil).toMinutes() + 1} minute(s).",
             )
         }
@@ -94,5 +95,3 @@ class LoginAttemptTracker(
         clientIp: String?,
     ): String = "${email.lowercase()}|${clientIp ?: "unknown"}"
 }
-
-class LoginLockedOutException(message: String) : RuntimeException(message)
