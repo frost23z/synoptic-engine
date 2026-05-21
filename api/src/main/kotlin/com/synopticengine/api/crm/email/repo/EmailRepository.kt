@@ -9,6 +9,22 @@ import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 interface EmailRepository : JpaRepository<Email, UUID> {
+    // JpaRepository.findById / existsById hit Hibernate's `EntityManager.find()`
+    // fast-path, which does NOT apply Hibernate's `@Filter("tenantFilter")` —
+    // the filter only rewrites HQL/JPQL/Criteria query results. The methods
+    // below are the tenant-aware loaders; callers in EmailService must use
+    // these and never the inherited primary-key methods (they would IDOR
+    // across tenants).
+    @Query("SELECT e FROM Email e WHERE e.id = :id AND e.deletedAt IS NULL")
+    fun findActiveById(
+        @Param("id") id: UUID,
+    ): Email?
+
+    @Query("SELECT COUNT(e) > 0 FROM Email e WHERE e.id = :id AND e.deletedAt IS NULL")
+    fun existsActiveById(
+        @Param("id") id: UUID,
+    ): Boolean
+
     // Native query — @SQLRestriction and Hibernate `@Filter("tenantFilter")` are
     // both bypassed for native SQL, and the `emails` table is not covered by
     // Postgres RLS (V007 only enables RLS on leads/orgs/persons/products). The
