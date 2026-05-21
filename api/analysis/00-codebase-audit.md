@@ -37,7 +37,7 @@ and are listed first below.
 | C5 | `crm/contact/repo/PersonRepository.kt:65–76` | `countCreatedInRangeNative` — native, no `tenant_id`. **Mitigated** by `persons` RLS in V007, but only because the GUC aspect runs; if the aspect ever skips (e.g. `@Transactional(readOnly=true)` propagated to a non-tx path), it leaks. | Defense-in-depth gap. |
 | C6 | `identity/repo/UserRepository.kt:44–53` | `findGroupMemberIds` is a native query against `user_groups` with no tenant filter. Used to resolve `ViewContext` for "same group" view permission. | A user in group X in tenant A also sees user-IDs of unrelated tenant-B users who happen to share a `group_id` UUID — which won't collide in practice, BUT the query also has no constraint that the joined `user_groups` row's user lives in the current tenant. |
 | C7 | `auth/service/AuthService.kt:28–29` + `identity/service/UserService.kt:42–43` | Login calls `findCredentialsByEmail` which uses JPQL with no tenant filter (TenantContext is null at login). If a future migration relaxes the `UNIQUE (email)` constraint to `(email, tenant_id)` to enable B2B multi-tenant signups, the **first** matching row wins silently → cross-tenant credential collision. | Latent today (current schema enforces global unique email) but actively prevents multi-tenant signup which is the stated product goal. |
-| C8 | V008 seed migration | Not idempotent — re-running on an existing DB will violate PKs / produce duplicate `lead_sources` (uses `gen_random_uuid()` instead of fixed IDs). | `flyway repair` / re-baseline scenarios will break. |
+| C8 | V008 seed migration | Not idempotent — re-running on an existing DB will violate PKs / produce duplicate `lead_sources` (uses `gen_random_uuid()` instead of fixed IDs). | `flyway repair` / re-baseline scenarios will break. **Severity revised**: Flyway only ever runs each migration once based on `flyway_schema_history`, so practical impact is limited to dev-environment re-baseline and rare ops scenarios. Treat as **MEDIUM**, not blocker. |
 
 ### 1.2 Verified HIGH-priority gaps
 
@@ -51,7 +51,7 @@ and are listed first below.
 | H6 | No login rate limiting / account lockout | `auth/web/AuthController.kt:21–29` — `/auth/login` and `/auth/forgot-password` are unthrottled. Brute force is open-bandwidth. |
 | H7 | Password-reset token stored in plaintext | `auth/domain/PasswordReset.kt` + `AuthService.kt:89–105` — token saved verbatim; emailed verbatim. DB read access ⇒ full account takeover. Should store BCrypt hash and compare on use. |
 | H8 | Object-level authorization (IDOR) on identity endpoints | e.g. `identity/web/UserController.getById(id)` — does not verify the loaded user belongs to the caller's tenant. The Hibernate filter is enabled for the request, so this happens to work today, but **breaks when invoked outside the request scope** (async, scheduled, future system endpoints). Service-layer should `require(user.tenantId == TenantContext.get())`. |
-| H9 | `SystemConfig` is not tenant-scoped | `settings/config/domain/SystemConfig.kt` — single global table keyed by `code`. The whole settings/config module is therefore **NOT multi-tenant**. SMTP credentials, API keys, branding etc. are shared across every tenant. This is incompatible with the stated product goal. |
+| H9 | `SystemConfig` is not tenant-scoped at the JPA layer | `settings/config/domain/SystemConfig.kt` — the table has a `tenant_id` column at the SQL level (V005), but the JPA entity does **not** model it and the primary key is `code` alone. Writes from one tenant therefore overwrite another's config (PK collision), reads ignore tenant entirely. To fix: change the PK to `(tenant_id, code)`, add a `tenant_id` field to the entity backed by `BaseEntity`, and migrate existing data into the seed tenant. V011 enables RLS on the table so cross-tenant *reads* are at least filtered out at the DB layer, but the PK collision on writes still needs the application change. |
 | H10 | Native query in `EmailRepository` also bypasses soft-delete and folder scoping correctness | folders are `jsonb`, query uses `@>` operator with `jsonb_build_array` — fine, but combined with C1 the impact is that `GET /mail/sent` returns every tenant's sent items. |
 | H11 | `BootstrapService` default admin credentials | `application.yaml:38–40` provides `SYNOPTIC_ADMIN_EMAIL=admin@synoptic.dev`/`SYNOPTIC_ADMIN_PASSWORD=Admin@123` as fallbacks — i.e. a fresh deploy without env vars boots with a known login. Should fail-fast in production profile. |
 | H12 | Datagrid filter input not whitelisted | `crm/datagrid/service/DataGridFilterService` accepts a free-form `applied: Map<String, Any>` payload that downstream code dereferences. Without a column-name allowlist, any future filter executor that builds dynamic SQL is one step from injection. |
@@ -444,11 +444,11 @@ For the CRM-parity MVP this is fine. Just document that the module is intentiona
 
 ## 9b. Fixed in this audit pass
 
-The mechanical native-query tenant leaks in Band A.1 were fixed alongside this
-report. Each affected query now takes an explicit `tenantId` parameter populated
-from `TenantContext.get()`, with a comment explaining why the predicate is
-required (Hibernate `@Filter` doesn't rewrite native SQL and the underlying
-tables aren't covered by RLS in V007).
+The mechanical native-query tenant leaks in Band A.1 and the broader RLS
+coverage gap in Band A.2 were addressed across two PRs (#25 and the one
+containing this revision).
+
+### PR #25 — native-query tenant predicates
 
 | File | Change |
 |------|--------|
@@ -461,10 +461,27 @@ tables aren't covered by RLS in V007).
 | `identity/repo/UserRepository.kt` | `findGroupMemberIds` now joins `users` and filters by `tenant_id` (C6). |
 | `identity/service/UserService.kt` | Passes tenant when resolving GROUP view scope. |
 
+### V011 + regression tests (this PR)
+
+- `db/migration/V011__rls_baseline.sql` — enables Postgres RLS on every
+  remaining BaseEntity-backed table (33 tables). Sharable resource families
+  (`activities`, `quotes`, `warehouses`) use the visibility-aware policy
+  matching V007; everything else uses the simple `tenant_id = app_current_tenant()`
+  policy. The sharing-module tables (record_shares, resource_visibility,
+  cross_tenant_audit, tenant_relationships, tenant_share_policies,
+  share_materialization_queue) are intentionally not RLS-protected — they
+  are cross-tenant by design.
+- `test/.../crm/EmailTenantIsolationIntegrationTest.kt` — provisions two
+  tenants, asserts each only sees its own emails via `GET /mail?folder=sent`.
+- `test/.../crm/ActivityOverlapTenantIsolationIntegrationTest.kt` —
+  provisions two tenants, asserts the meeting-overlap query does not leak
+  Tenant A's calendar to Tenant B even when B passes A's user id.
+
 **Not changed in this pass** (deferred — see Band A.2 etc.):
 - Lead/Person native dashboard queries (defense-in-depth; already protected by RLS in V007).
-- The RLS migration V011 covering the remaining ~35 tenant-scoped tables.
-- The V008 idempotency fix.
+- ~~The RLS migration V011~~ ✅ done in this PR.
+- The V008 idempotency fix (severity revised to MEDIUM; Flyway's run-once
+  model limits the practical impact).
 - Everything in Bands B–F.
 
 ## 10. Recommended priority queue
