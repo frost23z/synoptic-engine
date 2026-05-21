@@ -5,6 +5,7 @@ import jakarta.persistence.EntityManager
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.Around
 import org.aspectj.lang.annotation.Aspect
+import org.hibernate.Session
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
@@ -65,12 +66,25 @@ class RlsTenantGucAspect(
     fun aroundTransactional(joinPoint: ProceedingJoinPoint): Any? {
         val tenantId = TenantContext.get()
         if (tenantId != null) {
-            // SET LOCAL doesn't accept bind parameters in PostgreSQL (parser limitation).
-            // Inlining is safe because the value is a UUID — its `toString()` cannot
-            // contain SQL metacharacters.
-            entityManager
-                .createNativeQuery("SET LOCAL app.current_tenant = '$tenantId'")
-                .executeUpdate()
+            // Issue SET LOCAL through the raw JDBC connection rather than
+            // `entityManager.createNativeQuery(...).executeUpdate()`. Hibernate
+            // auto-flushes the persistence context before running a write query,
+            // and if this aspect fires for a `@Transactional` method invoked from
+            // inside an already-running Hibernate flush (e.g. the cross-tenant
+            // audit listener that reacts to `Interceptor.onFlushDirty`), that
+            // nested flush re-fires `onFlushDirty` on the same dirty entity, and
+            // the listener publishes the event again — infinite recursion that
+            // dies with StackOverflowError. `doWork` operates on the JDBC
+            // connection directly and skips JPA's flush plumbing.
+            //
+            // SET LOCAL doesn't accept bind parameters in PostgreSQL (parser
+            // limitation). Inlining is safe because the value is a UUID — its
+            // `toString()` cannot contain SQL metacharacters.
+            entityManager.unwrap(Session::class.java).doWork { connection ->
+                connection.createStatement().use { stmt ->
+                    stmt.execute("SET LOCAL app.current_tenant = '$tenantId'")
+                }
+            }
         }
         return joinPoint.proceed()
     }
