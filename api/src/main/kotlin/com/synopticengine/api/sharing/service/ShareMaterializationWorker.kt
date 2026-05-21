@@ -21,11 +21,10 @@ import java.util.UUID
 /**
  * Drains [ShareMaterializationTask] rows and updates [com.synopticengine.api.sharing.domain.ResourceVisibility].
  *
- * For Sprint 2b: filter_jsonb evaluation is not implemented — every policy materializes
- * all the source tenant's records of the resource_type. The hook is in place
- * ([matchesFilter]) so a JSON-DSL evaluator can drop in later. virtual visibility
- * (materialize=false) is honoured here: such policies skip the materialization step
- * entirely and rely on the RLS / Hibernate filter to evaluate at query time.
+ * `filter_json` expressions are evaluated through [TenantSharePolicyFilterEvaluator]
+ * before each row is materialized. Virtual visibility (materialize=false) is honoured:
+ * such policies skip the materialization step entirely and rely on the RLS / Hibernate
+ * path to evaluate access on read.
  *
  * P1-1: every task carries its own `tenantId` (the policy's source tenant, captured
  * at enqueue time). [drainQueue] runs on `@Scheduled` so there's no request thread —
@@ -39,6 +38,7 @@ class ShareMaterializationWorker(
     private val policyRepository: TenantSharePolicyRepository,
     private val relationshipRepository: TenantRelationshipRepository,
     private val visibilityService: ResourceVisibilityService,
+    private val filterEvaluator: TenantSharePolicyFilterEvaluator,
     @PersistenceContext private val em: EntityManager,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -99,24 +99,35 @@ class ShareMaterializationWorker(
         }
     }
 
-    /** Public for test use — run a single task synchronously. Caller must establish [TenantContext]. */
+    /**
+     * Public for test use — run a single task synchronously. Caller must establish [TenantContext].
+     *
+     * Wrapped in try-finally: `finishedAt` is **always** set, even when the body throws
+     * after `startedAt` was already stamped. Without this guarantee a crashed task
+     * would re-enter `drainQueue()`'s "pending" set forever; the unique constraint on
+     * `resource_visibility` would then bite on the second attempt and the whole task
+     * would roll back partial work. The [enqueue] catch-block and [drainQueue]'s
+     * per-task catch are still in place; they preserve the original exception while
+     * `markFailed` records the error message after this method has exited.
+     */
     @Transactional
     fun runTask(task: ShareMaterializationTask) {
         task.startedAt = Instant.now()
-        val policy = policyRepository.findById(task.policyId).orElse(null)
-        if (policy == null) {
-            // policy was hard-deleted before the worker got to it — treat as revoke
-            visibilityService.deleteBySource(VisibilitySource.POLICY, task.policyId)
+        try {
+            val policy = policyRepository.findById(task.policyId).orElse(null)
+            if (policy == null) {
+                // policy was hard-deleted before the worker got to it — treat as revoke
+                visibilityService.deleteBySource(VisibilitySource.POLICY, task.policyId)
+                return
+            }
+            when (task.op) {
+                ShareMaterializationOp.INSERT, ShareMaterializationOp.UPDATE -> materializePolicy(policy.id!!)
+                ShareMaterializationOp.DELETE, ShareMaterializationOp.REVOKE -> unmaterializePolicy(policy.id!!)
+            }
+        } finally {
             task.finishedAt = Instant.now()
             taskRepository.save(task)
-            return
         }
-        when (task.op) {
-            ShareMaterializationOp.INSERT, ShareMaterializationOp.UPDATE -> materializePolicy(policy.id!!)
-            ShareMaterializationOp.DELETE, ShareMaterializationOp.REVOKE -> unmaterializePolicy(policy.id!!)
-        }
-        task.finishedAt = Instant.now()
-        taskRepository.save(task)
     }
 
     private fun materializePolicy(policyId: UUID) {
@@ -153,16 +164,17 @@ class ShareMaterializationWorker(
         // ownerTenantId (we enqueue from the source tenant; drainQueue restores it),
         // so the RLS GUC matches and the native query returns the owner's rows.
         @Suppress("UNCHECKED_CAST")
-        val ids =
+        val rows =
             em
                 .createNativeQuery(
-                    "SELECT id FROM $table WHERE tenant_id = :tenant AND deleted_at IS NULL",
+                    "SELECT id, row_to_json(r)::text FROM $table r WHERE tenant_id = :tenant AND deleted_at IS NULL",
                 ).setParameter("tenant", ownerTenantId)
-                .resultList as List<Any>
-        ids
+                .resultList as List<Array<Any>>
+        var materialized = 0
+        rows
             .asSequence()
-            .map { (it as java.util.UUID) }
-            .filter { matchesFilter(policy.filterJson, it) }
+            .filter { row -> matchesFilter(policy.filterJson, row[1].toString()) }
+            .map { row -> row[0] as java.util.UUID }
             .forEach { resourceId ->
                 visibilityService.upsert(
                     ownerTenantId = ownerTenantId,
@@ -173,9 +185,10 @@ class ShareMaterializationWorker(
                     source = VisibilitySource.POLICY,
                     sourceId = policyId,
                 )
+                materialized += 1
             }
         log.info(
-            "Policy $policyId materialized ${ids.size} ${resourceType.literal} row(s) for consumer $consumerTenantId",
+            "Policy $policyId materialized $materialized/${rows.size} ${resourceType.literal} row(s) for consumer $consumerTenantId",
         )
     }
 
@@ -184,10 +197,7 @@ class ShareMaterializationWorker(
         log.info("Policy $policyId unmaterialized: removed $n visibility row(s)")
     }
 
-    /**
-     * Maps a [ResourceType] to its physical table. Returns null when no table is wired
-     * yet (e.g. activities — they're shared via cascade, not policy, in Sprint 2c).
-     */
+    /** Maps a [ResourceType] to its physical table. */
     private fun tableForResource(rt: ResourceType): String? =
         when (rt) {
             ResourceType.LEADS -> "leads"
@@ -196,23 +206,13 @@ class ShareMaterializationWorker(
             ResourceType.PRODUCTS -> "products"
             ResourceType.QUOTES -> "quotes"
             ResourceType.WAREHOUSES -> "warehouses"
-            ResourceType.ACTIVITIES, ResourceType.PRICELISTS -> null
+            ResourceType.ACTIVITIES -> "activities"
         }
 
-    /**
-     * Placeholder for policy filter_jsonb evaluation. Sprint 2b ships with "match all".
-     * Sprint 2c adds a JSON-DSL evaluator (operator+attribute+value AST).
-     *
-     * `TenantSharePolicyService` rejects non-null filterJson at create/update time, so this
-     * function is only ever called with `filterJson = null` against fresh policies. If a
-     * legacy row from an earlier build still has a filter, we materialize as if the filter
-     * matched everything (the docstring's "match all" intent) rather than the previous
-     * "match nothing" behaviour, which silently broke filtered policies.
-     */
     private fun matchesFilter(
-        @Suppress("UNUSED_PARAMETER") filterJson: String?,
-        @Suppress("UNUSED_PARAMETER") resourceId: java.util.UUID,
-    ): Boolean = true
+        filterJson: String?,
+        resourceJson: String,
+    ): Boolean = filterEvaluator.matches(filterJson, resourceJson)
 
     @Transactional
     fun markFailed(

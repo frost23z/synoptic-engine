@@ -72,6 +72,7 @@ class QuotePdfService {
         document.add(Paragraph("\nSubtotal: ${quote.subTotal}", bodyFont))
         document.add(Paragraph("Discount: ${quote.discount}", bodyFont))
         document.add(Paragraph("Tax: ${quote.tax}", bodyFont))
+        document.add(Paragraph("Adjustment: ${quote.adjustment}", bodyFont))
         document.add(
             Paragraph("Grand Total: ${quote.grandTotal}", bodyFont).also {
                 it.alignment = Element.ALIGN_RIGHT

@@ -3,15 +3,22 @@ package com.synopticengine.api.auth.service
 import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.auth.config.JwtTokenProvider
 import com.synopticengine.api.auth.domain.PasswordReset
+import com.synopticengine.api.auth.domain.RefreshSession
 import com.synopticengine.api.auth.repo.PasswordResetRepository
+import com.synopticengine.api.auth.repo.RefreshSessionRepository
 import com.synopticengine.api.auth.web.TokenResponse
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.shared.email.MailSenderService
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.security.SecureRandom
+import java.time.Instant
+import java.util.Base64
+import java.util.UUID
 
 @Service
 class AuthService(
@@ -19,25 +26,39 @@ class AuthService(
     private val jwtTokenProvider: JwtTokenProvider,
     private val passwordEncoder: PasswordEncoder,
     private val passwordResetRepository: PasswordResetRepository,
+    private val refreshSessionRepository: RefreshSessionRepository,
     private val mailSenderService: MailSenderService,
+    private val loginAttemptTracker: LoginAttemptTracker,
+    private val forgotPasswordAttemptTracker: ForgotPasswordAttemptTracker,
+    @Value("\${synoptic.auth.password-reset.ttl-minutes:15}") private val resetTtlMinutes: Long,
 ) {
     fun login(
         email: String,
         password: String,
+        clientIp: String? = null,
     ): TokenResponse {
-        val credentials =
-            identityApi.findCredentialsByEmail(email)
-                ?: throw IllegalArgumentException("Invalid email or password")
+        // H6 — lockout check BEFORE we even hit the credential lookup. Stops
+        // brute-force from being limited only by SMTP / DB throughput.
+        loginAttemptTracker.assertNotLocked(email, clientIp)
+
+        val credentials = identityApi.findCredentialsByEmail(email)
+        if (credentials == null) {
+            loginAttemptTracker.recordFailure(email, clientIp)
+            throw IllegalArgumentException("Invalid email or password")
+        }
 
         if (!passwordEncoder.matches(password, credentials.passwordHash)) {
+            loginAttemptTracker.recordFailure(email, clientIp)
             throw IllegalArgumentException("Invalid email or password")
         }
 
         credentials.requireActive()
+        loginAttemptTracker.recordSuccess(email, clientIp)
 
         return buildTokenResponse(credentials)
     }
 
+    @Transactional(noRollbackFor = [IllegalArgumentException::class])
     fun refresh(refreshToken: String): TokenResponse {
         if (!jwtTokenProvider.validateToken(refreshToken)) {
             throw IllegalArgumentException("Invalid refresh token")
@@ -47,21 +68,60 @@ class AuthService(
             throw IllegalArgumentException("Token is not a refresh token")
         }
 
-        val credentials =
-            identityApi.findCredentialsById(
-                jwtTokenProvider.getUserIdFromToken(refreshToken),
-            ) ?: throw IllegalArgumentException("User not found")
+        val userId = jwtTokenProvider.getUserIdFromToken(refreshToken)
+        val sessionId = jwtTokenProvider.getRefreshSessionIdFromToken(refreshToken)
+        val familyId = jwtTokenProvider.getRefreshFamilyIdFromToken(refreshToken)
+        val now = Instant.now()
+        val session =
+            refreshSessionRepository.findById(sessionId).orElse(null)
+                ?: run {
+                    refreshSessionRepository.revokeFamily(familyId, now, "INVALID_OR_REUSED_TOKEN")
+                    throw IllegalArgumentException("Invalid refresh token")
+                }
+        if (session.userId != userId || session.familyId != familyId || session.tokenHash != hashToken(refreshToken)) {
+            refreshSessionRepository.revokeFamily(familyId, now, "INVALID_OR_REUSED_TOKEN")
+            throw IllegalArgumentException("Invalid refresh token")
+        }
+        if (session.revokedAt != null) {
+            refreshSessionRepository.revokeFamily(familyId, now, "TOKEN_REUSE_DETECTED")
+            throw IllegalArgumentException("Refresh token has been revoked")
+        }
+        if (session.isExpired(now)) {
+            refreshSessionRepository.revokeFamily(familyId, now, "TOKEN_EXPIRED")
+            throw IllegalArgumentException("Refresh token has expired")
+        }
+
+        val credentials = identityApi.findCredentialsById(userId) ?: throw IllegalArgumentException("User not found")
 
         credentials.requireActive()
 
-        return buildTokenResponse(credentials)
+        val (newRefreshToken, newSessionId) =
+            issueRefreshToken(
+                userId = credentials.id,
+                familyId = familyId,
+                parentSessionId = session.id,
+            )
+        session.revokedAt = now
+        session.revokedReason = "ROTATED"
+        session.replacedBySessionId = newSessionId
+        refreshSessionRepository.save(session)
+
+        return TokenResponse(
+            accessToken = jwtTokenProvider.generateAccessToken(credentials.toPrincipal()),
+            refreshToken = newRefreshToken,
+            userId = credentials.id,
+            email = credentials.email,
+            fullName = credentials.fullName,
+            authorities = credentials.authorities,
+        )
     }
 
     private fun buildTokenResponse(credentials: UserCredentials): TokenResponse {
         val principal = credentials.toPrincipal()
+        val (refreshToken, _) = issueRefreshToken(credentials.id, UUID.randomUUID(), null)
         return TokenResponse(
             accessToken = jwtTokenProvider.generateAccessToken(principal),
-            refreshToken = jwtTokenProvider.generateRefreshToken(credentials.id),
+            refreshToken = refreshToken,
             userId = credentials.id,
             email = credentials.email,
             fullName = credentials.fullName,
@@ -84,16 +144,24 @@ class AuthService(
     }
 
     @Transactional
-    fun forgotPassword(email: String) {
+    fun forgotPassword(
+        email: String,
+        clientIp: String? = null,
+    ) {
+        forgotPasswordAttemptTracker.assertNotLocked(email, clientIp)
+        forgotPasswordAttemptTracker.recordAttempt(email, clientIp)
         identityApi.findCredentialsByEmail(email) ?: return // silent: don't reveal if email exists
-        val token =
-            java.util.UUID
-                .randomUUID()
-                .toString()
+        // H7 — token sent to user is high-entropy random; stored hash is BCrypt.
+        // A read-only leak of `user_password_resets` (e.g. backup snapshot)
+        // therefore cannot be replayed to take over the account.
+        val plaintextToken = generateResetToken()
+        val tokenHash =
+            passwordEncoder.encode(plaintextToken)
+                ?: throw IllegalStateException("Token encoding failed")
         passwordResetRepository.save(
             PasswordReset().apply {
                 this.email = email
-                this.token = token
+                this.token = tokenHash
             },
         )
         // Send inside the transaction so SMTP failures roll back the unused token row —
@@ -101,7 +169,7 @@ class AuthService(
         mailSenderService.sendEmail(
             to = email,
             subject = "Password Reset",
-            body = "Your password reset token: $token\n\nThis token expires in 60 minutes.",
+            body = "Your password reset token: $plaintextToken\n\nThis token expires in $resetTtlMinutes minutes.",
         )
     }
 
@@ -111,15 +179,60 @@ class AuthService(
         email: String,
         newPassword: String,
     ) {
+        // H7 — the stored row is keyed by email (one outstanding reset per
+        // email at a time). Compare the supplied plaintext against the BCrypt
+        // hash; constant-time inside passwordEncoder.matches.
         val reset =
-            passwordResetRepository.findByToken(token)
+            passwordResetRepository.findById(email).orElse(null)
                 ?: throw IllegalArgumentException("Invalid or expired token")
-        if (reset.email != email) throw IllegalArgumentException("Invalid or expired token")
-        if (reset.isExpired()) throw IllegalArgumentException("Token has expired. Please request a new password reset.")
+        if (!passwordEncoder.matches(token, reset.token)) {
+            throw IllegalArgumentException("Invalid or expired token")
+        }
+        if (reset.isExpired(resetTtlMinutes)) {
+            throw IllegalArgumentException("Token has expired. Please request a new password reset.")
+        }
         val encodedPassword =
             passwordEncoder.encode(newPassword)
                 ?: throw IllegalStateException("Password encoding failed")
         identityApi.updatePassword(email, encodedPassword)
         passwordResetRepository.deleteByEmail(email)
     }
+
+    private fun generateResetToken(): String {
+        // 32 bytes = 256 bits of entropy; URL-safe Base64 so it survives copy-paste.
+        val bytes = ByteArray(32)
+        secureRandom.nextBytes(bytes)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    }
+
+    companion object {
+        private val secureRandom = SecureRandom()
+    }
+
+    private fun issueRefreshToken(
+        userId: UUID,
+        familyId: UUID,
+        parentSessionId: UUID?,
+    ): Pair<String, UUID> {
+        val sessionId = UUID.randomUUID()
+        val refreshToken = jwtTokenProvider.generateRefreshToken(userId, sessionId, familyId)
+        refreshSessionRepository.save(
+            RefreshSession().apply {
+                this.id = sessionId
+                this.userId = userId
+                this.familyId = familyId
+                this.parentSessionId = parentSessionId
+                this.tokenHash = hashToken(refreshToken)
+                this.issuedAt = Instant.now()
+                this.expiresAt = jwtTokenProvider.getExpirationFromToken(refreshToken).toInstant()
+            },
+        )
+        return refreshToken to sessionId
+    }
+
+    private fun hashToken(token: String): String =
+        java.security.MessageDigest
+            .getInstance("SHA-256")
+            .digest(token.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 }

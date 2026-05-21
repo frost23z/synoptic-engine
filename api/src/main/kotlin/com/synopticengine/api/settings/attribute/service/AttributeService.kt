@@ -13,6 +13,8 @@ import com.synopticengine.api.settings.attribute.web.AttributeResponse
 import com.synopticengine.api.settings.attribute.web.AttributeValueResponse
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.core.type.TypeReference
+import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
 @Service
@@ -21,21 +23,22 @@ class AttributeService(
     private val attributeRepository: AttributeRepository,
     private val optionRepository: AttributeOptionRepository,
     private val valueRepository: AttributeValueRepository,
+    private val objectMapper: ObjectMapper,
 ) {
     fun findAll(entityType: String?): List<AttributeResponse> =
-        if (entityType != null) {
-            attributeRepository.findAllByEntityType(entityType).map { attr ->
-                attr.toResponse(optionRepository.findAllByAttributeId(attr.id!!))
-            }
-        } else {
-            attributeRepository.findAll().map { attr ->
-                attr.toResponse(optionRepository.findAllByAttributeId(attr.id!!))
-            }
-        }
+        buildResponses(
+            if (entityType !=
+                null
+            ) {
+                attributeRepository.findAllByEntityType(entityType)
+            } else {
+                attributeRepository.findAll()
+            },
+        )
 
     fun findById(id: UUID): AttributeResponse =
         (attributeRepository.findByIdWithOptions(id) ?: throw NoSuchElementException("Attribute not found: $id"))
-            .toResponseWithLoadedOptions()
+            .toResponseWithLoadedOptions(objectMapper)
 
     fun getEntityValues(
         entityId: UUID,
@@ -52,7 +55,12 @@ class AttributeService(
         type: AttributeType,
         entityType: String,
         isUserDefined: Boolean,
+        isRequired: Boolean,
+        isUnique: Boolean,
+        quickAdd: Boolean,
         lookup: String?,
+        lookupType: String?,
+        validationRules: Map<String, Any?>,
         sortOrder: Int,
     ): AttributeResponse {
         if (attributeRepository.existsByCodeAndEntityType(code, entityType)) {
@@ -66,11 +74,16 @@ class AttributeService(
                     this.type = type
                     this.entityType = entityType
                     this.isUserDefined = isUserDefined
+                    this.isRequired = isRequired
+                    this.isUnique = isUnique
+                    this.quickAdd = quickAdd
                     this.lookup = lookup
+                    this.lookupType = lookupType
+                    this.validationRules = objectMapper.writeValueAsString(validationRules)
                     this.sortOrder = sortOrder
                 },
             )
-        return attr.toResponse(emptyList())
+        return attr.toResponse(emptyList(), objectMapper)
     }
 
     @Transactional
@@ -78,22 +91,31 @@ class AttributeService(
         id: UUID,
         adminName: String,
         type: AttributeType,
+        isRequired: Boolean,
+        isUnique: Boolean,
+        quickAdd: Boolean,
         lookup: String?,
+        lookupType: String?,
+        validationRules: Map<String, Any?>,
         sortOrder: Int,
     ): AttributeResponse {
         val attr = requireAttr(id)
         attr.adminName = adminName
         attr.type = type
+        attr.isRequired = isRequired
+        attr.isUnique = isUnique
+        attr.quickAdd = quickAdd
         attr.lookup = lookup
+        attr.lookupType = lookupType
+        attr.validationRules = objectMapper.writeValueAsString(validationRules)
         attr.sortOrder = sortOrder
         attributeRepository.save(attr)
-        return attr.toResponse(optionRepository.findAllByAttributeId(id))
+        return attr.toResponse(optionRepository.findAllByAttributeId(id), objectMapper)
     }
 
     @Transactional
     fun delete(id: UUID) {
-        if (!attributeRepository.existsById(id)) throw NoSuchElementException("Attribute not found: $id")
-        attributeRepository.deleteById(id)
+        attributeRepository.delete(requireAttr(id))
     }
 
     @Transactional
@@ -124,10 +146,8 @@ class AttributeService(
     ): AttributeOptionResponse {
         requireAttr(attributeId)
         val option =
-            optionRepository
-                .findById(
-                    optionId,
-                ).orElseThrow { NoSuchElementException("Option not found: $optionId") }
+            optionRepository.findActiveById(optionId)
+                ?: throw NoSuchElementException("Option not found: $optionId")
         option.adminName = adminName
         option.sortOrder = sortOrder
         return optionRepository.save(option).toResponse()
@@ -139,8 +159,10 @@ class AttributeService(
         optionId: UUID,
     ) {
         requireAttr(attributeId)
-        if (!optionRepository.existsById(optionId)) throw NoSuchElementException("Option not found: $optionId")
-        optionRepository.deleteById(optionId)
+        val option =
+            optionRepository.findActiveById(optionId)
+                ?: throw NoSuchElementException("Option not found: $optionId")
+        optionRepository.delete(option)
     }
 
     @Transactional
@@ -150,8 +172,15 @@ class AttributeService(
         entityType: String,
         value: String?,
     ): AttributeValueResponse {
-        requireAttr(attributeId)
-        val existing = valueRepository.findByAttributeIdAndEntityId(attributeId, entityId)
+        val attr = requireAttr(attributeId)
+        if (attr.isRequired && value.isNullOrBlank()) {
+            throw IllegalArgumentException("Attribute '${attr.code}' is required")
+        }
+        if (attr.isUnique && !value.isNullOrBlank()) {
+            val isUnique = checkUniqueValidation(attr.code, entityType, value, entityId)
+            if (!isUnique) throw IllegalArgumentException("Attribute '${attr.code}' must be unique")
+        }
+        val existing = valueRepository.findByAttributeIdAndEntityIdAndEntityType(attributeId, entityId, entityType)
         return if (existing != null) {
             existing.value = value
             valueRepository.save(existing).toResponse()
@@ -175,7 +204,7 @@ class AttributeService(
         sortOrder: Int?,
     ) {
         ids.forEach { id ->
-            attributeRepository.findById(id).ifPresent { attr ->
+            attributeRepository.findActiveById(id)?.let { attr ->
                 if (adminName != null) attr.adminName = adminName
                 if (sortOrder != null) attr.sortOrder = sortOrder
                 attributeRepository.save(attr)
@@ -186,7 +215,7 @@ class AttributeService(
     @Transactional
     fun massDestroy(ids: List<UUID>) {
         ids.forEach { id ->
-            val attr = attributeRepository.findById(id).orElse(null) ?: return@forEach
+            val attr = attributeRepository.findActiveById(id) ?: return@forEach
             if (!attr.isUserDefined) {
                 throw IllegalArgumentException("Cannot delete system attribute: ${attr.code}")
             }
@@ -221,6 +250,16 @@ class AttributeService(
         }
     }
 
+    private fun buildResponses(attributes: List<Attribute>): List<AttributeResponse> {
+        if (attributes.isEmpty()) return emptyList()
+        val byAttributeId =
+            optionRepository
+                .findAllByAttributeIdIn(
+                    attributes.mapNotNull { it.id },
+                ).groupBy { it.attributeId }
+        return attributes.map { attr -> attr.toResponse(byAttributeId[attr.id] ?: emptyList(), objectMapper) }
+    }
+
     fun downloadCsv(): String {
         val sb = StringBuilder("id,code,admin_name,type,entity_type,sort_order,is_user_defined\n")
         attributeRepository.findAll().forEach { attr ->
@@ -231,18 +270,27 @@ class AttributeService(
         return sb.toString()
     }
 
+    // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
     private fun requireAttr(id: UUID): Attribute =
-        attributeRepository.findById(id).orElseThrow { NoSuchElementException("Attribute not found: $id") }
+        attributeRepository.findActiveById(id) ?: throw NoSuchElementException("Attribute not found: $id")
 }
 
-fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =
+fun Attribute.toResponse(
+    opts: List<AttributeOption>,
+    objectMapper: ObjectMapper,
+): AttributeResponse =
     AttributeResponse(
         id = id!!,
         code = code,
         adminName = adminName,
         type = type.name,
         isUserDefined = isUserDefined,
+        isRequired = isRequired,
+        isUnique = isUnique,
+        quickAdd = quickAdd,
         lookup = lookup,
+        lookupType = lookupType,
+        validationRules = readValidationRules(objectMapper, validationRules),
         entityType = entityType,
         sortOrder = sortOrder,
         options = opts.map { it.toResponse() },
@@ -250,7 +298,18 @@ fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =
         updatedAt = updatedAt,
     )
 
-fun Attribute.toResponseWithLoadedOptions(): AttributeResponse = toResponse(options.toList())
+fun Attribute.toResponseWithLoadedOptions(objectMapper: ObjectMapper): AttributeResponse =
+    toResponse(options.toList(), objectMapper)
+
+private fun readValidationRules(
+    objectMapper: ObjectMapper,
+    json: String,
+): Map<String, Any?> =
+    try {
+        objectMapper.readValue(json, object : TypeReference<Map<String, Any?>>() {})
+    } catch (_: Exception) {
+        emptyMap()
+    }
 
 fun AttributeOption.toResponse() =
     AttributeOptionResponse(

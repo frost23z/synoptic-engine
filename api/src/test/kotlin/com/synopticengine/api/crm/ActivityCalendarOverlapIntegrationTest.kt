@@ -52,7 +52,7 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `check-overlap finds a meeting that intersects the proposed window for the same user`() {
-        val now = Instant.now()
+        val now = uniqueBase()
         val existing =
             activityFactory.create(
                 adminToken,
@@ -103,7 +103,7 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
 
     @Test
     fun `check-overlap excludes a specified activity`() {
-        val now = Instant.now()
+        val now = uniqueBase()
         val existing =
             activityFactory.create(
                 adminToken,
@@ -142,4 +142,7 @@ class ActivityCalendarOverlapIntegrationTest : AbstractIntegrationTest() {
             )
         assertEquals(400, resp.status())
     }
+
+    private fun uniqueBase(): Instant =
+        Instant.now().plusSeconds((UUID.randomUUID().leastSignificantBits and Long.MAX_VALUE) % 86_400_000)
 }

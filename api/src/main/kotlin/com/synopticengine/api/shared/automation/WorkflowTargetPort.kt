@@ -57,6 +57,24 @@ interface WorkflowTargetPort {
     /** Look up the user id assigned to a lead. */
     fun findLeadOwnerId(leadId: UUID): UUID?
 
+    /** Assign lead owner directly. */
+    fun assignLeadUser(
+        leadId: UUID,
+        userId: UUID,
+    ): UUID?
+
+    /** Assign lead stage (and auto-align pipeline). */
+    fun assignLeadStage(
+        leadId: UUID,
+        stageId: UUID,
+    ): UUID?
+
+    /** Assign lead by group (first active group member). */
+    fun assignLeadGroup(
+        leadId: UUID,
+        groupId: UUID,
+    ): UUID?
+
     // ── Web form submission helpers (P3.5) ─────────────────────────────────
 
     /**

@@ -77,10 +77,14 @@ class QuoteController(
                     request.leadId,
                     request.title,
                     request.userId,
+                    request.personId,
                     request.discount,
                     request.tax,
+                    request.adjustment,
                     request.terms,
                     request.expiredAt,
+                    request.billingAddress,
+                    request.shippingAddress,
                     request.items,
                 ),
             )
@@ -96,10 +100,14 @@ class QuoteController(
                 id,
                 request.title,
                 request.userId,
+                request.personId,
                 request.discount,
                 request.tax,
+                request.adjustment,
                 request.terms,
                 request.expiredAt,
+                request.billingAddress,
+                request.shippingAddress,
                 request.items,
             ),
         )
@@ -165,4 +173,10 @@ class QuoteController(
                 .build()
         return ResponseEntity.ok().headers(headers).body(pdf)
     }
+
+    @GetMapping("/{id}/pdf")
+    @PreAuthorize("hasAuthority('quotes.view')")
+    fun pdf(
+        @PathVariable id: UUID,
+    ): ResponseEntity<ByteArray> = print(id)
 }

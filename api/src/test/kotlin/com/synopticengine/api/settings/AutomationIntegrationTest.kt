@@ -167,6 +167,38 @@ class AutomationIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
+    fun `create webhook with secret sets hasSecret true and update can clear it`() {
+        val created =
+            post(
+                "/api/settings/webhooks",
+                adminToken,
+                mapOf(
+                    "name" to "WH ${UUID.randomUUID().toString().take(6)}",
+                    "payloadUrl" to "https://example.com/hook",
+                    "secret" to "my-secret",
+                    "isActive" to true,
+                ),
+            )
+        assertEquals(201, created.status())
+        val createdBody = created.bodyAsMap()!!
+        assertEquals(true, createdBody["hasSecret"])
+        val id = createdBody["id"] as String
+        val updated =
+            put(
+                "/api/settings/webhooks/$id",
+                adminToken,
+                mapOf(
+                    "name" to "WH cleared",
+                    "payloadUrl" to "https://example.com/hook",
+                    "secret" to "",
+                    "isActive" to true,
+                ),
+            )
+        assertEquals(200, updated.status())
+        assertEquals(false, updated.bodyAsMap()!!["hasSecret"])
+    }
+
+    @Test
     fun `get webhook by id returns detail`() {
         val id = createWebhook()["id"] as String
         val result = get("/api/settings/webhooks/$id", adminToken)

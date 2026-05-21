@@ -3,6 +3,7 @@ package com.synopticengine.api.identity.repo
 import com.synopticengine.api.identity.domain.User
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
@@ -13,6 +14,21 @@ interface UserRepository :
     fun findByEmail(email: String): User?
 
     fun existsByEmail(email: String): Boolean
+
+    @Query("SELECT u FROM User u WHERE u.id = :id AND u.deletedAt IS NULL")
+    fun findActiveById(
+        @Param("id") id: UUID,
+    ): User?
+
+    @Query("SELECT COUNT(u) > 0 FROM User u WHERE u.id = :id AND u.deletedAt IS NULL")
+    fun existsActiveById(
+        @Param("id") id: UUID,
+    ): Boolean
+
+    @Query("SELECT u FROM User u WHERE u.email = :email AND u.deletedAt IS NULL")
+    fun findActiveByEmail(
+        @Param("email") email: String,
+    ): User?
 
     // Returns a list intentionally: with `LEFT JOIN FETCH` on two Set collections
     // (roles, permissions), Hibernate 7's `getSingleResult` raises NonUniqueResultException
@@ -72,4 +88,36 @@ interface UserRepository :
     """,
     )
     fun searchActive(query: String): List<User>
+
+    @Query(
+        value = """
+        SELECT u.id
+        FROM users u
+        JOIN user_groups ug ON ug.user_id = u.id
+        WHERE ug.group_id = :groupId
+          AND u.deleted_at IS NULL
+          AND u.tenant_id = :tenantId
+        ORDER BY u.created_at ASC
+    """,
+        nativeQuery = true,
+    )
+    fun findActiveIdsByGroupId(
+        @Param("groupId") groupId: UUID,
+        @Param("tenantId") tenantId: UUID,
+    ): List<UUID>
+
+    @Modifying
+    @Query(
+        value = """
+            UPDATE users
+            SET is_active = true, deleted_at = NULL
+            WHERE tenant_id = :tenantId
+              AND id IN (:ids)
+        """,
+        nativeQuery = true,
+    )
+    fun reactivateByIds(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("tenantId") tenantId: UUID,
+    ): Int
 }

@@ -25,10 +25,14 @@ data class CreateQuoteRequest(
     @field:NotBlank(message = "Title is required")
     val title: String,
     val userId: UUID? = null,
+    val personId: UUID? = null,
     val discount: BigDecimal = BigDecimal.ZERO,
     val tax: BigDecimal = BigDecimal.ZERO,
+    val adjustment: BigDecimal = BigDecimal.ZERO,
     val terms: String? = null,
     val expiredAt: LocalDate? = null,
+    val billingAddress: Map<String, Any?>? = null,
+    val shippingAddress: Map<String, Any?>? = null,
     @field:Valid
     val items: List<QuoteItemRequest> = emptyList(),
 )
@@ -37,10 +41,14 @@ data class UpdateQuoteRequest(
     @field:NotBlank(message = "Title is required")
     val title: String,
     val userId: UUID? = null,
+    val personId: UUID? = null,
     val discount: BigDecimal = BigDecimal.ZERO,
     val tax: BigDecimal = BigDecimal.ZERO,
+    val adjustment: BigDecimal = BigDecimal.ZERO,
     val terms: String? = null,
     val expiredAt: LocalDate? = null,
+    val billingAddress: Map<String, Any?>? = null,
+    val shippingAddress: Map<String, Any?>? = null,
     @field:Valid
     val items: List<QuoteItemRequest> = emptyList(),
 )
@@ -66,12 +74,16 @@ data class QuoteResponse(
     val id: UUID,
     val leadId: UUID,
     val userId: UUID?,
+    val personId: UUID?,
     val title: String,
     val status: String,
     val discount: BigDecimal,
     val tax: BigDecimal,
+    val adjustment: BigDecimal,
     val terms: String?,
     val expiredAt: LocalDate?,
+    val billingAddress: Map<String, Any?>?,
+    val shippingAddress: Map<String, Any?>?,
     val items: List<QuoteItemResponse>,
     val subTotal: BigDecimal,
     val grandTotal: BigDecimal,

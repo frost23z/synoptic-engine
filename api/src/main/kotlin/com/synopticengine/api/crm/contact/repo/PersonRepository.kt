@@ -4,6 +4,7 @@ import com.synopticengine.api.crm.contact.domain.Person
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.Instant
@@ -74,4 +75,18 @@ interface PersonRepository : JpaRepository<Person, UUID> {
         @Param("start") start: Instant,
         @Param("end") end: Instant,
     ): Long
+
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO person_tags (person_id, tag_id)
+            VALUES (:personId, :tagId)
+            ON CONFLICT DO NOTHING
+        """,
+        nativeQuery = true,
+    )
+    fun attachTag(
+        @Param("personId") personId: UUID,
+        @Param("tagId") tagId: UUID,
+    ): Int
 }

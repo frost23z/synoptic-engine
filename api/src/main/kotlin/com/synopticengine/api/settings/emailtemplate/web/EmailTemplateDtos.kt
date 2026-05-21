@@ -31,3 +31,7 @@ data class EmailTemplateResponse(
     val createdAt: Instant?,
     val updatedAt: Instant?,
 )
+
+data class RenderEmailTemplateRequest(
+    val context: Map<String, String> = emptyMap(),
+)

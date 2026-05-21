@@ -2,6 +2,7 @@ package com.synopticengine.api.settings.marketing.web
 
 import jakarta.validation.constraints.NotBlank
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 // ── Marketing Event DTOs ──────────────────────────────────────────────────────
@@ -10,6 +11,7 @@ data class MarketingEventResponse(
     val id: UUID,
     val name: String,
     val description: String?,
+    val eventDate: LocalDate?,
     val createdAt: Instant?,
     val updatedAt: Instant?,
 )
@@ -17,11 +19,13 @@ data class MarketingEventResponse(
 data class CreateMarketingEventRequest(
     @field:NotBlank val name: String,
     val description: String? = null,
+    val eventDate: LocalDate? = null,
 )
 
 data class UpdateMarketingEventRequest(
     @field:NotBlank val name: String,
     val description: String? = null,
+    val eventDate: LocalDate? = null,
 )
 
 data class MassDestroyRequest(
@@ -55,4 +59,15 @@ data class UpdateMarketingCampaignRequest(
     val description: String? = null,
     val eventId: UUID? = null,
     val emailTemplateId: UUID? = null,
+)
+
+data class ExecuteMarketingCampaignRequest(
+    val recipients: List<String>,
+    val context: Map<String, String> = emptyMap(),
+)
+
+data class ExecuteMarketingCampaignResponse(
+    val campaignId: UUID,
+    val requested: Int,
+    val sent: Int,
 )

@@ -100,6 +100,49 @@ class PermissionDenialCoverageIntegrationTest : AbstractIntegrationTest() {
                     "automations.edit",
                     mapOf("name" to "x", "eventName" to "lead.created"),
                 ),
+                // ── Settings: attributes / email templates / web forms ─────
+                Arguments.of("GET", "/api/settings/attributes", "attributes.view", null),
+                Arguments.of(
+                    "POST",
+                    "/api/settings/attributes",
+                    "attributes.create",
+                    mapOf("code" to "x", "adminName" to "x", "type" to "TEXT", "entityType" to "Lead"),
+                ),
+                Arguments.of(
+                    "PUT",
+                    "/api/settings/attributes/$ANY_ID",
+                    "attributes.edit",
+                    mapOf("adminName" to "x", "type" to "TEXT", "sortOrder" to 1),
+                ),
+                Arguments.of("DELETE", "/api/settings/attributes/$ANY_ID", "attributes.delete", null),
+                Arguments.of("GET", "/api/settings/email-templates", "email-templates.view", null),
+                Arguments.of(
+                    "POST",
+                    "/api/settings/email-templates",
+                    "email-templates.create",
+                    mapOf("name" to "x", "subject" to "x", "content" to "<p>x</p>"),
+                ),
+                Arguments.of(
+                    "PUT",
+                    "/api/settings/email-templates/$ANY_ID",
+                    "email-templates.edit",
+                    mapOf("name" to "x", "subject" to "x", "content" to "<p>x</p>"),
+                ),
+                Arguments.of("DELETE", "/api/settings/email-templates/$ANY_ID", "email-templates.delete", null),
+                Arguments.of("GET", "/api/settings/web-forms", "web-forms.view", null),
+                Arguments.of(
+                    "POST",
+                    "/api/settings/web-forms",
+                    "web-forms.create",
+                    mapOf("title" to "x", "isActive" to true),
+                ),
+                Arguments.of(
+                    "PUT",
+                    "/api/settings/web-forms/$ANY_ID",
+                    "web-forms.edit",
+                    mapOf("title" to "x", "isActive" to true),
+                ),
+                Arguments.of("DELETE", "/api/settings/web-forms/$ANY_ID", "web-forms.delete", null),
                 // ── Sharing: relationships, share policies, record shares ──
                 Arguments.of("GET", "/api/relationships", "relationships.view", null),
                 Arguments.of(

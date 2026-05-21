@@ -67,6 +67,18 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
+    fun `refresh token rotation revokes reused token family`() {
+        val firstRefresh =
+            post("/auth/login", null, mapOf("email" to email, "password" to password))
+                .bodyAsMap()!!["refreshToken"] as String
+        val secondRefresh =
+            post("/auth/refresh", null, mapOf("refreshToken" to firstRefresh))
+                .bodyAsMap()!!["refreshToken"] as String
+        assertEquals(400, post("/auth/refresh", null, mapOf("refreshToken" to firstRefresh)).status())
+        assertEquals(400, post("/auth/refresh", null, mapOf("refreshToken" to secondRefresh)).status())
+    }
+
+    @Test
     fun `refresh with access token returns 400`() {
         val accessToken = login(email, password)
         assertEquals(400, post("/auth/refresh", null, mapOf("refreshToken" to accessToken)).status())

@@ -3,6 +3,7 @@ package com.synopticengine.api.auth.web
 import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.auth.service.AuthService
 import com.synopticengine.api.identity.IdentityApi
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -21,7 +22,22 @@ class AuthController(
     @PostMapping("/login")
     fun login(
         @Valid @RequestBody request: LoginRequest,
-    ): ResponseEntity<TokenResponse> = ResponseEntity.ok(authService.login(request.email, request.password))
+        httpRequest: HttpServletRequest,
+    ): ResponseEntity<TokenResponse> =
+        ResponseEntity.ok(authService.login(request.email, request.password, clientIp(httpRequest)))
+
+    private fun clientIp(req: HttpServletRequest): String {
+        // Trust X-Forwarded-For only if your edge sets it (load balancer / nginx);
+        // fall back to the socket peer. Take the leftmost entry — that's the
+        // client per RFC 7239 — and strip any port.
+        val forwarded =
+            req
+                .getHeader("X-Forwarded-For")
+                ?.split(",")
+                ?.firstOrNull()
+                ?.trim()
+        return (forwarded?.takeIf { it.isNotBlank() } ?: req.remoteAddr ?: "unknown").substringBefore(':')
+    }
 
     @PostMapping("/refresh")
     fun refresh(
@@ -49,8 +65,9 @@ class AuthController(
     @PostMapping("/forgot-password")
     fun forgotPassword(
         @Valid @RequestBody request: ForgotPasswordRequest,
+        httpRequest: HttpServletRequest,
     ): ResponseEntity<Void> {
-        authService.forgotPassword(request.email)
+        authService.forgotPassword(request.email, clientIp(httpRequest))
         return ResponseEntity.noContent().build()
     }
 

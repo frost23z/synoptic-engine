@@ -4,7 +4,6 @@ import com.synopticengine.api.crm.email.service.EmailService
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
-import tools.jackson.databind.ObjectMapper
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.ContentDisposition
@@ -26,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
 @RestController
@@ -55,6 +55,12 @@ class EmailController(
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<EmailResponse> = ResponseEntity.ok(emailService.findById(id))
+
+    @GetMapping("/{id}/thread")
+    @PreAuthorize("hasAuthority('mail.view')")
+    fun getThread(
+        @PathVariable id: UUID,
+    ): ResponseEntity<EmailThreadResponse> = ResponseEntity.ok(emailService.findThreadById(id))
 
     /**
      * Compose. Two body shapes are accepted:
@@ -123,6 +129,22 @@ class EmailController(
     ): ResponseEntity<EmailResponse> =
         ResponseEntity.ok(
             emailService.forward(id, request.to, request.message, request.cc, request.bcc),
+        )
+
+    @PostMapping("/{id}/reply")
+    @PreAuthorize("hasAuthority('mail.edit')")
+    fun reply(
+        @PathVariable id: UUID,
+        @RequestBody request: ReplyEmailRequest,
+    ): ResponseEntity<EmailResponse> =
+        ResponseEntity.ok(
+            emailService.reply(
+                id = id,
+                message = request.body,
+                cc = request.cc,
+                bcc = request.bcc,
+                attachmentIds = request.attachmentIds,
+            ),
         )
 
     @PatchMapping("/{id}/folder")
@@ -224,6 +246,9 @@ class EmailController(
                 to = parsed.to,
                 subject = parsed.subject,
                 body = parsed.body,
+                messageId = parsed.messageId,
+                inReplyTo = parsed.inReplyTo,
+                references = parsed.references,
             ),
         )
     }

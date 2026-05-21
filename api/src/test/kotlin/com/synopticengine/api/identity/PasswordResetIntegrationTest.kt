@@ -2,6 +2,7 @@ package com.synopticengine.api.identity
 
 import com.synopticengine.api.AbstractIntegrationTest
 import org.junit.jupiter.api.Test
+import java.util.UUID
 import kotlin.test.assertEquals
 
 class PasswordResetIntegrationTest : AbstractIntegrationTest() {
@@ -25,5 +26,18 @@ class PasswordResetIntegrationTest : AbstractIntegrationTest() {
                 mapOf("token" to "bad-token", "email" to "admin@synoptic.dev", "newPassword" to "newPass123"),
             )
         assertEquals(400, result.status(), result.response.contentAsString)
+    }
+
+    @Test
+    fun `POST auth forgot-password is rate limited`() {
+        val email = "forgot-${UUID.randomUUID()}@example.com"
+        repeat(MAX_FORGOT_PASSWORD_ATTEMPTS) {
+            assertEquals(204, post("/auth/forgot-password", null, mapOf("email" to email)).status())
+        }
+        assertEquals(429, post("/auth/forgot-password", null, mapOf("email" to email)).status())
+    }
+
+    private companion object {
+        const val MAX_FORGOT_PASSWORD_ATTEMPTS = 5
     }
 }

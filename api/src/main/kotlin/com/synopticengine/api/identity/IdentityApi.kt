@@ -5,8 +5,12 @@ import java.util.UUID
 data class UserSummary(
     val id: UUID,
     val email: String,
+    val firstName: String,
+    val lastName: String,
     val fullName: String,
     val isActive: Boolean,
+    val createdAt: java.time.Instant?,
+    val updatedAt: java.time.Instant?,
 )
 
 data class UserCredentials(
@@ -44,6 +48,8 @@ interface IdentityApi {
 
     /** Convenience: resolve from authenticated email (avoids cross-module UserPrincipal import). */
     fun resolveViewContextByEmail(email: String): ViewContext
+
+    fun findFirstActiveUserInGroup(groupId: UUID): UUID?
 
     fun updatePassword(
         email: String,

@@ -5,6 +5,7 @@ import com.synopticengine.api.crm.lead.domain.LeadStatus
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.math.BigDecimal
@@ -124,6 +125,20 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
 
     fun existsByPersonIdAndDeletedAtIsNull(personId: UUID): Boolean
 
+    @Modifying
+    @Query(
+        """
+        UPDATE Lead l
+        SET l.personId = :targetPersonId
+        WHERE l.personId = :sourcePersonId
+          AND l.deletedAt IS NULL
+    """,
+    )
+    fun reassignPerson(
+        @Param("sourcePersonId") sourcePersonId: UUID,
+        @Param("targetPersonId") targetPersonId: UUID,
+    ): Int
+
     fun countByStatusAndDeletedAtIsNull(status: LeadStatus): Int
 
     @Query("SELECT COALESCE(SUM(l.amount), 0) FROM Lead l WHERE l.status = :status AND l.deletedAt IS NULL")
@@ -205,6 +220,46 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         @Param("hasScope") hasScope: Boolean,
         @Param("scopeIds") scopeIds: Collection<UUID>,
     ): List<Array<Any>>
+
+    @Query(
+        value = """
+            SELECT DATE_TRUNC(:bucket, closed_at)::date AS bucket_date, COUNT(*) AS cnt
+            FROM leads
+            WHERE deleted_at IS NULL
+              AND status = :status
+              AND closed_at IS NOT NULL
+              AND closed_at >= :start AND closed_at < :end
+              AND (:hasScope = false OR user_id IN (:scopeIds))
+            GROUP BY bucket_date
+            ORDER BY bucket_date
+        """,
+        nativeQuery = true,
+    )
+    fun countStatusByBucketNative(
+        @Param("bucket") bucket: String,
+        @Param("status") status: String,
+        @Param("start") start: Instant,
+        @Param("end") end: Instant,
+        @Param("hasScope") hasScope: Boolean,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): List<Array<Any>>
+
+    @Query(
+        value = """
+            SELECT COALESCE(AVG(amount), 0) FROM leads
+            WHERE deleted_at IS NULL
+              AND amount IS NOT NULL
+              AND created_at >= :start AND created_at < :end
+              AND (:hasScope = false OR user_id IN (:scopeIds))
+        """,
+        nativeQuery = true,
+    )
+    fun avgAmountInRangeNative(
+        @Param("start") start: Instant,
+        @Param("end") end: Instant,
+        @Param("hasScope") hasScope: Boolean,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): BigDecimal
 
     @Query(
         value = """
@@ -310,4 +365,44 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         @Param("hasScope") hasScope: Boolean,
         @Param("scopeIds") scopeIds: Collection<UUID>,
     ): List<Array<Any>>
+
+    @Query(
+        """
+        SELECT l FROM Lead l
+        WHERE l.deletedAt IS NULL
+          AND l.status = com.synopticengine.api.crm.lead.domain.LeadStatus.OPEN
+          AND (:pipelineId IS NULL OR l.pipelineId = :pipelineId)
+    """,
+    )
+    fun findOpenForRotten(
+        @Param("pipelineId") pipelineId: UUID?,
+    ): List<Lead>
+
+    @Query(
+        """
+        SELECT l FROM Lead l
+        WHERE l.deletedAt IS NULL
+          AND l.status = com.synopticengine.api.crm.lead.domain.LeadStatus.OPEN
+          AND (:pipelineId IS NULL OR l.pipelineId = :pipelineId)
+          AND l.userId IN :scopeIds
+    """,
+    )
+    fun findOpenForRottenScoped(
+        @Param("pipelineId") pipelineId: UUID?,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): List<Lead>
+
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO lead_tags (lead_id, tag_id)
+            VALUES (:leadId, :tagId)
+            ON CONFLICT DO NOTHING
+        """,
+        nativeQuery = true,
+    )
+    fun attachTag(
+        @Param("leadId") leadId: UUID,
+        @Param("tagId") tagId: UUID,
+    ): Int
 }

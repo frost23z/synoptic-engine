@@ -38,6 +38,12 @@ class WebFormService(
         title: String,
         description: String?,
         isActive: Boolean,
+        createLead: Boolean,
+        backgroundColor: String?,
+        submitSuccessAction: String,
+        submitSuccessMessage: String?,
+        submitSuccessUrl: String?,
+        captchaEnabled: Boolean,
         fields: List<WebFormFieldRequest>,
     ): WebFormResponse {
         val form =
@@ -47,6 +53,12 @@ class WebFormService(
                     this.description = description
                     this.isActive =
                         isActive
+                    this.createLead = createLead
+                    this.backgroundColor = backgroundColor
+                    this.submitSuccessAction = submitSuccessAction
+                    this.submitSuccessMessage = submitSuccessMessage
+                    this.submitSuccessUrl = submitSuccessUrl
+                    this.captchaEnabled = captchaEnabled
                 },
             )
         fields.forEach { req ->
@@ -69,12 +81,24 @@ class WebFormService(
         title: String,
         description: String?,
         isActive: Boolean,
+        createLead: Boolean,
+        backgroundColor: String?,
+        submitSuccessAction: String,
+        submitSuccessMessage: String?,
+        submitSuccessUrl: String?,
+        captchaEnabled: Boolean,
         fields: List<WebFormFieldRequest>,
     ): WebFormResponse {
         val form = webFormRepository.findByIdWithFields(id) ?: throw NoSuchElementException("Web form not found: $id")
         form.title = title
         form.description = description
         form.isActive = isActive
+        form.createLead = createLead
+        form.backgroundColor = backgroundColor
+        form.submitSuccessAction = submitSuccessAction
+        form.submitSuccessMessage = submitSuccessMessage
+        form.submitSuccessUrl = submitSuccessUrl
+        form.captchaEnabled = captchaEnabled
         form.fields.clear()
         fields.forEach { req ->
             form.fields.add(
@@ -92,8 +116,11 @@ class WebFormService(
 
     @Transactional
     fun delete(id: UUID) {
-        if (!webFormRepository.existsById(id)) throw NoSuchElementException("Web form not found: $id")
-        webFormRepository.deleteById(id)
+        // Load via the tenant-aware JPQL finder so cross-tenant deletes 404.
+        val form =
+            webFormRepository.findByIdWithFields(id)
+                ?: throw NoSuchElementException("Web form not found: $id")
+        webFormRepository.delete(form)
     }
 }
 
@@ -103,6 +130,12 @@ fun WebForm.toResponse() =
         title = title,
         description = description,
         isActive = isActive,
+        createLead = createLead,
+        backgroundColor = backgroundColor,
+        submitSuccessAction = submitSuccessAction,
+        submitSuccessMessage = submitSuccessMessage,
+        submitSuccessUrl = submitSuccessUrl,
+        captchaEnabled = captchaEnabled,
         fields = fields.map { it.toResponse() },
         createdAt = createdAt,
         updatedAt = updatedAt,

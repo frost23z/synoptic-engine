@@ -16,7 +16,6 @@ enum class ResourceType(
     PERSONS("contacts.persons"),
     ORGANIZATIONS("contacts.organizations"),
     PRODUCTS("products"),
-    PRICELISTS("products.pricelists"),
     ACTIVITIES("leads.activities"),
     QUOTES("quotes"),
     WAREHOUSES("warehouses"),

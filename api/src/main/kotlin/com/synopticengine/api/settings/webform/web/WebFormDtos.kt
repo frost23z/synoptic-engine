@@ -15,6 +15,12 @@ data class CreateWebFormRequest(
     val title: String,
     val description: String? = null,
     val isActive: Boolean = true,
+    val createLead: Boolean = false,
+    val backgroundColor: String? = null,
+    val submitSuccessAction: String = "message",
+    val submitSuccessMessage: String? = null,
+    val submitSuccessUrl: String? = null,
+    val captchaEnabled: Boolean = false,
     val fields: List<WebFormFieldRequest> = emptyList(),
 )
 
@@ -23,6 +29,12 @@ data class UpdateWebFormRequest(
     val title: String,
     val description: String? = null,
     val isActive: Boolean = true,
+    val createLead: Boolean = false,
+    val backgroundColor: String? = null,
+    val submitSuccessAction: String = "message",
+    val submitSuccessMessage: String? = null,
+    val submitSuccessUrl: String? = null,
+    val captchaEnabled: Boolean = false,
     val fields: List<WebFormFieldRequest> = emptyList(),
 )
 
@@ -38,6 +50,12 @@ data class WebFormResponse(
     val title: String,
     val description: String?,
     val isActive: Boolean,
+    val createLead: Boolean,
+    val backgroundColor: String?,
+    val submitSuccessAction: String,
+    val submitSuccessMessage: String?,
+    val submitSuccessUrl: String?,
+    val captchaEnabled: Boolean,
     val fields: List<WebFormFieldResponse>,
     val createdAt: Instant?,
     val updatedAt: Instant?,
@@ -45,6 +63,7 @@ data class WebFormResponse(
 
 data class WebFormSubmitRequest(
     val values: Map<String, String>,
+    val captchaToken: String? = null,
 )
 
 data class WebFormSubmitResponse(

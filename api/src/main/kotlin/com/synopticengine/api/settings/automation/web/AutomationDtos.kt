@@ -59,6 +59,7 @@ data class WebhookResponse(
     val id: UUID,
     val name: String,
     val payloadUrl: String,
+    val hasSecret: Boolean,
     val events: List<String>,
     val isActive: Boolean,
     val createdAt: Instant?,
@@ -68,6 +69,7 @@ data class WebhookResponse(
 data class CreateWebhookRequest(
     @field:NotBlank val name: String,
     @field:NotBlank val payloadUrl: String,
+    val secret: String? = null,
     val events: List<String> = emptyList(),
     val isActive: Boolean = true,
 )
@@ -75,6 +77,7 @@ data class CreateWebhookRequest(
 data class UpdateWebhookRequest(
     @field:NotBlank val name: String,
     @field:NotBlank val payloadUrl: String,
+    val secret: String? = null,
     val events: List<String> = emptyList(),
     val isActive: Boolean = true,
 )

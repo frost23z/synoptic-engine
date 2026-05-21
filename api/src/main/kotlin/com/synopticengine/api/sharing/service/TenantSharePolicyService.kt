@@ -25,6 +25,7 @@ class TenantSharePolicyService(
     private val policyRepository: TenantSharePolicyRepository,
     private val relationshipRepository: TenantRelationshipRepository,
     private val materializationWorker: ShareMaterializationWorker,
+    private val filterEvaluator: TenantSharePolicyFilterEvaluator,
 ) {
     @Transactional
     fun create(
@@ -41,12 +42,16 @@ class TenantSharePolicyService(
         if (rel.status == RelationshipStatus.REVOKED) {
             throw IllegalStateException("Cannot create policies on a revoked relationship")
         }
-        require(ResourceType.isKnown(resourceType)) { "Unknown resource type: $resourceType" }
-        // The materialization worker can't evaluate filter_jsonb yet (Sprint 2c). Accepting
-        // a filter here would let it silently materialize zero records — worse than refusing.
-        require(filterJson == null) {
-            "filterJson is not yet supported; the materialization worker would silently match no records"
+        val parsedType =
+            runCatching { ResourceType.fromLiteral(resourceType) }.getOrElse {
+                throw IllegalArgumentException("Unknown resource type: $resourceType")
+            }
+        if (materialize && parsedType in NON_MATERIALIZABLE_TYPES) {
+            throw IllegalArgumentException(
+                "Materialized policy is not supported for resource type: ${parsedType.literal}",
+            )
         }
+        filterEvaluator.validate(filterJson)
         val existing = policyRepository.findByRelationshipIdAndResourceType(relationshipId, resourceType)
         if (existing != null) {
             throw IllegalStateException("A policy for $resourceType already exists on this relationship")
@@ -75,14 +80,14 @@ class TenantSharePolicyService(
         cascadeJson: String? = null,
     ): TenantSharePolicy {
         val policy = loadOwnedPolicy(policyId, actingTenantId)
-        // Same rationale as create(): the worker can't honour a filter yet, so accepting one
-        // would silently break materialization.
-        require(filterJson == null) {
-            "filterJson is not yet supported; the materialization worker would silently match no records"
-        }
+        filterEvaluator.validate(filterJson)
         var changed = false
         if (accessLevel != null && policy.accessLevel != accessLevel) {
             policy.accessLevel = accessLevel
+            changed = true
+        }
+        if (filterJson != null && policy.filterJson != filterJson) {
+            policy.filterJson = filterJson
             changed = true
         }
         if (cascadeJson != null && policy.cascadeJson != cascadeJson) {
@@ -163,5 +168,9 @@ class TenantSharePolicyService(
                 .orElseThrow { NoSuchElementException("Policy not found") }
         loadOwnedRelationship(policy.relationshipId, actingTenantId)
         return policy
+    }
+
+    private companion object {
+        val NON_MATERIALIZABLE_TYPES = emptySet<ResourceType>()
     }
 }

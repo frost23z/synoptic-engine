@@ -20,16 +20,24 @@ data class EmailResponse(
     val status: String,
     val folders: List<String>,
     val from: Map<String, String>?,
+    val to: List<Map<String, String>>?,
     val cc: List<Map<String, String>>?,
     val bcc: List<Map<String, String>>?,
     val body: String?,
     val personId: UUID?,
     val leadId: UUID?,
     val parentId: UUID?,
+    val messageId: String?,
+    val referenceIds: List<String>?,
     val attachments: List<EmailAttachmentResponse>,
     val tags: List<TagResponse> = emptyList(),
     val createdAt: Instant?,
     val updatedAt: Instant?,
+)
+
+data class EmailThreadResponse(
+    val root: EmailResponse,
+    val messages: List<EmailResponse>,
 )
 
 data class ComposeEmailRequest(
@@ -53,6 +61,13 @@ data class ForwardEmailRequest(
     val message: String? = null,
     val cc: List<String>? = null,
     val bcc: List<String>? = null,
+)
+
+data class ReplyEmailRequest(
+    val body: String?,
+    val cc: List<String>? = null,
+    val bcc: List<String>? = null,
+    val attachmentIds: List<UUID> = emptyList(),
 )
 
 data class MoveFolderRequest(
@@ -86,4 +101,7 @@ data class InboundParseRequest(
     val to: String,
     val subject: String? = null,
     val body: String? = null,
+    val messageId: String? = null,
+    val inReplyTo: String? = null,
+    val references: List<String>? = null,
 )
