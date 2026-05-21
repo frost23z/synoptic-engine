@@ -68,7 +68,10 @@ class CsvExportService(
             block(printer)
             printer.flush()
         }
-        writer.flush()
+        // CSVPrinter.close() (triggered by use {}) closes the underlying writer
+        // because OutputStreamWriter is Closeable — that close call flushes the
+        // writer's buffer to `out`. Don't flush() again here: the writer is closed
+        // and the JDK's StreamEncoder throws IOException("Stream closed").
     }
 
     fun sampleCsv(entityType: String): String =
