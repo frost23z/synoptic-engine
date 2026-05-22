@@ -3,6 +3,7 @@ package com.synopticengine.api.crm.datagrid.service
 import com.synopticengine.api.crm.datagrid.domain.DataGridSavedFilter
 import com.synopticengine.api.crm.datagrid.repo.DataGridSavedFilterRepository
 import com.synopticengine.api.crm.datagrid.web.DataGridFilterResponse
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -11,6 +12,8 @@ import java.util.UUID
 @Transactional(readOnly = true)
 class DataGridFilterService(
     private val repository: DataGridSavedFilterRepository,
+    @Value("\${synoptic.datagrid.max-filter-keys:50}") private val maxFilterKeys: Int,
+    @Value("\${synoptic.datagrid.max-filter-list-values:50}") private val maxFilterListValues: Int,
 ) {
     fun findByUserAndSrc(
         userId: UUID,
@@ -87,7 +90,7 @@ class DataGridFilterService(
         src: String,
         applied: Map<String, Any>,
     ) {
-        if (applied.size > MAX_FILTER_KEYS) {
+        if (applied.size > maxFilterKeys) {
             throw IllegalArgumentException("Too many applied filters")
         }
         val allowedKeys = SOURCE_ALLOWED_KEYS[src] ?: COMMON_ALLOWED_KEYS
@@ -109,7 +112,7 @@ class DataGridFilterService(
             }
 
             is List<*> -> {
-                if (value.size > MAX_FILTER_LIST_VALUES) {
+                if (value.size > maxFilterListValues) {
                     throw IllegalArgumentException("Too many values for filter '$key'")
                 }
                 if (value.any { it !is String && it !is Number && it !is Boolean }) {
@@ -125,9 +128,6 @@ class DataGridFilterService(
     }
 
     private companion object {
-        const val MAX_FILTER_KEYS = 50
-        const val MAX_FILTER_LIST_VALUES = 50
-
         val ALLOWED_SOURCES =
             setOf(
                 "leads",

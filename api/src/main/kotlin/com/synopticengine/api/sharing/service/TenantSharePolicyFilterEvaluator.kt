@@ -32,7 +32,7 @@ class TenantSharePolicyFilterEvaluator(
             val hasAny = node.has("any")
             val hasAll = node.has("all")
             val hasNot = node.has("not")
-            if ((hasRule.toInt() + hasAny.toInt() + hasAll.toInt() + hasNot.toInt()) > 1) {
+            if ((hasRule.asIntValue() + hasAny.asIntValue() + hasAll.asIntValue() + hasNot.asIntValue()) > 1) {
                 throw IllegalArgumentException("filterJson node cannot mix rule keys with boolean operator keys")
             }
             if (hasAny) requireArray(node.get("any"), "filterJson.any must be an array")
@@ -159,7 +159,7 @@ class TenantSharePolicyFilterEvaluator(
             ?.toBigDecimalOrNull()
             ?: BigDecimal.ZERO
 
-    private fun Boolean.toInt(): Int = if (this) 1 else 0
+    private fun Boolean.asIntValue(): Int = if (this) 1 else 0
 
     private fun requireArray(
         node: JsonNode?,

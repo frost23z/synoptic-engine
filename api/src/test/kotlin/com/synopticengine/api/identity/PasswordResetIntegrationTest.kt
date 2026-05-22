@@ -31,9 +31,13 @@ class PasswordResetIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `POST auth forgot-password is rate limited`() {
         val email = "forgot-${UUID.randomUUID()}@example.com"
-        repeat(5) {
+        repeat(MAX_FORGOT_PASSWORD_ATTEMPTS) {
             assertEquals(204, post("/auth/forgot-password", null, mapOf("email" to email)).status())
         }
         assertEquals(429, post("/auth/forgot-password", null, mapOf("email" to email)).status())
+    }
+
+    private companion object {
+        const val MAX_FORGOT_PASSWORD_ATTEMPTS = 5
     }
 }

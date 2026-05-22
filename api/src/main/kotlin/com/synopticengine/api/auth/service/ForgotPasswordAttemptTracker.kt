@@ -29,12 +29,17 @@ class ForgotPasswordAttemptTracker(
         val lockedUntil = state.lockedUntil ?: return
         val now = Instant.now()
         if (now.isBefore(lockedUntil)) {
+            val remaining = Duration.between(now, lockedUntil)
+            val minutes = remaining.toMinutes()
+            val seconds = remaining.minusMinutes(minutes).seconds
+            val waitText =
+                if (minutes > 0) {
+                    "$minutes minute(s) ${seconds.coerceAtLeast(0)} second(s)"
+                } else {
+                    "${seconds.coerceAtLeast(1)} second(s)"
+                }
             throw RateLimitedException(
-                "Too many forgot-password attempts. Try again in ${Duration
-                    .between(
-                        now,
-                        lockedUntil,
-                    ).toMinutes() + 1} minute(s).",
+                "Too many forgot-password attempts. Try again in $waitText.",
             )
         }
         state.lockedUntil = null
