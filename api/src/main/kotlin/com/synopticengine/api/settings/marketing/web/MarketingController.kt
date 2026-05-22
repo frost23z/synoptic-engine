@@ -133,4 +133,12 @@ class MarketingCampaignController(
         marketingService.massDestroyCampaigns(request.ids)
         return ResponseEntity.noContent().build()
     }
+
+    @PostMapping("/{id}/execute")
+    @PreAuthorize("hasAuthority('marketing.edit')")
+    fun execute(
+        @PathVariable id: UUID,
+        @RequestBody request: ExecuteMarketingCampaignRequest,
+    ): ResponseEntity<ExecuteMarketingCampaignResponse> =
+        ResponseEntity.ok(marketingService.executeCampaign(id, request.recipients, request.context))
 }

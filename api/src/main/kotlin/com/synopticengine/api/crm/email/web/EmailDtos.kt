@@ -86,4 +86,7 @@ data class InboundParseRequest(
     val to: String,
     val subject: String? = null,
     val body: String? = null,
+    val messageId: String? = null,
+    val inReplyTo: String? = null,
+    val references: List<String>? = null,
 )

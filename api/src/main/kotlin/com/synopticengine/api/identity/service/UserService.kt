@@ -191,6 +191,11 @@ class UserService(
         return resolveViewContext(userId)
     }
 
+    override fun findFirstActiveUserInGroup(groupId: UUID): UUID? {
+        val tenantId = TenantContext.get() ?: return null
+        return userRepository.findActiveIdsByGroupId(groupId, tenantId).firstOrNull()
+    }
+
     override fun resolveViewContext(requesterId: UUID): ViewContext {
         val user =
             userRepository.findById(requesterId).orElse(null)

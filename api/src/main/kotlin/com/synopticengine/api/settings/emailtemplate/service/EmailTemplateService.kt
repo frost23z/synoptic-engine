@@ -3,6 +3,7 @@ package com.synopticengine.api.settings.emailtemplate.service
 import com.synopticengine.api.settings.emailtemplate.domain.EmailTemplate
 import com.synopticengine.api.settings.emailtemplate.repo.EmailTemplateRepository
 import com.synopticengine.api.settings.emailtemplate.web.EmailTemplateResponse
+import com.synopticengine.api.shared.email.interpolateTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -65,6 +66,22 @@ class EmailTemplateService(
         val template = requireTemplate(id)
         if (template.isPredefined) throw IllegalStateException("Cannot delete predefined templates")
         emailTemplateRepository.delete(template)
+    }
+
+    fun render(
+        id: UUID,
+        context: Map<String, String>,
+    ): EmailTemplateResponse {
+        val template = requireTemplate(id)
+        return EmailTemplateResponse(
+            id = template.id!!,
+            name = template.name,
+            subject = interpolateTemplate(template.subject, context),
+            content = interpolateTemplate(template.content, context),
+            isPredefined = template.isPredefined,
+            createdAt = template.createdAt,
+            updatedAt = template.updatedAt,
+        )
     }
 
     // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.

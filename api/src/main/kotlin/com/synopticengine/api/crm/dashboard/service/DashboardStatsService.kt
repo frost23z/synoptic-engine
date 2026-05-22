@@ -61,14 +61,31 @@ class DashboardStatsService(
                 .toInt()
         val activitiesPrevious =
             activityRepository
-                .countCreatedInRangeNative(tenantId, range.previousStartInstant, range.previousEndInstant, sb.hasScope, sb.ids)
-                .toInt()
+                .countCreatedInRangeNative(
+                    tenantId,
+                    range.previousStartInstant,
+                    range.previousEndInstant,
+                    sb.hasScope,
+                    sb.ids,
+                ).toInt()
         val quotesCurrent =
-            quoteRepository.countCreatedInRangeNative(tenantId, range.startInstant, range.endInstant, sb.hasScope, sb.ids).toInt()
+            quoteRepository
+                .countCreatedInRangeNative(
+                    tenantId,
+                    range.startInstant,
+                    range.endInstant,
+                    sb.hasScope,
+                    sb.ids,
+                ).toInt()
         val quotesPrevious =
             quoteRepository
-                .countCreatedInRangeNative(tenantId, range.previousStartInstant, range.previousEndInstant, sb.hasScope, sb.ids)
-                .toInt()
+                .countCreatedInRangeNative(
+                    tenantId,
+                    range.previousStartInstant,
+                    range.previousEndInstant,
+                    sb.hasScope,
+                    sb.ids,
+                ).toInt()
         // Persons aren't user-scoped today (CRM-wide list); count as-is.
         val personsCurrent =
             personRepository.countCreatedInRangeNative(range.startInstant, range.endInstant).toInt()

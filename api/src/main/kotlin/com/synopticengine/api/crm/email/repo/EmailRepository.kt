@@ -4,6 +4,7 @@ import com.synopticengine.api.crm.email.domain.Email
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
@@ -48,4 +49,30 @@ interface EmailRepository : JpaRepository<Email, UUID> {
         @Param("folder") folder: String,
         pageable: Pageable,
     ): Page<Email>
+
+    @Modifying
+    @Query(
+        """
+        UPDATE Email e
+        SET e.personId = :targetPersonId
+        WHERE e.personId = :sourcePersonId
+          AND e.deletedAt IS NULL
+    """,
+    )
+    fun reassignPerson(
+        @Param("sourcePersonId") sourcePersonId: UUID,
+        @Param("targetPersonId") targetPersonId: UUID,
+    ): Int
+
+    @Query(
+        """
+        SELECT e FROM Email e
+        WHERE e.deletedAt IS NULL
+          AND e.messageId IN :messageIds
+        ORDER BY e.createdAt DESC
+    """,
+    )
+    fun findThreadParentsByMessageIds(
+        @Param("messageIds") messageIds: Collection<String>,
+    ): List<Email>
 }

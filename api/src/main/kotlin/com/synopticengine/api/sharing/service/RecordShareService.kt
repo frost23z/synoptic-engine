@@ -200,16 +200,38 @@ class RecordShareService(
             }
         val actualOwner =
             when (rt) {
-                ResourceType.LEADS -> crmApi.findLeadOwnerTenant(resourceId)
-                ResourceType.PERSONS -> crmApi.findPersonOwnerTenant(resourceId)
-                ResourceType.ORGANIZATIONS -> crmApi.findOrganizationOwnerTenant(resourceId)
-                ResourceType.QUOTES -> crmApi.findQuoteOwnerTenant(resourceId)
-                ResourceType.ACTIVITIES -> crmApi.findActivityOwnerTenant(resourceId)
-                ResourceType.PRODUCTS -> inventoryApi.findProductOwnerTenant(resourceId)
-                ResourceType.WAREHOUSES -> inventoryApi.findWarehouseOwnerTenant(resourceId)
-                ResourceType.PRICELISTS ->
+                ResourceType.LEADS -> {
+                    crmApi.findLeadOwnerTenant(resourceId)
+                }
+
+                ResourceType.PERSONS -> {
+                    crmApi.findPersonOwnerTenant(resourceId)
+                }
+
+                ResourceType.ORGANIZATIONS -> {
+                    crmApi.findOrganizationOwnerTenant(resourceId)
+                }
+
+                ResourceType.QUOTES -> {
+                    crmApi.findQuoteOwnerTenant(resourceId)
+                }
+
+                ResourceType.ACTIVITIES -> {
+                    crmApi.findActivityOwnerTenant(resourceId)
+                }
+
+                ResourceType.PRODUCTS -> {
+                    inventoryApi.findProductOwnerTenant(resourceId)
+                }
+
+                ResourceType.WAREHOUSES -> {
+                    inventoryApi.findWarehouseOwnerTenant(resourceId)
+                }
+
+                ResourceType.PRICELISTS -> {
                     // No pricelist entity wired yet; refuse to share rather than silently trust.
                     throw IllegalArgumentException("Sharing $resourceType is not yet supported")
+                }
             }
         if (actualOwner == null) {
             throw NoSuchElementException("$resourceType $resourceId not found")

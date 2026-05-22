@@ -47,6 +47,13 @@ class EmailTemplateController(
     ): ResponseEntity<EmailTemplateResponse> =
         ResponseEntity.ok(emailTemplateService.update(id, request.name, request.subject, request.content))
 
+    @PostMapping("/{id}/render")
+    @PreAuthorize("hasAuthority('settings.view')")
+    fun render(
+        @PathVariable id: UUID,
+        @RequestBody request: RenderEmailTemplateRequest,
+    ): ResponseEntity<EmailTemplateResponse> = ResponseEntity.ok(emailTemplateService.render(id, request.context))
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('settings.edit')")
     fun delete(

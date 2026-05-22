@@ -13,6 +13,7 @@ import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.crm.lead.service.LeadService
 import com.synopticengine.api.crm.tag.domain.Tag
 import com.synopticengine.api.crm.tag.repo.TagRepository
+import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.shared.automation.WorkflowTargetPort
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -38,6 +39,7 @@ class CrmWorkflowTargetAdapter(
     private val leadService: LeadService,
     private val pipelineRepository: PipelineRepository,
     private val stageRepository: StageRepository,
+    private val identityApi: IdentityApi,
 ) : WorkflowTargetPort {
     private val log = LoggerFactory.getLogger(CrmWorkflowTargetAdapter::class.java)
 
@@ -138,6 +140,40 @@ class CrmWorkflowTargetAdapter(
     override fun findPersonEmail(personId: UUID): String? = personRepository.findActiveById(personId)?.email
 
     override fun findLeadOwnerId(leadId: UUID): UUID? = leadRepository.findActiveById(leadId)?.userId
+
+    override fun assignLeadUser(
+        leadId: UUID,
+        userId: UUID,
+    ): UUID? {
+        val lead = leadRepository.findActiveById(leadId) ?: return null
+        lead.userId = userId
+        leadRepository.save(lead)
+        return lead.id
+    }
+
+    override fun assignLeadStage(
+        leadId: UUID,
+        stageId: UUID,
+    ): UUID? {
+        val lead = leadRepository.findActiveById(leadId) ?: return null
+        val stage = stageRepository.findByIdAndDeletedAtIsNull(stageId) ?: return null
+        lead.stageId = stage.id!!
+        lead.pipelineId = stage.pipeline.id!!
+        lead.stageUpdatedAt = java.time.Instant.now()
+        leadRepository.save(lead)
+        return lead.id
+    }
+
+    override fun assignLeadGroup(
+        leadId: UUID,
+        groupId: UUID,
+    ): UUID? {
+        val lead = leadRepository.findActiveById(leadId) ?: return null
+        val candidateUserId = identityApi.findFirstActiveUserInGroup(groupId) ?: return null
+        lead.userId = candidateUserId
+        leadRepository.save(lead)
+        return lead.id
+    }
 
     override fun createPersonFromForm(
         firstName: String,

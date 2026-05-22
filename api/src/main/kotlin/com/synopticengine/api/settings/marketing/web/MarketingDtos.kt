@@ -56,3 +56,14 @@ data class UpdateMarketingCampaignRequest(
     val eventId: UUID? = null,
     val emailTemplateId: UUID? = null,
 )
+
+data class ExecuteMarketingCampaignRequest(
+    val recipients: List<String>,
+    val context: Map<String, String> = emptyMap(),
+)
+
+data class ExecuteMarketingCampaignResponse(
+    val campaignId: UUID,
+    val requested: Int,
+    val sent: Int,
+)

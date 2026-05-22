@@ -39,7 +39,10 @@ class WorkflowEngine(
     actions: List<WorkflowAction>,
 ) {
     private val log = LoggerFactory.getLogger(WorkflowEngine::class.java)
-    private val actionsByType: Map<String, WorkflowAction> = actions.associateBy { it.type }
+    private val actionsByType: Map<String, WorkflowAction> =
+        actions
+            .flatMap { action -> listOf(action.type to action, action.type.replace("_", "-") to action) }
+            .toMap()
 
     @EventListener
     @Async

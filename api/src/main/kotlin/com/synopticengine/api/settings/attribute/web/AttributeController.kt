@@ -55,7 +55,12 @@ class AttributeController(
                     request.type,
                     request.entityType,
                     request.isUserDefined,
+                    request.isRequired,
+                    request.isUnique,
+                    request.quickAdd,
                     request.lookup,
+                    request.lookupType,
+                    request.validationRules,
                     request.sortOrder,
                 ),
             )
@@ -67,7 +72,18 @@ class AttributeController(
         @Valid @RequestBody request: UpdateAttributeRequest,
     ): ResponseEntity<AttributeResponse> =
         ResponseEntity.ok(
-            attributeService.update(id, request.adminName, request.type, request.lookup, request.sortOrder),
+            attributeService.update(
+                id,
+                request.adminName,
+                request.type,
+                request.isRequired,
+                request.isUnique,
+                request.quickAdd,
+                request.lookup,
+                request.lookupType,
+                request.validationRules,
+                request.sortOrder,
+            ),
         )
 
     @DeleteMapping("/{id}")

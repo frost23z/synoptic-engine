@@ -165,4 +165,10 @@ class QuoteController(
                 .build()
         return ResponseEntity.ok().headers(headers).body(pdf)
     }
+
+    @GetMapping("/{id}/pdf")
+    @PreAuthorize("hasAuthority('quotes.view')")
+    fun pdf(
+        @PathVariable id: UUID,
+    ): ResponseEntity<ByteArray> = print(id)
 }

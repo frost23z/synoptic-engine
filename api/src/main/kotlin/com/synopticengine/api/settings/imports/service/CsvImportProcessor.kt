@@ -11,6 +11,8 @@ import org.apache.commons.csv.CSVParser
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import java.io.File
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
@@ -25,6 +27,7 @@ class CsvImportProcessor(
     private val log = LoggerFactory.getLogger(CsvImportProcessor::class.java)
 
     @Async
+    @Transactional
     fun process(importId: UUID) {
         // P1-1: this is @Async; submission happens from DataImportController inside an
         // authenticated request, and TenantPropagatingTaskDecorator carries the tenant
@@ -55,18 +58,13 @@ class CsvImportProcessor(
                 }
 
                 else -> {
-                    dataImport.status = ImportStatus.FAILED
-                    dataImport.errors =
-                        listOf(mapOf("row" to "0", "error" to "Unknown entity type: ${dataImport.entityType}"))
-                    dataImportRepository.save(dataImport)
-                    return
+                    throw IllegalArgumentException("Unknown entity type: ${dataImport.entityType}")
                 }
             }
         } catch (e: Exception) {
             log.error("Import $importId failed: ${e.message}")
-            dataImport.status = ImportStatus.FAILED
-            dataImport.errors = listOf(mapOf("row" to "0", "error" to (e.message ?: "Unknown error")))
-            dataImportRepository.save(dataImport)
+            markFailed(importId, listOf(mapOf("row" to "0", "error" to (e.message ?: "Unknown error"))))
+            throw e
         }
     }
 
@@ -101,9 +99,12 @@ class CsvImportProcessor(
             }
         }
 
+        if (errors.isNotEmpty()) {
+            throw IllegalStateException("CSV import aborted: ${errors.size} row(s) failed validation")
+        }
         dataImport.successCount = successCount
-        dataImport.errorCount = errors.size
-        dataImport.errors = errors.ifEmpty { null }
+        dataImport.errorCount = 0
+        dataImport.errors = null
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
@@ -150,9 +151,12 @@ class CsvImportProcessor(
             }
         }
 
+        if (errors.isNotEmpty()) {
+            throw IllegalStateException("CSV import aborted: ${errors.size} row(s) failed validation")
+        }
         dataImport.successCount = successCount
-        dataImport.errorCount = errors.size
-        dataImport.errors = errors.ifEmpty { null }
+        dataImport.errorCount = 0
+        dataImport.errors = null
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
@@ -185,9 +189,12 @@ class CsvImportProcessor(
             }
         }
 
+        if (errors.isNotEmpty()) {
+            throw IllegalStateException("CSV import aborted: ${errors.size} row(s) failed validation")
+        }
         dataImport.successCount = successCount
-        dataImport.errorCount = errors.size
-        dataImport.errors = errors.ifEmpty { null }
+        dataImport.errorCount = 0
+        dataImport.errors = null
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
@@ -234,4 +241,17 @@ class CsvImportProcessor(
                 .setSkipHeaderRecord(true)
                 .build(),
         )
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun markFailed(
+        importId: UUID,
+        errors: List<Map<String, String>>,
+    ) {
+        val dataImport = dataImportRepository.findActiveById(importId) ?: return
+        dataImport.status = ImportStatus.FAILED
+        dataImport.errors = errors
+        dataImport.errorCount = errors.size
+        dataImport.successCount = 0
+        dataImportRepository.save(dataImport)
+    }
 }
