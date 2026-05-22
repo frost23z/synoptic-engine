@@ -1,6 +1,7 @@
 package com.synopticengine.api.sharing.service
 
 import com.synopticengine.api.identity.TenantApi
+import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.sharing.domain.RelationshipStatus
 import com.synopticengine.api.sharing.domain.RelationshipType
 import com.synopticengine.api.sharing.domain.ShareMaterializationOp
@@ -95,8 +96,10 @@ class TenantRelationshipService(
         rel.acceptedBy = actingUserId
         rel.acceptedAt = Instant.now()
         // Once the relationship is active, replay any pre-existing policies.
-        policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
-            materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.INSERT)
+        TenantContext.runAs(rel.sourceTenantId) {
+            policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
+                materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.INSERT)
+            }
         }
         eventPublisher.publishEvent(
             RelationshipAcceptedEvent(
@@ -166,8 +169,10 @@ class TenantRelationshipService(
             throw IllegalStateException("Only SUSPENDED relationships may be resumed")
         }
         rel.status = RelationshipStatus.ACTIVE
-        policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
-            materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.INSERT)
+        TenantContext.runAs(rel.sourceTenantId) {
+            policyRepository.findAllByRelationshipId(rel.id!!).forEach { policy ->
+                materializationWorker.enqueue(policy.id!!, ShareMaterializationOp.INSERT)
+            }
         }
         return rel
     }

@@ -24,7 +24,7 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
             objectMapper.writeValueAsBytes(
                 mapOf(
                     "from" to "sender@example.com",
-                    "to" to "inbox@synoptic.dev",
+                    "to" to "inbox+00000000-0000-0000-0000-000000000001@synoptic.dev",
                     "subject" to "Test inbound",
                     "body" to "Hello",
                 ),
@@ -39,6 +39,29 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                         .content(body),
                 ).andReturn()
         assertEquals(201, result.response.status, result.response.contentAsString)
+    }
+
+    @Test
+    fun `POST mail inbound-parse rejects signed payload with no tenant context in recipient`() {
+        val body =
+            objectMapper.writeValueAsBytes(
+                mapOf(
+                    "from" to "sender@example.com",
+                    "to" to "inbox@synoptic.dev",
+                    "subject" to "Test inbound",
+                    "body" to "Hello",
+                ),
+            )
+        val result =
+            mockMvc
+                .perform(
+                    MockMvcRequestBuilders
+                        .post("/api/mail/inbound-parse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Synoptic-Signature", sign(testSecret, body))
+                        .content(body),
+                ).andReturn()
+        assertEquals(400, result.response.status, result.response.contentAsString)
     }
 
     @Test

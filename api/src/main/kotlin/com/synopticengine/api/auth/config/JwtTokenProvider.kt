@@ -2,7 +2,6 @@ package com.synopticengine.api.auth.config
 
 import com.synopticengine.api.auth.UserPrincipal
 import io.jsonwebtoken.Claims
-import io.jsonwebtoken.JwtException
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.springframework.beans.factory.annotation.Value
@@ -32,11 +31,20 @@ class JwtTokenProvider(
                 ),
         )
 
-    fun generateRefreshToken(userId: UUID): String =
+    fun generateRefreshToken(
+        userId: UUID,
+        sessionId: UUID,
+        familyId: UUID,
+    ): String =
         buildToken(
             subject = userId.toString(),
             expiry = refreshTokenExpiry,
-            claims = mapOf("type" to "refresh"),
+            claims =
+                mapOf(
+                    "type" to "refresh",
+                    "sid" to sessionId.toString(),
+                    "fid" to familyId.toString(),
+                ),
         )
 
     fun validateToken(token: String): Boolean = runCatching { parseClaims(token) }.isSuccess
@@ -49,6 +57,12 @@ class JwtTokenProvider(
 
     @Suppress("UNCHECKED_CAST")
     fun getAuthoritiesFromToken(token: String): List<String> = parseClaims(token)["authorities"] as List<String>
+
+    fun getRefreshSessionIdFromToken(token: String): UUID = UUID.fromString(parseClaims(token)["sid"] as String)
+
+    fun getRefreshFamilyIdFromToken(token: String): UUID = UUID.fromString(parseClaims(token)["fid"] as String)
+
+    fun getExpirationFromToken(token: String): Date = parseClaims(token).expiration
 
     fun isRefreshToken(token: String): Boolean = parseClaims(token)["type"] == "refresh"
 

@@ -56,6 +56,21 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
 
         val consumerUserId = UUID.fromString(get("/auth/me", consumer.token).bodyAsMap()!!["id"] as String)
         val leadId = createLeadInTenant(owner.tenantId, "Cross-tenant audit probe")
+        val relId =
+            post(
+                "/api/relationships",
+                owner.token,
+                mapOf("targetTenantId" to consumer.tenantId.toString(), "type" to "PARTNER"),
+            ).bodyAsMap()!!["id"] as String
+        patch("/api/relationships/$relId/accept", consumer.token)
+        assertEquals(
+            201,
+            post(
+                "/api/relationships/$relId/policies",
+                owner.token,
+                mapOf("resourceType" to "leads", "accessLevel" to "WRITE"),
+            ).status(),
+        )
 
         // Cross-tenant edit: the consumer modifies the owner's lead.
         TransactionTemplate(transactionManager).execute {
