@@ -12,7 +12,9 @@ import java.util.UUID
 @Transactional(readOnly = true)
 class DataGridFilterService(
     private val repository: DataGridSavedFilterRepository,
+    /** Maximum number of top-level keys accepted in `applied`; blocks oversized payloads early. */
     @Value("\${synoptic.datagrid.max-filter-keys:50}") private val maxFilterKeys: Int,
+    /** Maximum number of values allowed for any list-valued applied filter key. */
     @Value("\${synoptic.datagrid.max-filter-list-values:50}") private val maxFilterListValues: Int,
 ) {
     fun findByUserAndSrc(
