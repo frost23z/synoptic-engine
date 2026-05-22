@@ -53,6 +53,7 @@ class SettingsApiImpl(
                 tenantId = form.tenantId,
                 title = form.title,
                 isActive = form.isActive,
+                createLead = form.createLead,
                 isDeleted = form.deletedAt != null,
                 fields =
                     form.fields.map { f ->

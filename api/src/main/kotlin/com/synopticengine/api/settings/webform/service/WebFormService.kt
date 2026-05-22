@@ -38,6 +38,7 @@ class WebFormService(
         title: String,
         description: String?,
         isActive: Boolean,
+        createLead: Boolean,
         backgroundColor: String?,
         submitSuccessAction: String,
         submitSuccessMessage: String?,
@@ -52,6 +53,7 @@ class WebFormService(
                     this.description = description
                     this.isActive =
                         isActive
+                    this.createLead = createLead
                     this.backgroundColor = backgroundColor
                     this.submitSuccessAction = submitSuccessAction
                     this.submitSuccessMessage = submitSuccessMessage
@@ -79,6 +81,7 @@ class WebFormService(
         title: String,
         description: String?,
         isActive: Boolean,
+        createLead: Boolean,
         backgroundColor: String?,
         submitSuccessAction: String,
         submitSuccessMessage: String?,
@@ -90,6 +93,7 @@ class WebFormService(
         form.title = title
         form.description = description
         form.isActive = isActive
+        form.createLead = createLead
         form.backgroundColor = backgroundColor
         form.submitSuccessAction = submitSuccessAction
         form.submitSuccessMessage = submitSuccessMessage
@@ -126,6 +130,7 @@ fun WebForm.toResponse() =
         title = title,
         description = description,
         isActive = isActive,
+        createLead = createLead,
         backgroundColor = backgroundColor,
         submitSuccessAction = submitSuccessAction,
         submitSuccessMessage = submitSuccessMessage,
