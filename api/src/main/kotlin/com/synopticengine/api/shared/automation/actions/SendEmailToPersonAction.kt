@@ -5,6 +5,7 @@ import com.synopticengine.api.shared.automation.WorkflowAction
 import com.synopticengine.api.shared.automation.WorkflowActionContext
 import com.synopticengine.api.shared.automation.WorkflowTargetPort
 import com.synopticengine.api.shared.email.MailSenderService
+import com.synopticengine.api.shared.email.interpolateTemplate
 import org.springframework.stereotype.Component
 import java.util.UUID
 
@@ -47,7 +48,22 @@ class SendEmailToPersonAction(
                 }
             }
         val to = email ?: throw IllegalStateException("Person $personId has no email address")
-        mailSender.sendHtmlEmail(to, template.subject, template.content)
+        val renderContext =
+            buildMap {
+                put("eventName", ctx.event.eventName)
+                put("entityType", ctx.event.entityType)
+                put("entityId", ctx.event.entityId.toString())
+                put("personId", personId.toString())
+                put("personEmail", to)
+                ctx.event.payload.forEach { (key, value) ->
+                    if (value != null) put(key, value.toString())
+                }
+            }
+        mailSender.sendHtmlEmail(
+            to,
+            interpolateTemplate(template.subject, renderContext),
+            interpolateTemplate(template.content, renderContext),
+        )
         return mapOf("personId" to personId, "templateId" to templateId, "to" to to)
     }
 }

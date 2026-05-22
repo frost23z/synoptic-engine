@@ -39,6 +39,7 @@ class ShareMaterializationWorker(
     private val policyRepository: TenantSharePolicyRepository,
     private val relationshipRepository: TenantRelationshipRepository,
     private val visibilityService: ResourceVisibilityService,
+    private val filterEvaluator: TenantSharePolicyFilterEvaluator,
     @PersistenceContext private val em: EntityManager,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -164,16 +165,17 @@ class ShareMaterializationWorker(
         // ownerTenantId (we enqueue from the source tenant; drainQueue restores it),
         // so the RLS GUC matches and the native query returns the owner's rows.
         @Suppress("UNCHECKED_CAST")
-        val ids =
+        val rows =
             em
                 .createNativeQuery(
-                    "SELECT id FROM $table WHERE tenant_id = :tenant AND deleted_at IS NULL",
+                    "SELECT id, row_to_json(r)::text FROM $table r WHERE tenant_id = :tenant AND deleted_at IS NULL",
                 ).setParameter("tenant", ownerTenantId)
-                .resultList as List<Any>
-        ids
+                .resultList as List<Array<Any>>
+        var materialized = 0
+        rows
             .asSequence()
-            .map { (it as java.util.UUID) }
-            .filter { matchesFilter(policy.filterJson, it) }
+            .filter { row -> matchesFilter(policy.filterJson, row[1].toString()) }
+            .map { row -> row[0] as java.util.UUID }
             .forEach { resourceId ->
                 visibilityService.upsert(
                     ownerTenantId = ownerTenantId,
@@ -184,9 +186,10 @@ class ShareMaterializationWorker(
                     source = VisibilitySource.POLICY,
                     sourceId = policyId,
                 )
+                materialized += 1
             }
         log.info(
-            "Policy $policyId materialized ${ids.size} ${resourceType.literal} row(s) for consumer $consumerTenantId",
+            "Policy $policyId materialized $materialized/${rows.size} ${resourceType.literal} row(s) for consumer $consumerTenantId",
         )
     }
 
@@ -210,20 +213,10 @@ class ShareMaterializationWorker(
             ResourceType.ACTIVITIES, ResourceType.PRICELISTS -> null
         }
 
-    /**
-     * Placeholder for policy filter_jsonb evaluation. Sprint 2b ships with "match all".
-     * Sprint 2c adds a JSON-DSL evaluator (operator+attribute+value AST).
-     *
-     * `TenantSharePolicyService` rejects non-null filterJson at create/update time, so this
-     * function is only ever called with `filterJson = null` against fresh policies. If a
-     * legacy row from an earlier build still has a filter, we materialize as if the filter
-     * matched everything (the docstring's "match all" intent) rather than the previous
-     * "match nothing" behaviour, which silently broke filtered policies.
-     */
     private fun matchesFilter(
-        @Suppress("UNUSED_PARAMETER") filterJson: String?,
-        @Suppress("UNUSED_PARAMETER") resourceId: java.util.UUID,
-    ): Boolean = true
+        filterJson: String?,
+        resourceJson: String,
+    ): Boolean = filterEvaluator.matches(filterJson, resourceJson)
 
     @Transactional
     fun markFailed(

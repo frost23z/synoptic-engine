@@ -38,4 +38,29 @@ class DataGridFilterIntegrationTest : AbstractIntegrationTest() {
         val afterDelete = get("/api/datagrid/saved-filters?src=leads", token)
         assertEquals(0, afterDelete.bodyAsList()!!.size)
     }
+
+    @Test
+    fun `save rejects unsupported source and nested applied payload`() {
+        val token = adminToken()
+        assertEquals(
+            400,
+            post(
+                "/api/datagrid/saved-filters",
+                token,
+                mapOf("name" to "bad", "src" to "unknown", "applied" to mapOf("status" to "open")),
+            ).status(),
+        )
+        assertEquals(
+            400,
+            post(
+                "/api/datagrid/saved-filters",
+                token,
+                mapOf(
+                    "name" to "bad",
+                    "src" to "leads",
+                    "applied" to mapOf("status" to mapOf("op" to "eq", "value" to "open")),
+                ),
+            ).status(),
+        )
+    }
 }
