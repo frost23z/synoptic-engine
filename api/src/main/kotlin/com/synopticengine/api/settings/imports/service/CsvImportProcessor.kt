@@ -113,6 +113,7 @@ class CsvImportProcessor(
         val errors = mutableListOf<Map<String, String>>()
         var successCount = 0
         var rowIndex = 1
+        val defaultRouting = crmApi.findDefaultLeadRouting()
 
         parseCsv(dataImport.filePath).use { parser ->
             for (record in parser) {
@@ -123,26 +124,40 @@ class CsvImportProcessor(
                         errors.add(mapOf("row" to rowIndex.toString(), "error" to "title is required"))
                         continue
                     }
-                    val pipelineId =
-                        record
-                            .get("pipelineId")
-                            .ifBlank { null }
-                            ?.let { UUID.fromString(it) }
-                            ?: UUID.fromString("00000000-0000-0000-0000-000000000010")
-                    val stageId =
-                        record
-                            .get("stageId")
-                            .ifBlank { null }
-                            ?.let { UUID.fromString(it) }
-                            ?: UUID.fromString("00000000-0000-0000-0000-000000000011")
+                    val pipelineIdRaw = record.get("pipelineId").ifBlank { null }
+                    val stageIdRaw = record.get("stageId").ifBlank { null }
+                    val pipelineId = pipelineIdRaw?.let { UUID.fromString(it) }
+                    val stageId = stageIdRaw?.let { UUID.fromString(it) }
+                    val resolvedRouting =
+                        when {
+                            pipelineId != null && stageId != null -> {
+                                pipelineId to stageId
+                            }
+
+                            pipelineId == null && stageId == null && defaultRouting != null -> {
+                                defaultRouting.pipelineId to defaultRouting.stageId
+                            }
+
+                            pipelineId == null && stageId == null -> {
+                                throw IllegalArgumentException(
+                                    "pipelineId and stageId are required when no default pipeline/stage is configured",
+                                )
+                            }
+
+                            else -> {
+                                throw IllegalArgumentException(
+                                    "pipelineId and stageId must either both be provided or both omitted",
+                                )
+                            }
+                        }
                     val amount = record.get("amount").ifBlank { null }?.let { BigDecimal(it) }
 
                     crmApi.createLead(
                         title = title,
                         description = record.get("description").ifBlank { null },
                         amount = amount,
-                        pipelineId = pipelineId,
-                        stageId = stageId,
+                        pipelineId = resolvedRouting.first,
+                        stageId = resolvedRouting.second,
                     )
                     successCount++
                 } catch (e: Exception) {
