@@ -224,6 +224,9 @@ class EmailController(
                 to = parsed.to,
                 subject = parsed.subject,
                 body = parsed.body,
+                messageId = parsed.messageId,
+                inReplyTo = parsed.inReplyTo,
+                references = parsed.references,
             ),
         )
     }

@@ -46,6 +46,24 @@ data class MoveStageRequest(
     val lostReason: String? = null,
 )
 
+data class ConvertLeadRequest(
+    val firstName: String,
+    val lastName: String,
+    val email: String? = null,
+    val phone: String? = null,
+    val jobTitle: String? = null,
+    val organizationId: UUID? = null,
+    val organizationName: String? = null,
+    val closeAsWon: Boolean = true,
+)
+
+data class ConvertLeadResponse(
+    val leadId: UUID,
+    val personId: UUID,
+    val organizationId: UUID?,
+    val status: String,
+)
+
 data class MassUpdateLeadRequest(
     val ids: List<UUID>,
     val userId: UUID? = null,

@@ -37,6 +37,8 @@ interface AttributeRepository : JpaRepository<Attribute, UUID> {
 interface AttributeOptionRepository : JpaRepository<AttributeOption, UUID> {
     fun findAllByAttributeId(attributeId: UUID): List<AttributeOption>
 
+    fun findAllByAttributeIdIn(attributeIds: Collection<UUID>): List<AttributeOption>
+
     // Tenant-aware load — see EmailRepository.findActiveById docstring.
     @Query("SELECT o FROM AttributeOption o WHERE o.id = :id")
     fun findActiveById(
@@ -53,6 +55,12 @@ interface AttributeValueRepository : JpaRepository<AttributeValue, UUID> {
     fun findByAttributeIdAndEntityId(
         attributeId: UUID,
         entityId: UUID,
+    ): AttributeValue?
+
+    fun findByAttributeIdAndEntityIdAndEntityType(
+        attributeId: UUID,
+        entityId: UUID,
+        entityType: String,
     ): AttributeValue?
 
     fun findAllByEntityTypeAndValue(

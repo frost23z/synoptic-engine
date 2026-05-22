@@ -16,7 +16,12 @@ data class CreateAttributeRequest(
     @field:NotBlank(message = "Entity type is required")
     val entityType: String,
     val isUserDefined: Boolean = true,
+    val isRequired: Boolean = false,
+    val isUnique: Boolean = false,
+    val quickAdd: Boolean = false,
     val lookup: String? = null,
+    val lookupType: String? = null,
+    val validationRules: Map<String, Any?> = emptyMap(),
     val sortOrder: Int = 0,
 )
 
@@ -25,7 +30,12 @@ data class UpdateAttributeRequest(
     val adminName: String,
     @field:NotNull(message = "Type is required")
     val type: AttributeType,
+    val isRequired: Boolean = false,
+    val isUnique: Boolean = false,
+    val quickAdd: Boolean = false,
     val lookup: String? = null,
+    val lookupType: String? = null,
+    val validationRules: Map<String, Any?> = emptyMap(),
     val sortOrder: Int = 0,
 )
 
@@ -56,7 +66,12 @@ data class AttributeResponse(
     val adminName: String,
     val type: String,
     val isUserDefined: Boolean,
+    val isRequired: Boolean,
+    val isUnique: Boolean,
+    val quickAdd: Boolean,
     val lookup: String?,
+    val lookupType: String?,
+    val validationRules: Map<String, Any?>,
     val entityType: String,
     val sortOrder: Int,
     val options: List<AttributeOptionResponse>,

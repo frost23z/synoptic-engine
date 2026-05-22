@@ -2,12 +2,16 @@ package com.synopticengine.api.settings.marketing.service
 
 import com.synopticengine.api.settings.marketing.domain.MarketingCampaign
 import com.synopticengine.api.settings.marketing.domain.MarketingEvent
+import com.synopticengine.api.settings.marketing.web.ExecuteMarketingCampaignResponse
 import com.synopticengine.api.settings.marketing.repo.MarketingCampaignRepository
 import com.synopticengine.api.settings.marketing.repo.MarketingEventRepository
 import com.synopticengine.api.settings.marketing.web.MarketingCampaignResponse
 import com.synopticengine.api.settings.marketing.web.MarketingEventResponse
+import com.synopticengine.api.settings.emailtemplate.repo.EmailTemplateRepository
+import com.synopticengine.api.shared.email.MailSenderService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.UUID
 
 @Service
@@ -15,6 +19,8 @@ import java.util.UUID
 class MarketingService(
     private val eventRepository: MarketingEventRepository,
     private val campaignRepository: MarketingCampaignRepository,
+    private val emailTemplateRepository: EmailTemplateRepository,
+    private val mailSenderService: MailSenderService,
 ) {
     // ── Marketing Events ──────────────────────────────────────────────────
 
@@ -120,6 +126,41 @@ class MarketingService(
     @Transactional
     fun massDestroyCampaigns(ids: List<UUID>) =
         ids.filter { campaignRepository.existsById(it) }.forEach { campaignRepository.deleteById(it) }
+
+    @Transactional
+    fun executeCampaign(
+        id: UUID,
+        recipients: List<String>,
+        context: Map<String, String>,
+    ): ExecuteMarketingCampaignResponse {
+        val campaign =
+            campaignRepository.findById(id).orElseThrow { NoSuchElementException("Marketing campaign not found: $id") }
+        val subject = applyTemplate(campaign.subject, context)
+        val bodyTemplate =
+            campaign.emailTemplateId
+                ?.let { emailTemplateRepository.findActiveById(it)?.content }
+                ?: campaign.description.orEmpty()
+        val body = applyTemplate(bodyTemplate, context)
+        val sentCounter = AtomicInteger(0)
+        recipients.filter { it.isNotBlank() }.distinct().forEach { recipient ->
+            mailSenderService.sendHtmlEmail(recipient, subject, body)
+            sentCounter.incrementAndGet()
+        }
+        return ExecuteMarketingCampaignResponse(
+            campaignId = campaign.id!!,
+            requested = recipients.size,
+            sent = sentCounter.get(),
+        )
+    }
+
+    private fun applyTemplate(
+        template: String,
+        context: Map<String, String>,
+    ): String =
+        Regex("\\{\\{\\s*([a-zA-Z0-9_.-]+)\\s*\\}\\}")
+            .replace(template) { match ->
+                context[match.groupValues[1]] ?: ""
+            }
 }
 
 fun MarketingEvent.toResponse() =

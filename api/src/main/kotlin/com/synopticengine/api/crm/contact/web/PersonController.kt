@@ -123,4 +123,11 @@ class PersonController(
         @PathVariable id: UUID,
         @PathVariable tagId: UUID,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.detachTag(id, tagId))
+
+    @PostMapping("/merge")
+    @PreAuthorize("hasAuthority('contacts.edit')")
+    fun merge(
+        @RequestBody request: MergePersonRequest,
+    ): ResponseEntity<MergePersonResponse> =
+        ResponseEntity.ok(personService.merge(request.sourceId, request.targetId))
 }

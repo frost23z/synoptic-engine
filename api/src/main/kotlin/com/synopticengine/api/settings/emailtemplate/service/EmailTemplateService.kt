@@ -67,6 +67,22 @@ class EmailTemplateService(
         emailTemplateRepository.delete(template)
     }
 
+    fun render(
+        id: UUID,
+        context: Map<String, String>,
+    ): EmailTemplateResponse {
+        val template = requireTemplate(id)
+        return EmailTemplateResponse(
+            id = template.id!!,
+            name = template.name,
+            subject = substituteVariables(template.subject, context),
+            content = substituteVariables(template.content, context),
+            isPredefined = template.isPredefined,
+            createdAt = template.createdAt,
+            updatedAt = template.updatedAt,
+        )
+    }
+
     // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
     private fun requireTemplate(id: UUID): EmailTemplate =
         emailTemplateRepository.findActiveById(id)
@@ -83,3 +99,13 @@ fun EmailTemplate.toResponse() =
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
+
+private fun substituteVariables(
+    template: String,
+    context: Map<String, String>,
+): String =
+    Regex("\\{\\{\\s*([a-zA-Z0-9_.-]+)\\s*\\}\\}")
+        .replace(template) { match ->
+            val key = match.groupValues[1]
+            context[key] ?: ""
+        }

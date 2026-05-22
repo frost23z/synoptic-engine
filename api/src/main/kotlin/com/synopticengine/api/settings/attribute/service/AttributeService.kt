@@ -13,6 +13,8 @@ import com.synopticengine.api.settings.attribute.web.AttributeResponse
 import com.synopticengine.api.settings.attribute.web.AttributeValueResponse
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.core.type.TypeReference
+import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
 @Service
@@ -21,17 +23,12 @@ class AttributeService(
     private val attributeRepository: AttributeRepository,
     private val optionRepository: AttributeOptionRepository,
     private val valueRepository: AttributeValueRepository,
+    private val objectMapper: ObjectMapper,
 ) {
     fun findAll(entityType: String?): List<AttributeResponse> =
-        if (entityType != null) {
-            attributeRepository.findAllByEntityType(entityType).map { attr ->
-                attr.toResponse(optionRepository.findAllByAttributeId(attr.id!!))
-            }
-        } else {
-            attributeRepository.findAll().map { attr ->
-                attr.toResponse(optionRepository.findAllByAttributeId(attr.id!!))
-            }
-        }
+        buildResponses(
+            if (entityType != null) attributeRepository.findAllByEntityType(entityType) else attributeRepository.findAll(),
+        )
 
     fun findById(id: UUID): AttributeResponse =
         (attributeRepository.findByIdWithOptions(id) ?: throw NoSuchElementException("Attribute not found: $id"))
@@ -52,7 +49,12 @@ class AttributeService(
         type: AttributeType,
         entityType: String,
         isUserDefined: Boolean,
+        isRequired: Boolean,
+        isUnique: Boolean,
+        quickAdd: Boolean,
         lookup: String?,
+        lookupType: String?,
+        validationRules: Map<String, Any?>,
         sortOrder: Int,
     ): AttributeResponse {
         if (attributeRepository.existsByCodeAndEntityType(code, entityType)) {
@@ -66,7 +68,12 @@ class AttributeService(
                     this.type = type
                     this.entityType = entityType
                     this.isUserDefined = isUserDefined
+                    this.isRequired = isRequired
+                    this.isUnique = isUnique
+                    this.quickAdd = quickAdd
                     this.lookup = lookup
+                    this.lookupType = lookupType
+                    this.validationRules = objectMapper.writeValueAsString(validationRules)
                     this.sortOrder = sortOrder
                 },
             )
@@ -78,13 +85,23 @@ class AttributeService(
         id: UUID,
         adminName: String,
         type: AttributeType,
+        isRequired: Boolean,
+        isUnique: Boolean,
+        quickAdd: Boolean,
         lookup: String?,
+        lookupType: String?,
+        validationRules: Map<String, Any?>,
         sortOrder: Int,
     ): AttributeResponse {
         val attr = requireAttr(id)
         attr.adminName = adminName
         attr.type = type
+        attr.isRequired = isRequired
+        attr.isUnique = isUnique
+        attr.quickAdd = quickAdd
         attr.lookup = lookup
+        attr.lookupType = lookupType
+        attr.validationRules = objectMapper.writeValueAsString(validationRules)
         attr.sortOrder = sortOrder
         attributeRepository.save(attr)
         return attr.toResponse(optionRepository.findAllByAttributeId(id))
@@ -149,8 +166,15 @@ class AttributeService(
         entityType: String,
         value: String?,
     ): AttributeValueResponse {
-        requireAttr(attributeId)
-        val existing = valueRepository.findByAttributeIdAndEntityId(attributeId, entityId)
+        val attr = requireAttr(attributeId)
+        if (attr.isRequired && value.isNullOrBlank()) {
+            throw IllegalArgumentException("Attribute '${attr.code}' is required")
+        }
+        if (attr.isUnique && !value.isNullOrBlank()) {
+            val isUnique = checkUniqueValidation(attr.code, entityType, value, entityId)
+            if (!isUnique) throw IllegalArgumentException("Attribute '${attr.code}' must be unique")
+        }
+        val existing = valueRepository.findByAttributeIdAndEntityIdAndEntityType(attributeId, entityId, entityType)
         return if (existing != null) {
             existing.value = value
             valueRepository.save(existing).toResponse()
@@ -220,6 +244,12 @@ class AttributeService(
         }
     }
 
+    private fun buildResponses(attributes: List<Attribute>): List<AttributeResponse> {
+        if (attributes.isEmpty()) return emptyList()
+        val byAttributeId = optionRepository.findAllByAttributeIdIn(attributes.mapNotNull { it.id }).groupBy { it.attributeId }
+        return attributes.map { attr -> attr.toResponse(byAttributeId[attr.id] ?: emptyList()) }
+    }
+
     fun downloadCsv(): String {
         val sb = StringBuilder("id,code,admin_name,type,entity_type,sort_order,is_user_defined\n")
         attributeRepository.findAll().forEach { attr ->
@@ -242,7 +272,12 @@ fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =
         adminName = adminName,
         type = type.name,
         isUserDefined = isUserDefined,
+        isRequired = isRequired,
+        isUnique = isUnique,
+        quickAdd = quickAdd,
         lookup = lookup,
+        lookupType = lookupType,
+        validationRules = readValidationRules(validationRules),
         entityType = entityType,
         sortOrder = sortOrder,
         options = opts.map { it.toResponse() },
@@ -251,6 +286,16 @@ fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =
     )
 
 fun Attribute.toResponseWithLoadedOptions(): AttributeResponse = toResponse(options.toList())
+
+private fun readValidationRules(json: String): Map<String, Any?> =
+    try {
+        tools.jackson.databind.json.JsonMapper
+            .builder()
+            .build()
+            .readValue(json, object : TypeReference<Map<String, Any?>>() {})
+    } catch (_: Exception) {
+        emptyMap()
+    }
 
 fun AttributeOption.toResponse() =
     AttributeOptionResponse(

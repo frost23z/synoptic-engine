@@ -5,6 +5,7 @@ import com.synopticengine.api.crm.lead.domain.LeadStatus
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.math.BigDecimal
@@ -123,6 +124,20 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
     fun countByDeletedAtIsNull(): Int
 
     fun existsByPersonIdAndDeletedAtIsNull(personId: UUID): Boolean
+
+    @Modifying
+    @Query(
+        """
+        UPDATE Lead l
+        SET l.personId = :targetPersonId
+        WHERE l.personId = :sourcePersonId
+          AND l.deletedAt IS NULL
+    """,
+    )
+    fun reassignPerson(
+        @Param("sourcePersonId") sourcePersonId: UUID,
+        @Param("targetPersonId") targetPersonId: UUID,
+    ): Int
 
     fun countByStatusAndDeletedAtIsNull(status: LeadStatus): Int
 
@@ -310,4 +325,30 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         @Param("hasScope") hasScope: Boolean,
         @Param("scopeIds") scopeIds: Collection<UUID>,
     ): List<Array<Any>>
+
+    @Query(
+        """
+        SELECT l FROM Lead l
+        WHERE l.deletedAt IS NULL
+          AND l.status = com.synopticengine.api.crm.lead.domain.LeadStatus.OPEN
+          AND (:pipelineId IS NULL OR l.pipelineId = :pipelineId)
+    """,
+    )
+    fun findOpenForRotten(
+        @Param("pipelineId") pipelineId: UUID?,
+    ): List<Lead>
+
+    @Query(
+        """
+        SELECT l FROM Lead l
+        WHERE l.deletedAt IS NULL
+          AND l.status = com.synopticengine.api.crm.lead.domain.LeadStatus.OPEN
+          AND (:pipelineId IS NULL OR l.pipelineId = :pipelineId)
+          AND l.userId IN :scopeIds
+    """,
+    )
+    fun findOpenForRottenScoped(
+        @Param("pipelineId") pipelineId: UUID?,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): List<Lead>
 }

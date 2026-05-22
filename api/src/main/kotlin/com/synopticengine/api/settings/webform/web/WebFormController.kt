@@ -1,6 +1,7 @@
 package com.synopticengine.api.settings.webform.web
 
 import com.synopticengine.api.settings.webform.service.WebFormRateLimiter
+import com.synopticengine.api.settings.webform.service.WebFormCaptchaVerifier
 import com.synopticengine.api.settings.webform.service.WebFormService
 import com.synopticengine.api.shared.webform.WebFormSubmissionService
 import jakarta.servlet.http.HttpServletRequest
@@ -40,7 +41,19 @@ class WebFormController(
     ): ResponseEntity<WebFormResponse> =
         ResponseEntity
             .status(HttpStatus.CREATED)
-            .body(webFormService.create(request.title, request.description, request.isActive, request.fields))
+            .body(
+                webFormService.create(
+                    request.title,
+                    request.description,
+                    request.isActive,
+                    request.backgroundColor,
+                    request.submitSuccessAction,
+                    request.submitSuccessMessage,
+                    request.submitSuccessUrl,
+                    request.captchaEnabled,
+                    request.fields,
+                ),
+            )
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('settings.edit')")
@@ -49,7 +62,18 @@ class WebFormController(
         @Valid @RequestBody request: UpdateWebFormRequest,
     ): ResponseEntity<WebFormResponse> =
         ResponseEntity.ok(
-            webFormService.update(id, request.title, request.description, request.isActive, request.fields),
+            webFormService.update(
+                id,
+                request.title,
+                request.description,
+                request.isActive,
+                request.backgroundColor,
+                request.submitSuccessAction,
+                request.submitSuccessMessage,
+                request.submitSuccessUrl,
+                request.captchaEnabled,
+                request.fields,
+            ),
         )
 
     @DeleteMapping("/{id}")
@@ -72,6 +96,7 @@ class PublicWebFormController(
     private val webFormService: WebFormService,
     private val submissionService: WebFormSubmissionService,
     private val rateLimiter: WebFormRateLimiter,
+    private val captchaVerifier: WebFormCaptchaVerifier,
 ) {
     @GetMapping("/{id}")
     fun getPublicForm(
@@ -90,10 +115,16 @@ class PublicWebFormController(
                 .status(HttpStatus.TOO_MANY_REQUESTS)
                 .body(WebFormSubmitResponse(success = false, message = "Rate limit exceeded for $ip"))
         }
+        val form = webFormService.findPublicById(id)
+        if (form.captchaEnabled && !captchaVerifier.verify(request.captchaToken, ip)) {
+            return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(WebFormSubmitResponse(success = false, message = "Captcha verification failed"))
+        }
         val payload =
             com.synopticengine.api.shared.webform
                 .WebFormSubmitPayload(values = request.values)
-        val result = submissionService.submit(id, payload)
+        val result = submissionService.submit(form.id, payload)
         return ResponseEntity.ok(
             WebFormSubmitResponse(
                 success = result.success,

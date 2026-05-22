@@ -3,12 +3,19 @@ package com.synopticengine.api.crm.lead.service
 import com.synopticengine.api.crm.email.repo.EmailRepository
 import com.synopticengine.api.crm.email.service.toResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
+import com.synopticengine.api.crm.contact.domain.ContactEntry
+import com.synopticengine.api.crm.contact.domain.Organization
+import com.synopticengine.api.crm.contact.domain.Person
+import com.synopticengine.api.crm.contact.repo.OrganizationRepository
+import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.domain.LeadProduct
 import com.synopticengine.api.crm.lead.domain.LeadStatus
 import com.synopticengine.api.crm.lead.repo.LeadProductRepository
 import com.synopticengine.api.crm.lead.repo.LeadRepository
+import com.synopticengine.api.crm.lead.repo.PipelineRepository
 import com.synopticengine.api.crm.lead.repo.StageRepository
+import com.synopticengine.api.crm.lead.web.ConvertLeadResponse
 import com.synopticengine.api.crm.lead.web.KanbanStageGroup
 import com.synopticengine.api.crm.lead.web.LeadProductResponse
 import com.synopticengine.api.crm.lead.web.LeadResponse
@@ -21,6 +28,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -31,11 +39,15 @@ import java.util.UUID
 class LeadService(
     private val leadRepository: LeadRepository,
     private val stageRepository: StageRepository,
+    private val pipelineRepository: PipelineRepository,
+    private val personRepository: PersonRepository,
+    private val organizationRepository: OrganizationRepository,
     private val tagRepository: TagRepository,
     private val emailRepository: EmailRepository,
     private val leadProductRepository: LeadProductRepository,
     private val eventPublisher: ApplicationEventPublisher,
     private val scopeResolver: ScopeResolver,
+    private val objectMapper: ObjectMapper,
 ) {
     fun findAll(pageable: Pageable): PageResponse<LeadResponse> {
         val scopeIds = scopeResolver.userIdsForCurrentUser()
@@ -89,6 +101,25 @@ class LeadService(
             } else {
                 leadRepository.findAllByPipelineIdScopedAndDeletedAtIsNull(pipelineId, scopeIds)
             }
+
+            fun findRottenLeads(pipelineId: UUID?): List<LeadResponse> {
+                val scopeIds = scopeResolver.userIdsForCurrentUser()
+                val leads =
+                    if (scopeIds == null) {
+                        leadRepository.findOpenForRotten(pipelineId)
+                    } else {
+                        leadRepository.findOpenForRottenScoped(pipelineId, scopeIds)
+                    }
+                if (leads.isEmpty()) return emptyList()
+                val pipelinesById =
+                    pipelineRepository.findAllById(leads.map { it.pipelineId }.toSet()).associateBy { it.id!! }
+                val now = Instant.now()
+                return leads
+                    .filter { lead ->
+                        val rottenDays = pipelinesById[lead.pipelineId]?.rottenDays ?: 30
+                        lead.stageUpdatedAt.isBefore(now.minusSeconds(rottenDays.toLong() * 86_400))
+                    }.map { it.toResponse() }
+            }
         val leadsByStage = leads.groupBy { it.stageId }
         return stages.map { stage ->
             val stageLeads = leadsByStage[stage.id] ?: emptyList()
@@ -128,6 +159,7 @@ class LeadService(
                     this.leadSourceId = leadSourceId
                     this.leadTypeId = leadTypeId
                     this.userId = userId
+                    this.stageUpdatedAt = Instant.now()
                 },
             )
         eventPublisher.publishEvent(
@@ -161,7 +193,10 @@ class LeadService(
         if (status != null) lead.status = status
         if (lostReason != null) lead.lostReason = lostReason
         if (pipelineId != null) lead.pipelineId = pipelineId
-        if (stageId != null) lead.stageId = stageId
+        if (stageId != null && stageId != lead.stageId) {
+            lead.stageUpdatedAt = Instant.now()
+            lead.stageId = stageId
+        }
         lead.personId = personId
         lead.organizationId = organizationId
         lead.leadSourceId = leadSourceId
@@ -187,6 +222,7 @@ class LeadService(
                 ?: throw NoSuchElementException("Stage not found: $stageId")
         lead.stageId = stageId
         lead.pipelineId = stage.pipeline.id!!
+        lead.stageUpdatedAt = Instant.now()
         if (status != null) {
             lead.status = status
             if (status != LeadStatus.OPEN) lead.closedAt = Instant.now()
@@ -335,6 +371,69 @@ class LeadService(
     ) {
         requireLead(leadId)
         leadProductRepository.deleteByLeadIdAndProductId(leadId, productId)
+    }
+
+    @Transactional
+    fun convert(
+        id: UUID,
+        firstName: String,
+        lastName: String,
+        email: String?,
+        phone: String?,
+        jobTitle: String?,
+        organizationId: UUID?,
+        organizationName: String?,
+        closeAsWon: Boolean,
+    ): ConvertLeadResponse {
+        val lead = requireLead(id)
+        val organization =
+            when {
+                organizationId != null -> {
+                    organizationRepository.findActiveById(organizationId)
+                        ?: throw NoSuchElementException("Organization not found: $organizationId")
+                }
+                !organizationName.isNullOrBlank() -> {
+                    organizationRepository.save(
+                        Organization().apply {
+                            name = organizationName
+                        },
+                    )
+                }
+                else -> null
+            }
+        val person =
+            personRepository.save(
+                Person().apply {
+                    this.firstName = firstName
+                    this.lastName = lastName
+                    this.organizationId = organization?.id
+                    this.email = email
+                    this.phone = phone
+                    this.emails =
+                        objectMapper.writeValueAsString(
+                            email?.takeIf { it.isNotBlank() }?.let { listOf(ContactEntry(it, "primary")) } ?: emptyList(),
+                        )
+                    this.contactNumbers =
+                        objectMapper.writeValueAsString(
+                            phone?.takeIf { it.isNotBlank() }?.let { listOf(ContactEntry(it, "primary")) } ?: emptyList(),
+                        )
+                    this.jobTitle = jobTitle
+                },
+            )
+        lead.personId = person.id
+        if (organization != null) lead.organizationId = organization.id
+        if (closeAsWon) {
+            lead.status = LeadStatus.WON
+            lead.closedAt = Instant.now()
+        }
+        leadRepository.save(lead)
+        eventPublisher.publishEvent(DomainEvent("lead.converted", "Lead", lead.id!!, mapOf("personId" to person.id)))
+        return ConvertLeadResponse(
+            leadId = lead.id!!,
+            personId = person.id!!,
+            organizationId = organization?.id,
+            status = lead.status.value,
+        )
     }
 
     private fun requireLead(id: UUID): Lead =

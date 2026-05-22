@@ -3,7 +3,9 @@ package com.synopticengine.api.crm.contact.service
 import com.synopticengine.api.crm.contact.domain.ContactEntry
 import com.synopticengine.api.crm.contact.domain.Person
 import com.synopticengine.api.crm.contact.repo.PersonRepository
+import com.synopticengine.api.crm.contact.web.MergePersonResponse
 import com.synopticengine.api.crm.contact.web.PersonResponse
+import com.synopticengine.api.crm.email.repo.EmailRepository
 import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.crm.tag.repo.TagRepository
@@ -28,6 +30,7 @@ class PersonService(
     private val eventPublisher: ApplicationEventPublisher,
     private val scopeResolver: ScopeResolver,
     private val leadRepository: LeadRepository,
+    private val emailRepository: EmailRepository,
     private val objectMapper: ObjectMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -171,6 +174,33 @@ class PersonService(
         val person = requirePerson(personId)
         person.tags.removeIf { it.id == tagId }
         return personRepository.save(person).toResponse()
+    }
+
+    @Transactional
+    fun merge(
+        sourceId: UUID,
+        targetId: UUID,
+    ): MergePersonResponse {
+        if (sourceId == targetId) {
+            throw IllegalArgumentException("sourceId and targetId must be different")
+        }
+        val source = requirePerson(sourceId)
+        val target = requirePerson(targetId)
+        val mergedEmails = (readEntries(target.emails) + readEntries(source.emails)).distinctBy { it.value.lowercase() }
+        val mergedPhones =
+            (readEntries(target.contactNumbers) + readEntries(source.contactNumbers)).distinctBy { it.value.lowercase() }
+        target.emails = writeJson(mergedEmails)
+        target.contactNumbers = writeJson(mergedPhones)
+        if (target.email.isNullOrBlank()) target.email = source.email
+        if (target.phone.isNullOrBlank()) target.phone = source.phone
+        if (target.organizationId == null) target.organizationId = source.organizationId
+        target.tags.addAll(source.tags)
+        personRepository.save(target)
+        leadRepository.reassignPerson(sourceId, targetId)
+        emailRepository.reassignPerson(sourceId, targetId)
+        source.deletedAt = Instant.now()
+        personRepository.save(source)
+        return MergePersonResponse(merged = true, targetId = targetId)
     }
 
     // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
