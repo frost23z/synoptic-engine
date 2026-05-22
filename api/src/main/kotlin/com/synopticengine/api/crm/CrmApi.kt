@@ -69,6 +69,11 @@ data class LeadCsvRow(
     val stageId: UUID,
 )
 
+data class LeadRoutingDefaults(
+    val pipelineId: UUID,
+    val stageId: UUID,
+)
+
 /** Minimum fields needed to apply [CascadeRules] when a lead is shared. */
 data class LeadCascadeInfo(
     val personId: UUID?,
@@ -97,6 +102,8 @@ interface CrmApi {
         pipelineId: UUID,
         stageId: UUID,
     ): LeadCsvRow
+
+    fun findDefaultLeadRouting(): LeadRoutingDefaults?
 
     /**
      * Streams export rows in fixed-size pages, invoking [consume] for each row.

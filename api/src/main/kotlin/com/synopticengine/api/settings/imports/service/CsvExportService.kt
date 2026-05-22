@@ -86,11 +86,7 @@ class CsvExportService(
             "lead" -> {
                 buildString {
                     appendLine("title,description,amount,pipelineId,stageId")
-                    appendLine(
-                        "Deal with Acme,Follow up with client,5000," +
-                            "00000000-0000-0000-0000-000000000010," +
-                            "00000000-0000-0000-0000-000000000011",
-                    )
+                    appendLine("Deal with Acme,Follow up with client,5000,<pipeline-uuid>,<stage-uuid>")
                 }
             }
 
