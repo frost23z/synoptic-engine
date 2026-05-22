@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 @Transactional(readOnly = true)
@@ -363,15 +364,17 @@ class EmailService(
         key: String,
     ): UUID? {
         if (body.isNullOrBlank()) return null
-        val regex = ENTITY_ID_REGEX_BY_KEY.getOrPut(key.lowercase()) {
-            Regex("${key.lowercase()}[#:=\\s]+([0-9a-fA-F-]{36})", RegexOption.IGNORE_CASE)
-        }
+        val lowerKey = key.lowercase()
+        val regex =
+            ENTITY_ID_REGEX_BY_KEY.computeIfAbsent(lowerKey) {
+                Regex("$lowerKey[#:=\\s]+([0-9a-fA-F-]{36})", RegexOption.IGNORE_CASE)
+            }
         val value = regex.find(body)?.groupValues?.getOrNull(1) ?: return null
         return runCatching { UUID.fromString(value) }.getOrNull()
     }
 
     private companion object {
-        val ENTITY_ID_REGEX_BY_KEY: MutableMap<String, Regex> = mutableMapOf()
+        val ENTITY_ID_REGEX_BY_KEY: ConcurrentHashMap<String, Regex> = ConcurrentHashMap()
     }
 
     // Tenant-aware load. JpaRepository.findById bypasses Hibernate's

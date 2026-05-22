@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.core.type.TypeReference
 import tools.jackson.databind.ObjectMapper
-import tools.jackson.databind.json.JsonMapper
 import java.util.UUID
 
 @Service
@@ -39,7 +38,7 @@ class AttributeService(
 
     fun findById(id: UUID): AttributeResponse =
         (attributeRepository.findByIdWithOptions(id) ?: throw NoSuchElementException("Attribute not found: $id"))
-            .toResponseWithLoadedOptions()
+            .toResponseWithLoadedOptions(objectMapper)
 
     fun getEntityValues(
         entityId: UUID,
@@ -84,7 +83,7 @@ class AttributeService(
                     this.sortOrder = sortOrder
                 },
             )
-        return attr.toResponse(emptyList())
+        return attr.toResponse(emptyList(), objectMapper)
     }
 
     @Transactional
@@ -111,7 +110,7 @@ class AttributeService(
         attr.validationRules = objectMapper.writeValueAsString(validationRules)
         attr.sortOrder = sortOrder
         attributeRepository.save(attr)
-        return attr.toResponse(optionRepository.findAllByAttributeId(id))
+        return attr.toResponse(optionRepository.findAllByAttributeId(id), objectMapper)
     }
 
     @Transactional
@@ -258,7 +257,7 @@ class AttributeService(
                 .findAllByAttributeIdIn(
                     attributes.mapNotNull { it.id },
                 ).groupBy { it.attributeId }
-        return attributes.map { attr -> attr.toResponse(byAttributeId[attr.id] ?: emptyList()) }
+        return attributes.map { attr -> attr.toResponse(byAttributeId[attr.id] ?: emptyList(), objectMapper) }
     }
 
     fun downloadCsv(): String {
@@ -276,7 +275,10 @@ class AttributeService(
         attributeRepository.findActiveById(id) ?: throw NoSuchElementException("Attribute not found: $id")
 }
 
-fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =
+fun Attribute.toResponse(
+    opts: List<AttributeOption>,
+    objectMapper: ObjectMapper,
+): AttributeResponse =
     AttributeResponse(
         id = id!!,
         code = code,
@@ -288,7 +290,7 @@ fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =
         quickAdd = quickAdd,
         lookup = lookup,
         lookupType = lookupType,
-        validationRules = readValidationRules(validationRules),
+        validationRules = readValidationRules(objectMapper, validationRules),
         entityType = entityType,
         sortOrder = sortOrder,
         options = opts.map { it.toResponse() },
@@ -296,16 +298,18 @@ fun Attribute.toResponse(opts: List<AttributeOption>): AttributeResponse =
         updatedAt = updatedAt,
     )
 
-fun Attribute.toResponseWithLoadedOptions(): AttributeResponse = toResponse(options.toList())
+fun Attribute.toResponseWithLoadedOptions(objectMapper: ObjectMapper): AttributeResponse =
+    toResponse(options.toList(), objectMapper)
 
-private fun readValidationRules(json: String): Map<String, Any?> =
+private fun readValidationRules(
+    objectMapper: ObjectMapper,
+    json: String,
+): Map<String, Any?> =
     try {
-        VALIDATION_RULES_MAPPER.readValue(json, object : TypeReference<Map<String, Any?>>() {})
+        objectMapper.readValue(json, object : TypeReference<Map<String, Any?>>() {})
     } catch (_: Exception) {
         emptyMap()
     }
-
-private val VALIDATION_RULES_MAPPER: JsonMapper = JsonMapper.builder().build()
 
 fun AttributeOption.toResponse() =
     AttributeOptionResponse(

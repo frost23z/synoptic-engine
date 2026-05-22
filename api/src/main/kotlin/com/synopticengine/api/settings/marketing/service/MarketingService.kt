@@ -153,7 +153,6 @@ class MarketingService(
             sent = sentCounter.get(),
         )
     }
-
 }
 
 fun MarketingEvent.toResponse() =
