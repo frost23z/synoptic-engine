@@ -25,17 +25,17 @@ class WebFormController(
     private val webFormService: WebFormService,
 ) {
     @GetMapping
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('web-forms.view')")
     fun listAll(): ResponseEntity<List<WebFormResponse>> = ResponseEntity.ok(webFormService.findAll())
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('web-forms.view')")
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<WebFormResponse> = ResponseEntity.ok(webFormService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('web-forms.create')")
     fun create(
         @Valid @RequestBody request: CreateWebFormRequest,
     ): ResponseEntity<WebFormResponse> =
@@ -57,7 +57,7 @@ class WebFormController(
             )
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('web-forms.edit')")
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateWebFormRequest,
@@ -79,7 +79,7 @@ class WebFormController(
         )
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('web-forms.delete')")
     fun delete(
         @PathVariable id: UUID,
     ): ResponseEntity<Void> {

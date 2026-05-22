@@ -22,19 +22,19 @@ class AttributeController(
     private val attributeService: AttributeService,
 ) {
     @GetMapping
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('attributes.view')")
     fun listAll(
         @RequestParam entityType: String?,
     ): ResponseEntity<List<AttributeResponse>> = ResponseEntity.ok(attributeService.findAll(entityType))
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('attributes.view')")
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<AttributeResponse> = ResponseEntity.ok(attributeService.findById(id))
 
     @GetMapping("/values")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('attributes.view')")
     fun getValues(
         @RequestParam entityId: UUID,
         @RequestParam entityType: String,
@@ -42,7 +42,7 @@ class AttributeController(
         ResponseEntity.ok(attributeService.getEntityValues(entityId, entityType))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.create')")
     fun create(
         @Valid @RequestBody request: CreateAttributeRequest,
     ): ResponseEntity<AttributeResponse> =
@@ -66,7 +66,7 @@ class AttributeController(
             )
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.edit')")
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateAttributeRequest,
@@ -87,7 +87,7 @@ class AttributeController(
         )
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.delete')")
     fun delete(
         @PathVariable id: UUID,
     ): ResponseEntity<Void> {
@@ -96,7 +96,7 @@ class AttributeController(
     }
 
     @PostMapping("/{id}/options")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.edit')")
     fun addOption(
         @PathVariable id: UUID,
         @Valid @RequestBody request: AttributeOptionRequest,
@@ -107,7 +107,7 @@ class AttributeController(
             ).body(attributeService.addOption(id, request.adminName, request.sortOrder))
 
     @PutMapping("/{id}/options/{optionId}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.edit')")
     fun updateOption(
         @PathVariable id: UUID,
         @PathVariable optionId: UUID,
@@ -116,7 +116,7 @@ class AttributeController(
         ResponseEntity.ok(attributeService.updateOption(id, optionId, request.adminName, request.sortOrder))
 
     @DeleteMapping("/{id}/options/{optionId}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.edit')")
     fun deleteOption(
         @PathVariable id: UUID,
         @PathVariable optionId: UUID,
@@ -126,7 +126,7 @@ class AttributeController(
     }
 
     @PostMapping("/values")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.edit')")
     fun setValue(
         @RequestBody request: SetAttributeValueRequest,
     ): ResponseEntity<AttributeValueResponse> =
@@ -135,7 +135,7 @@ class AttributeController(
         )
 
     @PostMapping("/mass-update")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.edit')")
     fun massUpdate(
         @RequestBody request: MassUpdateAttributeRequest,
     ): ResponseEntity<Void> {
@@ -144,7 +144,7 @@ class AttributeController(
     }
 
     @PostMapping("/mass-destroy")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('attributes.delete')")
     fun massDestroy(
         @RequestBody request: MassDestroyAttributeRequest,
     ): ResponseEntity<Void> {
@@ -153,19 +153,19 @@ class AttributeController(
     }
 
     @GetMapping("/lookup/{lookup}")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('attributes.view')")
     fun lookup(
         @PathVariable lookup: String,
     ): ResponseEntity<List<AttributeLookupItem>> = ResponseEntity.ok(attributeService.lookup(lookup))
 
     @GetMapping("/lookup-entity/{lookup}")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('attributes.view')")
     fun lookupEntity(
         @PathVariable lookup: String,
     ): ResponseEntity<List<AttributeLookupItem>> = ResponseEntity.ok(attributeService.lookup(lookup))
 
     @GetMapping("/check-unique-validation")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('attributes.view')")
     fun checkUniqueValidation(
         @RequestParam code: String,
         @RequestParam entityType: String,
@@ -177,6 +177,6 @@ class AttributeController(
         )
 
     @GetMapping("/download")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('attributes.view')")
     fun download(): ResponseEntity<Void> = ResponseEntity.noContent().build()
 }

@@ -22,7 +22,8 @@ class LocalStorageService(
         require(!relativeDirectory.isAbsolute && !relativeDirectory.startsWith("..")) {
             "Invalid storage directory: $directory"
         }
-        val sanitizedFilename = Path.of(filename).fileName?.toString() ?: throw IllegalArgumentException("Invalid filename")
+        val sanitizedFilename =
+            Path.of(filename).fileName?.toString() ?: throw IllegalArgumentException("Invalid filename")
         val dir = rootPath.resolve(relativeDirectory).normalize()
         require(dir.startsWith(rootPath)) { "Storage directory escapes root: $directory" }
         Files.createDirectories(dir)
