@@ -72,4 +72,21 @@ interface UserRepository :
     """,
     )
     fun searchActive(query: String): List<User>
+
+    @Query(
+        value = """
+        SELECT u.id
+        FROM users u
+        JOIN user_groups ug ON ug.user_id = u.id
+        WHERE ug.group_id = :groupId
+          AND u.deleted_at IS NULL
+          AND u.tenant_id = :tenantId
+        ORDER BY u.created_at ASC
+    """,
+        nativeQuery = true,
+    )
+    fun findActiveIdsByGroupId(
+        @Param("groupId") groupId: UUID,
+        @Param("tenantId") tenantId: UUID,
+    ): List<UUID>
 }

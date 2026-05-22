@@ -50,7 +50,11 @@ class LoginAttemptTracker(
         val now = Instant.now()
         if (now.isBefore(lockedUntil)) {
             throw RateLimitedException(
-                "Too many failed login attempts. Try again in ${Duration.between(now, lockedUntil).toMinutes() + 1} minute(s).",
+                "Too many failed login attempts. Try again in ${Duration
+                    .between(
+                        now,
+                        lockedUntil,
+                    ).toMinutes() + 1} minute(s).",
             )
         }
         // Lock expired — clear it lazily.
@@ -67,8 +71,9 @@ class LoginAttemptTracker(
         val state =
             states.compute(keyFor(email, clientIp)) { _, existing ->
                 val window = Duration.ofMinutes(windowMinutes)
-                val s = existing
-                    ?: State(failureCount = 0, windowStart = now, lockedUntil = null)
+                val s =
+                    existing
+                        ?: State(failureCount = 0, windowStart = now, lockedUntil = null)
                 if (Duration.between(s.windowStart, now) > window) {
                     s.failureCount = 0
                     s.windowStart = now
@@ -80,7 +85,8 @@ class LoginAttemptTracker(
                 s
             }
         // No-op — `compute` mutated the value in place.
-        @Suppress("UNUSED_EXPRESSION") state
+        @Suppress("UNUSED_EXPRESSION")
+        state
     }
 
     fun recordSuccess(

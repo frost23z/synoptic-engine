@@ -32,6 +32,21 @@ class WebForm :
     var isActive: Boolean = true
 
     @Column
+    var backgroundColor: String? = null
+
+    @Column(nullable = false)
+    var submitSuccessAction: String = "message"
+
+    @Column(columnDefinition = "TEXT")
+    var submitSuccessMessage: String? = null
+
+    @Column
+    var submitSuccessUrl: String? = null
+
+    @Column(nullable = false)
+    var captchaEnabled: Boolean = false
+
+    @Column
     override var deletedAt: Instant? = null
 
     @OneToMany(mappedBy = "webForm", fetch = FetchType.LAZY, cascade = [CascadeType.ALL], orphanRemoval = true)

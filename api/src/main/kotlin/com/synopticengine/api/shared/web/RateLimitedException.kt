@@ -7,4 +7,6 @@ package com.synopticengine.api.shared.web
  * exception handler into module-specific imports (Spring Modulith
  * forbids that).
  */
-class RateLimitedException(message: String) : RuntimeException(message)
+class RateLimitedException(
+    message: String,
+) : RuntimeException(message)

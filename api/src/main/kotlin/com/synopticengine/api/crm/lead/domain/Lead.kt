@@ -60,6 +60,9 @@ class Lead :
     @Column(nullable = false)
     var stageId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000011")
 
+    @Column(nullable = false)
+    var stageUpdatedAt: Instant = Instant.now()
+
     @Column
     var personId: UUID? = null
 

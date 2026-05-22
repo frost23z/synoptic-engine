@@ -117,8 +117,7 @@ class CsvExportController(
 ) {
     @GetMapping("/persons/export")
     @PreAuthorize("hasAuthority('contacts.view')")
-    fun exportPersons(): ResponseEntity<ByteArray> =
-        csvResponse("persons.csv") { csvExportService.streamPersons(it) }
+    fun exportPersons(): ResponseEntity<ByteArray> = csvResponse("persons.csv") { csvExportService.streamPersons(it) }
 
     @GetMapping("/organizations/export")
     @PreAuthorize("hasAuthority('contacts.view')")
@@ -127,8 +126,7 @@ class CsvExportController(
 
     @GetMapping("/leads/export")
     @PreAuthorize("hasAuthority('leads.view')")
-    fun exportLeads(): ResponseEntity<ByteArray> =
-        csvResponse("leads.csv") { csvExportService.streamLeads(it) }
+    fun exportLeads(): ResponseEntity<ByteArray> = csvResponse("leads.csv") { csvExportService.streamLeads(it) }
 
     @GetMapping("/products/export")
     @PreAuthorize("hasAuthority('products.view')")

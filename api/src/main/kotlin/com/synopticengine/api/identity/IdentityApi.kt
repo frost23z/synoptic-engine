@@ -45,6 +45,8 @@ interface IdentityApi {
     /** Convenience: resolve from authenticated email (avoids cross-module UserPrincipal import). */
     fun resolveViewContextByEmail(email: String): ViewContext
 
+    fun findFirstActiveUserInGroup(groupId: UUID): UUID?
+
     fun updatePassword(
         email: String,
         encodedPassword: String,

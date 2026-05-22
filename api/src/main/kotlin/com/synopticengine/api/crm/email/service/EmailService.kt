@@ -1,5 +1,6 @@
 package com.synopticengine.api.crm.email.service
 
+import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.email.domain.Email
 import com.synopticengine.api.crm.email.domain.EmailAttachment
 import com.synopticengine.api.crm.email.domain.EmailStatus
@@ -7,6 +8,7 @@ import com.synopticengine.api.crm.email.repo.EmailAttachmentRepository
 import com.synopticengine.api.crm.email.repo.EmailRepository
 import com.synopticengine.api.crm.email.web.EmailAttachmentResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
+import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
 import com.synopticengine.api.shared.TenantContext
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 @Transactional(readOnly = true)
@@ -27,6 +30,8 @@ class EmailService(
     private val tagRepository: TagRepository,
     private val attachmentRepository: EmailAttachmentRepository,
     private val storageService: StorageService,
+    private val personRepository: PersonRepository,
+    private val leadRepository: LeadRepository,
 ) {
     fun findByFolder(
         folder: String,
@@ -65,7 +70,7 @@ class EmailService(
                     this.leadId = leadId
                     this.parentId = parentId
                     this.folders = effectiveFolders
-                    this.status = if (isDraft) EmailStatus.DRAFT else EmailStatus.SENT
+                    this.status = if (isDraft) EmailStatus.DRAFT else EmailStatus.OUTBOX
                     this.from = mapOf("email" to to)
                     if (cc != null) this.cc = cc.map { mapOf("email" to it) }
                     if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
@@ -104,7 +109,15 @@ class EmailService(
             )
         }
         if (!isDraft) {
-            mailSenderService.sendEmail(to, subject ?: "", body ?: "", cc, bcc)
+            try {
+                mailSenderService.sendEmail(to, subject ?: "", body ?: "", cc, bcc)
+                email.status = EmailStatus.SENT
+                emailRepository.save(email)
+            } catch (ex: Exception) {
+                email.status = EmailStatus.FAILED
+                emailRepository.save(email)
+                throw ex
+            }
         }
         // Re-read so the attachments collection is populated for the response.
         val refreshed = emailRepository.findById(email.id!!).get()
@@ -119,17 +132,24 @@ class EmailService(
             throw IllegalStateException("Email $id is already SENT")
         }
         val to = email.from?.get("email") ?: throw IllegalStateException("Draft has no recipient")
-        mailSenderService.sendEmail(
-            to,
-            email.subject ?: "",
-            email.body ?: "",
-            email.cc?.mapNotNull { it["email"] },
-            email.bcc?.mapNotNull { it["email"] },
-        )
-        email.status = EmailStatus.SENT
-        // Drafts move to the sent folder once sent.
-        email.folders = listOf("sent")
-        return emailRepository.save(email).toResponse()
+        return try {
+            email.status = EmailStatus.OUTBOX
+            emailRepository.save(email)
+            mailSenderService.sendEmail(
+                to,
+                email.subject ?: "",
+                email.body ?: "",
+                email.cc?.mapNotNull { it["email"] },
+                email.bcc?.mapNotNull { it["email"] },
+            )
+            email.status = EmailStatus.SENT
+            email.folders = listOf("sent")
+            emailRepository.save(email).toResponse()
+        } catch (ex: Exception) {
+            email.status = EmailStatus.FAILED
+            emailRepository.save(email)
+            throw ex
+        }
     }
 
     /** P3.3: forward an existing email to a new recipient. */
@@ -170,8 +190,17 @@ class EmailService(
                     if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
                 },
             )
-        mailSenderService.sendEmail(to, subject, combinedBody, cc, bcc)
-        return forwarded.toResponse()
+        return try {
+            forwarded.status = EmailStatus.OUTBOX
+            emailRepository.save(forwarded)
+            mailSenderService.sendEmail(to, subject, combinedBody, cc, bcc)
+            forwarded.status = EmailStatus.SENT
+            emailRepository.save(forwarded).toResponse()
+        } catch (ex: Exception) {
+            forwarded.status = EmailStatus.FAILED
+            emailRepository.save(forwarded)
+            throw ex
+        }
     }
 
     @Transactional
@@ -286,12 +315,29 @@ class EmailService(
         to: String,
         subject: String?,
         body: String?,
+        messageId: String?,
+        inReplyTo: String?,
+        references: List<String>?,
     ): EmailResponse {
+        val normalizedReferences = references.orEmpty().filter { it.isNotBlank() }
+        val threadMessageIds =
+            buildList {
+                if (!inReplyTo.isNullOrBlank()) add(inReplyTo.trim())
+                addAll(normalizedReferences.map { it.trim() })
+            }.distinct()
+        val detectedPersonId = extractEntityId(body, "person")
+        val detectedLeadId = extractEntityId(body, "lead")
         // The inbound endpoint is public, so no JWT has populated TenantContext.
         // Until Phase 2 resolves the tenant from the recipient address, land the
         // email in the seed tenant so BaseEntity.@PrePersist has a tenant to assign.
         val email =
             TenantContext.runAs(TenantContext.SEED_TENANT_ID) {
+                val parent =
+                    if (threadMessageIds.isEmpty()) {
+                        null
+                    } else {
+                        emailRepository.findThreadParentsByMessageIds(threadMessageIds).firstOrNull()
+                    }
                 emailRepository.save(
                     Email().apply {
                         this.from = mapOf("email" to from)
@@ -300,10 +346,35 @@ class EmailService(
                         this.folders = listOf("inbox")
                         this.status = EmailStatus.SENT
                         this.isRead = false
+                        this.messageId = messageId
+                        this.referenceIds = normalizedReferences
+                        this.parentId = parent?.id
+                        this.personId =
+                            detectedPersonId?.takeIf { personRepository.findActiveById(it) != null } ?: parent?.personId
+                        this.leadId =
+                            detectedLeadId?.takeIf { leadRepository.findActiveById(it) != null } ?: parent?.leadId
                     },
                 )
             }
         return email.toResponse()
+    }
+
+    private fun extractEntityId(
+        body: String?,
+        key: String,
+    ): UUID? {
+        if (body.isNullOrBlank()) return null
+        val lowerKey = key.lowercase()
+        val regex =
+            ENTITY_ID_REGEX_BY_KEY.computeIfAbsent(lowerKey) {
+                Regex("$lowerKey[#:=\\s]+([0-9a-fA-F-]{36})", RegexOption.IGNORE_CASE)
+            }
+        val value = regex.find(body)?.groupValues?.getOrNull(1) ?: return null
+        return runCatching { UUID.fromString(value) }.getOrNull()
+    }
+
+    private companion object {
+        val ENTITY_ID_REGEX_BY_KEY: ConcurrentHashMap<String, Regex> = ConcurrentHashMap()
     }
 
     // Tenant-aware load. JpaRepository.findById bypasses Hibernate's

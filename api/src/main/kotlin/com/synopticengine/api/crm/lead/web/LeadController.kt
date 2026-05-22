@@ -56,6 +56,12 @@ class LeadController(
         return ResponseEntity.ok(leadService.search(q, pageable))
     }
 
+    @GetMapping("/rotten")
+    @PreAuthorize("hasAuthority('leads.view')")
+    fun rotten(
+        @RequestParam pipelineId: UUID?,
+    ): ResponseEntity<List<LeadResponse>> = ResponseEntity.ok(leadService.findRottenLeads(pipelineId))
+
     @GetMapping("/kanban")
     @PreAuthorize("hasAuthority('leads.view')")
     fun kanban(
@@ -208,4 +214,24 @@ class LeadController(
         leadService.removeProduct(id, productId)
         return ResponseEntity.noContent().build()
     }
+
+    @PostMapping("/{id}/convert")
+    @PreAuthorize("hasAuthority('leads.edit')")
+    fun convert(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: ConvertLeadRequest,
+    ): ResponseEntity<ConvertLeadResponse> =
+        ResponseEntity.ok(
+            leadService.convert(
+                id = id,
+                firstName = request.firstName,
+                lastName = request.lastName,
+                email = request.email,
+                phone = request.phone,
+                jobTitle = request.jobTitle,
+                organizationId = request.organizationId,
+                organizationName = request.organizationName,
+                closeAsWon = request.closeAsWon,
+            ),
+        )
 }

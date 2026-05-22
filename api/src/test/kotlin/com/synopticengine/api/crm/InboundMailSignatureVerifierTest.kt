@@ -21,9 +21,10 @@ class InboundMailSignatureVerifierTest {
 
     @Test
     fun `valid signature passes`() {
-        val req: HttpServletRequest = MockHttpServletRequest().apply {
-            addHeader("X-Synoptic-Signature", sign(secret, body))
-        }
+        val req: HttpServletRequest =
+            MockHttpServletRequest().apply {
+                addHeader("X-Synoptic-Signature", sign(secret, body))
+            }
         verifier.verify(req, body) // no throw → success
     }
 
@@ -36,30 +37,36 @@ class InboundMailSignatureVerifierTest {
 
     @Test
     fun `wrong signature is rejected`() {
-        val req: HttpServletRequest = MockHttpServletRequest().apply {
-            addHeader("X-Synoptic-Signature", "deadbeef")
-        }
+        val req: HttpServletRequest =
+            MockHttpServletRequest().apply {
+                addHeader("X-Synoptic-Signature", "deadbeef")
+            }
         assertFailsWith<AccessDeniedException> { verifier.verify(req, body) }
     }
 
     @Test
     fun `signature from a different body is rejected (prevents replay against mutated payloads)`() {
-        val req: HttpServletRequest = MockHttpServletRequest().apply {
-            addHeader("X-Synoptic-Signature", sign(secret, "tampered".toByteArray()))
-        }
+        val req: HttpServletRequest =
+            MockHttpServletRequest().apply {
+                addHeader("X-Synoptic-Signature", sign(secret, "tampered".toByteArray()))
+            }
         assertFailsWith<AccessDeniedException> { verifier.verify(req, body) }
     }
 
     @Test
     fun `empty secret fails closed`() {
         val emptySecretVerifier = InboundMailSignatureVerifier(secret = "")
-        val req: HttpServletRequest = MockHttpServletRequest().apply {
-            addHeader("X-Synoptic-Signature", sign(secret, body))
-        }
+        val req: HttpServletRequest =
+            MockHttpServletRequest().apply {
+                addHeader("X-Synoptic-Signature", sign(secret, body))
+            }
         assertFailsWith<AccessDeniedException> { emptySecretVerifier.verify(req, body) }
     }
 
-    private fun sign(secret: String, body: ByteArray): String {
+    private fun sign(
+        secret: String,
+        body: ByteArray,
+    ): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         return mac.doFinal(body).joinToString("") { "%02x".format(it.toInt() and 0xff) }
