@@ -185,6 +185,7 @@ class LeadService(
         userId: UUID?,
     ): LeadResponse {
         val lead = requireLead(id)
+        val previousStageId = lead.stageId
         lead.title = title
         lead.description = description
         lead.amount = amount
@@ -205,6 +206,9 @@ class LeadService(
         eventPublisher.publishEvent(
             DomainEvent("lead.updated", "Lead", saved.id!!, mapOf("status" to saved.status.value)),
         )
+        if (saved.stageId != previousStageId) {
+            publishLeadStageChanged(saved.id!!, saved.stageId, saved.status.value)
+        }
         return saved.toResponse()
     }
 
@@ -234,17 +238,7 @@ class LeadService(
             if (lostReason != null) lead.lostReason = lostReason
         }
         val saved = leadRepository.save(lead)
-        eventPublisher.publishEvent(
-            DomainEvent(
-                "lead.stage.changed",
-                "Lead",
-                saved.id!!,
-                mapOf(
-                    "stageId" to stageId,
-                    "status" to saved.status.value,
-                ),
-            ),
-        )
+        publishLeadStageChanged(saved.id!!, stageId, saved.status.value)
         return saved.toResponse()
     }
 
@@ -443,6 +437,21 @@ class LeadService(
 
     private fun requireLead(id: UUID): Lead =
         leadRepository.findActiveById(id) ?: throw NoSuchElementException("Lead not found: $id")
+
+    private fun publishLeadStageChanged(
+        leadId: UUID,
+        stageId: UUID,
+        status: String,
+    ) {
+        val payload =
+            mapOf(
+                "stageId" to stageId,
+                "status" to status,
+            )
+        // Keep legacy dot form and Krayin-style underscore form for parity.
+        eventPublisher.publishEvent(DomainEvent("lead.stage.changed", "Lead", leadId, payload))
+        eventPublisher.publishEvent(DomainEvent("lead.stage_changed", "Lead", leadId, payload))
+    }
 }
 
 fun LeadProduct.toResponse() =

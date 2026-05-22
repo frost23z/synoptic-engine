@@ -31,6 +31,9 @@ class WebForm :
     @Column(nullable = false)
     var isActive: Boolean = true
 
+    @Column(nullable = false)
+    var createLead: Boolean = false
+
     @Column
     var backgroundColor: String? = null
 

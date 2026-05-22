@@ -77,6 +77,7 @@ class WebFormSubmissionIntegrationTest : AbstractIntegrationTest() {
                 mapOf(
                     "title" to "Lead form ${UUID.randomUUID()}",
                     "isActive" to true,
+                    "createLead" to true,
                     "fields" to
                         listOf(
                             mapOf("attributeId" to firstNameAttr, "sortOrder" to 1, "isRequired" to true),
@@ -120,6 +121,42 @@ class WebFormSubmissionIntegrationTest : AbstractIntegrationTest() {
         // PublicWebFormController.submit goes via WebFormSubmissionService which
         // re-checks `isActive`. The inactive form raises NoSuchElementException.
         assertTrue(resp.status() == 404 || resp.status() == 400)
+    }
+
+    @Test
+    fun `public submit does not create lead when createLead is false`() {
+        val firstNameAttr = createAttribute("first_name")
+        val leadTitleAttr = createAttribute("lead_title")
+        val formId =
+            post(
+                "/api/settings/web-forms",
+                adminToken,
+                mapOf(
+                    "title" to "Person-only form ${UUID.randomUUID()}",
+                    "isActive" to true,
+                    "createLead" to false,
+                    "fields" to
+                        listOf(
+                            mapOf("attributeId" to firstNameAttr, "sortOrder" to 1, "isRequired" to true),
+                            mapOf("attributeId" to leadTitleAttr, "sortOrder" to 2, "isRequired" to false),
+                        ),
+                ),
+            ).bodyAsMap()!!["id"] as String
+
+        val result =
+            post(
+                "/web-forms/$formId/submit",
+                null,
+                mapOf(
+                    "values" to
+                        mapOf(
+                            "first_name" to "Only Person",
+                            "lead_title" to "Should not create lead",
+                        ),
+                ),
+            )
+        assertEquals(200, result.status())
+        assertEquals(null, result.bodyAsMap()!!["leadId"])
     }
 
     @Test

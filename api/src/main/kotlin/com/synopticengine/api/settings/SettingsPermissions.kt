@@ -11,6 +11,18 @@ object SettingsPermissions {
     const val ATTRIBUTES_EDIT = "attributes.edit"
     const val ATTRIBUTES_DELETE = "attributes.delete"
 
+    const val EMAIL_TEMPLATES = "email-templates"
+    const val EMAIL_TEMPLATES_VIEW = "email-templates.view"
+    const val EMAIL_TEMPLATES_CREATE = "email-templates.create"
+    const val EMAIL_TEMPLATES_EDIT = "email-templates.edit"
+    const val EMAIL_TEMPLATES_DELETE = "email-templates.delete"
+
+    const val WEB_FORMS = "web-forms"
+    const val WEB_FORMS_VIEW = "web-forms.view"
+    const val WEB_FORMS_CREATE = "web-forms.create"
+    const val WEB_FORMS_EDIT = "web-forms.edit"
+    const val WEB_FORMS_DELETE = "web-forms.delete"
+
     const val AUTOMATIONS = "automations"
     const val AUTOMATIONS_VIEW = "automations.view"
     const val AUTOMATIONS_CREATE = "automations.create"

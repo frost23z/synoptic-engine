@@ -21,17 +21,17 @@ class EmailTemplateController(
     private val emailTemplateService: EmailTemplateService,
 ) {
     @GetMapping
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('email-templates.view')")
     fun listAll(): ResponseEntity<List<EmailTemplateResponse>> = ResponseEntity.ok(emailTemplateService.findAll())
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('email-templates.view')")
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<EmailTemplateResponse> = ResponseEntity.ok(emailTemplateService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('email-templates.create')")
     fun create(
         @Valid @RequestBody request: CreateEmailTemplateRequest,
     ): ResponseEntity<EmailTemplateResponse> =
@@ -40,7 +40,7 @@ class EmailTemplateController(
             .body(emailTemplateService.create(request.name, request.subject, request.content))
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('email-templates.edit')")
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateEmailTemplateRequest,
@@ -48,14 +48,14 @@ class EmailTemplateController(
         ResponseEntity.ok(emailTemplateService.update(id, request.name, request.subject, request.content))
 
     @PostMapping("/{id}/render")
-    @PreAuthorize("hasAuthority('settings.view')")
+    @PreAuthorize("hasAuthority('email-templates.view')")
     fun render(
         @PathVariable id: UUID,
         @RequestBody request: RenderEmailTemplateRequest,
     ): ResponseEntity<EmailTemplateResponse> = ResponseEntity.ok(emailTemplateService.render(id, request.context))
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('settings.edit')")
+    @PreAuthorize("hasAuthority('email-templates.delete')")
     fun delete(
         @PathVariable id: UUID,
     ): ResponseEntity<Void> {

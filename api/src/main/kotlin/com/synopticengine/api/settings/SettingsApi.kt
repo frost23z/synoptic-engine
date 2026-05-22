@@ -36,6 +36,7 @@ data class WebFormSummary(
     val tenantId: UUID,
     val title: String,
     val isActive: Boolean,
+    val createLead: Boolean,
     val isDeleted: Boolean,
     val fields: List<WebFormFieldSummary>,
 )
