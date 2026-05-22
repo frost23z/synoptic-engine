@@ -16,9 +16,11 @@ class AssignLeadStageAction(
         if (ctx.event.entityType != "Lead") {
             throw IllegalStateException("assign_stage requires a Lead event")
         }
-        val stageId = UUID.fromString(ctx.action["stageId"]?.toString() ?: throw IllegalArgumentException("stageId is required"))
-        val leadId = targetPort.assignLeadStage(ctx.event.entityId, stageId)
-            ?: throw NoSuchElementException("Lead/stage not found for ${ctx.event.entityId}")
+        val stageId =
+            UUID.fromString(ctx.action["stageId"]?.toString() ?: throw IllegalArgumentException("stageId is required"))
+        val leadId =
+            targetPort.assignLeadStage(ctx.event.entityId, stageId)
+                ?: throw NoSuchElementException("Lead/stage not found for ${ctx.event.entityId}")
         return mapOf("leadId" to leadId, "stageId" to stageId)
     }
 }

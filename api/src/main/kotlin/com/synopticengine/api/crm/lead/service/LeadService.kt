@@ -1,13 +1,13 @@
 package com.synopticengine.api.crm.lead.service
 
-import com.synopticengine.api.crm.email.repo.EmailRepository
-import com.synopticengine.api.crm.email.service.toResponse
-import com.synopticengine.api.crm.email.web.EmailResponse
 import com.synopticengine.api.crm.contact.domain.ContactEntry
 import com.synopticengine.api.crm.contact.domain.Organization
 import com.synopticengine.api.crm.contact.domain.Person
 import com.synopticengine.api.crm.contact.repo.OrganizationRepository
 import com.synopticengine.api.crm.contact.repo.PersonRepository
+import com.synopticengine.api.crm.email.repo.EmailRepository
+import com.synopticengine.api.crm.email.service.toResponse
+import com.synopticengine.api.crm.email.web.EmailResponse
 import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.domain.LeadProduct
 import com.synopticengine.api.crm.lead.domain.LeadStatus
@@ -101,25 +101,6 @@ class LeadService(
             } else {
                 leadRepository.findAllByPipelineIdScopedAndDeletedAtIsNull(pipelineId, scopeIds)
             }
-
-            fun findRottenLeads(pipelineId: UUID?): List<LeadResponse> {
-                val scopeIds = scopeResolver.userIdsForCurrentUser()
-                val leads =
-                    if (scopeIds == null) {
-                        leadRepository.findOpenForRotten(pipelineId)
-                    } else {
-                        leadRepository.findOpenForRottenScoped(pipelineId, scopeIds)
-                    }
-                if (leads.isEmpty()) return emptyList()
-                val pipelinesById =
-                    pipelineRepository.findAllById(leads.map { it.pipelineId }.toSet()).associateBy { it.id!! }
-                val now = Instant.now()
-                return leads
-                    .filter { lead ->
-                        val rottenDays = pipelinesById[lead.pipelineId]?.rottenDays ?: 30
-                        lead.stageUpdatedAt.isBefore(now.minusSeconds(rottenDays.toLong() * 86_400))
-                    }.map { it.toResponse() }
-            }
         val leadsByStage = leads.groupBy { it.stageId }
         return stages.map { stage ->
             val stageLeads = leadsByStage[stage.id] ?: emptyList()
@@ -129,6 +110,24 @@ class LeadService(
                 totalAmount = stageLeads.sumOf { it.amount ?: BigDecimal.ZERO },
             )
         }
+    }
+
+    fun findRottenLeads(pipelineId: UUID?): List<LeadResponse> {
+        val scopeIds = scopeResolver.userIdsForCurrentUser()
+        val leads =
+            if (scopeIds == null) {
+                leadRepository.findOpenForRotten(pipelineId)
+            } else {
+                leadRepository.findOpenForRottenScoped(pipelineId, scopeIds)
+            }
+        if (leads.isEmpty()) return emptyList()
+        val pipelinesById = pipelineRepository.findAllById(leads.map { it.pipelineId }.toSet()).associateBy { it.id!! }
+        val now = Instant.now()
+        return leads
+            .filter { lead ->
+                val rottenDays = pipelinesById[lead.pipelineId]?.rottenDays ?: 30
+                lead.stageUpdatedAt.isBefore(now.minusSeconds(rottenDays.toLong() * 86_400))
+            }.map { it.toResponse() }
     }
 
     @Transactional
@@ -392,6 +391,7 @@ class LeadService(
                     organizationRepository.findActiveById(organizationId)
                         ?: throw NoSuchElementException("Organization not found: $organizationId")
                 }
+
                 !organizationName.isNullOrBlank() -> {
                     organizationRepository.save(
                         Organization().apply {
@@ -399,7 +399,10 @@ class LeadService(
                         },
                     )
                 }
-                else -> null
+
+                else -> {
+                    null
+                }
             }
         val person =
             personRepository.save(
@@ -411,11 +414,13 @@ class LeadService(
                     this.phone = phone
                     this.emails =
                         objectMapper.writeValueAsString(
-                            email?.takeIf { it.isNotBlank() }?.let { listOf(ContactEntry(it, "primary")) } ?: emptyList(),
+                            email?.takeIf { it.isNotBlank() }?.let { listOf(ContactEntry(it, "primary")) }
+                                ?: emptyList<ContactEntry>(),
                         )
                     this.contactNumbers =
                         objectMapper.writeValueAsString(
-                            phone?.takeIf { it.isNotBlank() }?.let { listOf(ContactEntry(it, "primary")) } ?: emptyList(),
+                            phone?.takeIf { it.isNotBlank() }?.let { listOf(ContactEntry(it, "primary")) }
+                                ?: emptyList<ContactEntry>(),
                         )
                     this.jobTitle = jobTitle
                 },

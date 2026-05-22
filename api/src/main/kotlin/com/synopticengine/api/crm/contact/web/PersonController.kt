@@ -128,6 +128,5 @@ class PersonController(
     @PreAuthorize("hasAuthority('contacts.edit')")
     fun merge(
         @RequestBody request: MergePersonRequest,
-    ): ResponseEntity<MergePersonResponse> =
-        ResponseEntity.ok(personService.merge(request.sourceId, request.targetId))
+    ): ResponseEntity<MergePersonResponse> = ResponseEntity.ok(personService.merge(request.sourceId, request.targetId))
 }

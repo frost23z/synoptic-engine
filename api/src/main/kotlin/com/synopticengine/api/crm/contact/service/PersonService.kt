@@ -188,7 +188,11 @@ class PersonService(
         val target = requirePerson(targetId)
         val mergedEmails = (readEntries(target.emails) + readEntries(source.emails)).distinctBy { it.value.lowercase() }
         val mergedPhones =
-            (readEntries(target.contactNumbers) + readEntries(source.contactNumbers)).distinctBy { it.value.lowercase() }
+            (
+                readEntries(
+                    target.contactNumbers,
+                ) + readEntries(source.contactNumbers)
+            ).distinctBy { it.value.lowercase() }
         target.emails = writeJson(mergedEmails)
         target.contactNumbers = writeJson(mergedPhones)
         if (target.email.isNullOrBlank()) target.email = source.email

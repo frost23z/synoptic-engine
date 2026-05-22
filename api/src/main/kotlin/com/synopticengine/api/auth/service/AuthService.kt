@@ -104,8 +104,9 @@ class AuthService(
         // A read-only leak of `user_password_resets` (e.g. backup snapshot)
         // therefore cannot be replayed to take over the account.
         val plaintextToken = generateResetToken()
-        val tokenHash = passwordEncoder.encode(plaintextToken)
-            ?: throw IllegalStateException("Token encoding failed")
+        val tokenHash =
+            passwordEncoder.encode(plaintextToken)
+                ?: throw IllegalStateException("Token encoding failed")
         passwordResetRepository.save(
             PasswordReset().apply {
                 this.email = email

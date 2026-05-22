@@ -4,7 +4,6 @@ import com.synopticengine.api.crm.email.service.EmailService
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
-import tools.jackson.databind.ObjectMapper
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.ContentDisposition
@@ -26,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
 @RestController

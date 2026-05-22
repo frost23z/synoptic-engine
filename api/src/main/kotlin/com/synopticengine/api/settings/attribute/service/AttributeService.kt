@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.core.type.TypeReference
 import tools.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import java.util.UUID
 
 @Service
@@ -27,7 +28,13 @@ class AttributeService(
 ) {
     fun findAll(entityType: String?): List<AttributeResponse> =
         buildResponses(
-            if (entityType != null) attributeRepository.findAllByEntityType(entityType) else attributeRepository.findAll(),
+            if (entityType !=
+                null
+            ) {
+                attributeRepository.findAllByEntityType(entityType)
+            } else {
+                attributeRepository.findAll()
+            },
         )
 
     fun findById(id: UUID): AttributeResponse =
@@ -246,7 +253,11 @@ class AttributeService(
 
     private fun buildResponses(attributes: List<Attribute>): List<AttributeResponse> {
         if (attributes.isEmpty()) return emptyList()
-        val byAttributeId = optionRepository.findAllByAttributeIdIn(attributes.mapNotNull { it.id }).groupBy { it.attributeId }
+        val byAttributeId =
+            optionRepository
+                .findAllByAttributeIdIn(
+                    attributes.mapNotNull { it.id },
+                ).groupBy { it.attributeId }
         return attributes.map { attr -> attr.toResponse(byAttributeId[attr.id] ?: emptyList()) }
     }
 
@@ -289,13 +300,12 @@ fun Attribute.toResponseWithLoadedOptions(): AttributeResponse = toResponse(opti
 
 private fun readValidationRules(json: String): Map<String, Any?> =
     try {
-        tools.jackson.databind.json.JsonMapper
-            .builder()
-            .build()
-            .readValue(json, object : TypeReference<Map<String, Any?>>() {})
+        VALIDATION_RULES_MAPPER.readValue(json, object : TypeReference<Map<String, Any?>>() {})
     } catch (_: Exception) {
         emptyMap()
     }
+
+private val VALIDATION_RULES_MAPPER: JsonMapper = JsonMapper.builder().build()
 
 fun AttributeOption.toResponse() =
     AttributeOptionResponse(

@@ -1,14 +1,14 @@
 package com.synopticengine.api.crm.email.service
 
+import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.email.domain.Email
 import com.synopticengine.api.crm.email.domain.EmailAttachment
 import com.synopticengine.api.crm.email.domain.EmailStatus
-import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.email.repo.EmailAttachmentRepository
 import com.synopticengine.api.crm.email.repo.EmailRepository
-import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.email.web.EmailAttachmentResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
+import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
 import com.synopticengine.api.shared.TenantContext
@@ -348,8 +348,10 @@ class EmailService(
                         this.messageId = messageId
                         this.referenceIds = normalizedReferences
                         this.parentId = parent?.id
-                        this.personId = detectedPersonId?.takeIf { personRepository.findActiveById(it) != null } ?: parent?.personId
-                        this.leadId = detectedLeadId?.takeIf { leadRepository.findActiveById(it) != null } ?: parent?.leadId
+                        this.personId =
+                            detectedPersonId?.takeIf { personRepository.findActiveById(it) != null } ?: parent?.personId
+                        this.leadId =
+                            detectedLeadId?.takeIf { leadRepository.findActiveById(it) != null } ?: parent?.leadId
                     },
                 )
             }
@@ -361,9 +363,15 @@ class EmailService(
         key: String,
     ): UUID? {
         if (body.isNullOrBlank()) return null
-        val regex = Regex("$key[#:=\\s]+([0-9a-fA-F-]{36})", RegexOption.IGNORE_CASE)
+        val regex = ENTITY_ID_REGEX_BY_KEY.getOrPut(key.lowercase()) {
+            Regex("${key.lowercase()}[#:=\\s]+([0-9a-fA-F-]{36})", RegexOption.IGNORE_CASE)
+        }
         val value = regex.find(body)?.groupValues?.getOrNull(1) ?: return null
         return runCatching { UUID.fromString(value) }.getOrNull()
+    }
+
+    private companion object {
+        val ENTITY_ID_REGEX_BY_KEY: MutableMap<String, Regex> = mutableMapOf()
     }
 
     // Tenant-aware load. JpaRepository.findById bypasses Hibernate's

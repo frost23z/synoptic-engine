@@ -3,6 +3,7 @@ package com.synopticengine.api.settings.emailtemplate.service
 import com.synopticengine.api.settings.emailtemplate.domain.EmailTemplate
 import com.synopticengine.api.settings.emailtemplate.repo.EmailTemplateRepository
 import com.synopticengine.api.settings.emailtemplate.web.EmailTemplateResponse
+import com.synopticengine.api.shared.email.interpolateTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -75,8 +76,8 @@ class EmailTemplateService(
         return EmailTemplateResponse(
             id = template.id!!,
             name = template.name,
-            subject = substituteVariables(template.subject, context),
-            content = substituteVariables(template.content, context),
+            subject = interpolateTemplate(template.subject, context),
+            content = interpolateTemplate(template.content, context),
             isPredefined = template.isPredefined,
             createdAt = template.createdAt,
             updatedAt = template.updatedAt,
@@ -99,13 +100,3 @@ fun EmailTemplate.toResponse() =
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
-
-private fun substituteVariables(
-    template: String,
-    context: Map<String, String>,
-): String =
-    Regex("\\{\\{\\s*([a-zA-Z0-9_.-]+)\\s*\\}\\}")
-        .replace(template) { match ->
-            val key = match.groupValues[1]
-            context[key] ?: ""
-        }

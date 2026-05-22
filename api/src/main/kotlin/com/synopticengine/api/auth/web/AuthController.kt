@@ -30,7 +30,12 @@ class AuthController(
         // Trust X-Forwarded-For only if your edge sets it (load balancer / nginx);
         // fall back to the socket peer. Take the leftmost entry — that's the
         // client per RFC 7239 — and strip any port.
-        val forwarded = req.getHeader("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
+        val forwarded =
+            req
+                .getHeader("X-Forwarded-For")
+                ?.split(",")
+                ?.firstOrNull()
+                ?.trim()
         return (forwarded?.takeIf { it.isNotBlank() } ?: req.remoteAddr ?: "unknown").substringBefore(':')
     }
 

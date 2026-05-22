@@ -33,7 +33,12 @@ class SecretsGuard(
     @PostConstruct
     fun verify() {
         val activeProfiles = environment.activeProfiles.toSet()
-        val devProfiles = devProfilesCsv.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        val devProfiles =
+            devProfilesCsv
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .toSet()
         val isDevDeployment = activeProfiles.isEmpty() || activeProfiles.any { it in devProfiles }
 
         val violations = mutableListOf<String>()

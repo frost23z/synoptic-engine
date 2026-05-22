@@ -16,9 +16,11 @@ class AssignLeadUserAction(
         if (ctx.event.entityType != "Lead") {
             throw IllegalStateException("assign_user requires a Lead event")
         }
-        val userId = UUID.fromString(ctx.action["userId"]?.toString() ?: throw IllegalArgumentException("userId is required"))
-        val leadId = targetPort.assignLeadUser(ctx.event.entityId, userId)
-            ?: throw NoSuchElementException("Lead not found: ${ctx.event.entityId}")
+        val userId =
+            UUID.fromString(ctx.action["userId"]?.toString() ?: throw IllegalArgumentException("userId is required"))
+        val leadId =
+            targetPort.assignLeadUser(ctx.event.entityId, userId)
+                ?: throw NoSuchElementException("Lead not found: ${ctx.event.entityId}")
         return mapOf("leadId" to leadId, "userId" to userId)
     }
 }

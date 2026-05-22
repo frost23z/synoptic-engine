@@ -16,9 +16,11 @@ class AssignLeadGroupAction(
         if (ctx.event.entityType != "Lead") {
             throw IllegalStateException("assign_group requires a Lead event")
         }
-        val groupId = UUID.fromString(ctx.action["groupId"]?.toString() ?: throw IllegalArgumentException("groupId is required"))
-        val leadId = targetPort.assignLeadGroup(ctx.event.entityId, groupId)
-            ?: throw NoSuchElementException("Lead/group not found for ${ctx.event.entityId}")
+        val groupId =
+            UUID.fromString(ctx.action["groupId"]?.toString() ?: throw IllegalArgumentException("groupId is required"))
+        val leadId =
+            targetPort.assignLeadGroup(ctx.event.entityId, groupId)
+                ?: throw NoSuchElementException("Lead/group not found for ${ctx.event.entityId}")
         return mapOf("leadId" to leadId, "groupId" to groupId)
     }
 }

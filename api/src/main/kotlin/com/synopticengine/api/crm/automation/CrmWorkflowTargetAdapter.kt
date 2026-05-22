@@ -13,9 +13,7 @@ import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.crm.lead.service.LeadService
 import com.synopticengine.api.crm.tag.domain.Tag
 import com.synopticengine.api.crm.tag.repo.TagRepository
-import com.synopticengine.api.identity.repo.GroupRepository
-import com.synopticengine.api.identity.repo.UserRepository
-import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.shared.automation.WorkflowTargetPort
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -41,8 +39,7 @@ class CrmWorkflowTargetAdapter(
     private val leadService: LeadService,
     private val pipelineRepository: PipelineRepository,
     private val stageRepository: StageRepository,
-    private val groupRepository: GroupRepository,
-    private val userRepository: UserRepository,
+    private val identityApi: IdentityApi,
 ) : WorkflowTargetPort {
     private val log = LoggerFactory.getLogger(CrmWorkflowTargetAdapter::class.java)
 
@@ -172,9 +169,7 @@ class CrmWorkflowTargetAdapter(
         groupId: UUID,
     ): UUID? {
         val lead = leadRepository.findActiveById(leadId) ?: return null
-        if (groupRepository.findActiveById(groupId) == null) return null
-        val tenantId = TenantContext.get() ?: return null
-        val candidateUserId = userRepository.findActiveIdsByGroupId(groupId, tenantId).firstOrNull() ?: return null
+        val candidateUserId = identityApi.findFirstActiveUserInGroup(groupId) ?: return null
         lead.userId = candidateUserId
         leadRepository.save(lead)
         return lead.id
