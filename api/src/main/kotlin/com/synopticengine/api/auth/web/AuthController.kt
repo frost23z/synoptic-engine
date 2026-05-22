@@ -65,8 +65,9 @@ class AuthController(
     @PostMapping("/forgot-password")
     fun forgotPassword(
         @Valid @RequestBody request: ForgotPasswordRequest,
+        httpRequest: HttpServletRequest,
     ): ResponseEntity<Void> {
-        authService.forgotPassword(request.email)
+        authService.forgotPassword(request.email, clientIp(httpRequest))
         return ResponseEntity.noContent().build()
     }
 
