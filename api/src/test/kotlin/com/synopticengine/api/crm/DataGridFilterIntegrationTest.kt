@@ -55,7 +55,11 @@ class DataGridFilterIntegrationTest : AbstractIntegrationTest() {
             post(
                 "/api/datagrid/saved-filters",
                 token,
-                mapOf("name" to "bad", "src" to "leads", "applied" to mapOf("status" to mapOf("op" to "eq", "value" to "open"))),
+                mapOf(
+                    "name" to "bad",
+                    "src" to "leads",
+                    "applied" to mapOf("status" to mapOf("op" to "eq", "value" to "open")),
+                ),
             ).status(),
         )
     }

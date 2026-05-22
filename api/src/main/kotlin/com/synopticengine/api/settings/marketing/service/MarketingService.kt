@@ -27,8 +27,7 @@ class MarketingService(
 
     fun findAllEvents(): List<MarketingEventResponse> = eventRepository.findAll().map { it.toResponse() }
 
-    fun findEventById(id: UUID): MarketingEventResponse =
-        requireEvent(id).toResponse()
+    fun findEventById(id: UUID): MarketingEventResponse = requireEvent(id).toResponse()
 
     @Transactional
     fun createEvent(
@@ -68,8 +67,7 @@ class MarketingService(
 
     fun findAllCampaigns(): List<MarketingCampaignResponse> = campaignRepository.findAll().map { it.toResponse() }
 
-    fun findCampaignById(id: UUID): MarketingCampaignResponse =
-        requireCampaign(id).toResponse()
+    fun findCampaignById(id: UUID): MarketingCampaignResponse = requireCampaign(id).toResponse()
 
     @Transactional
     fun createCampaign(

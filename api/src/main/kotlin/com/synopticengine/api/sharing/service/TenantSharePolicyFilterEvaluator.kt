@@ -39,9 +39,19 @@ class TenantSharePolicyFilterEvaluator(
             if (hasAll) requireArray(node.get("all"), "filterJson.all must be an array")
             if (hasNot) validateShape(node.get("not"))
             if (hasRule) {
-                val field = node.get("field")?.asText()?.trim().orEmpty()
+                val field =
+                    node
+                        .get("field")
+                        ?.asText()
+                        ?.trim()
+                        .orEmpty()
                 if (field.isBlank()) throw IllegalArgumentException("filterJson rule field is required")
-                val op = node.get("op")?.asText()?.lowercase()?.ifBlank { "eq" } ?: "eq"
+                val op =
+                    node
+                        .get("op")
+                        ?.asText()
+                        ?.lowercase()
+                        ?.ifBlank { "eq" } ?: "eq"
                 if (op !in SUPPORTED_OPS) throw IllegalArgumentException("Unsupported filterJson operator: $op")
             }
             node.get("any")?.forEach { validateShape(it) }
@@ -82,7 +92,12 @@ class TenantSharePolicyFilterEvaluator(
         resource: JsonNode,
     ): Boolean {
         val field = rule.get("field").asText()
-        val op = rule.get("op")?.asText()?.lowercase()?.ifBlank { "eq" } ?: "eq"
+        val op =
+            rule
+                .get("op")
+                ?.asText()
+                ?.lowercase()
+                ?.ifBlank { "eq" } ?: "eq"
         val actual = getPath(resource, field)
         val expected = rule.get("value")
         return compare(actual, expected, op)

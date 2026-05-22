@@ -104,7 +104,10 @@ class DataGridFilterService(
         key: String,
     ) {
         when (value) {
-            is String, is Number, is Boolean -> return
+            is String, is Number, is Boolean -> {
+                return
+            }
+
             is List<*> -> {
                 if (value.size > MAX_FILTER_LIST_VALUES) {
                     throw IllegalArgumentException("Too many values for filter '$key'")
@@ -115,7 +118,9 @@ class DataGridFilterService(
                 return
             }
 
-            else -> throw IllegalArgumentException("Unsupported filter value type for '$key'")
+            else -> {
+                throw IllegalArgumentException("Unsupported filter value type for '$key'")
+            }
         }
     }
 
@@ -157,7 +162,11 @@ class DataGridFilterService(
 
         val SOURCE_ALLOWED_KEYS =
             mapOf(
-                "leads" to (COMMON_ALLOWED_KEYS + setOf("pipelineId", "stageId", "personId", "organizationId", "sourceId", "typeId")),
+                "leads" to
+                    (
+                        COMMON_ALLOWED_KEYS +
+                            setOf("pipelineId", "stageId", "personId", "organizationId", "sourceId", "typeId")
+                    ),
                 "persons" to (COMMON_ALLOWED_KEYS + setOf("organizationId")),
                 "organizations" to (COMMON_ALLOWED_KEYS + setOf("country", "state", "city")),
                 "products" to (COMMON_ALLOWED_KEYS + setOf("sku", "price", "inventory")),
