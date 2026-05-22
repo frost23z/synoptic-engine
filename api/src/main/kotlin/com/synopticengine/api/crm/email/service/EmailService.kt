@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
+import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -90,10 +91,12 @@ class EmailService(
         }
         // Also accept fresh multipart uploads bundled with the compose request.
         uploads.forEach { upload ->
+            val originalName = upload.originalFilename ?: upload.name
+            val safeName = Path.of(originalName).fileName?.toString() ?: "upload.bin"
             val storedPath =
                 storageService.store(
                     directory = "emails/${email.id}",
-                    filename = "${UUID.randomUUID()}_${upload.originalFilename ?: upload.name}",
+                    filename = "${UUID.randomUUID()}_$safeName",
                     bytes = upload.bytes,
                     contentType = upload.contentType ?: "application/octet-stream",
                 )
@@ -291,21 +294,9 @@ class EmailService(
 
     fun downloadAttachment(attachmentId: UUID): Pair<ByteArray, EmailAttachment> {
         val attachment =
-            attachmentRepository
-                .findById(attachmentId)
-                .orElseThrow { NoSuchElementException("Attachment not found: $attachmentId") }
-        val path =
-            java.nio.file.Path
-                .of(attachment.attachmentPath)
-        val bytes =
-            if (java.nio.file.Files
-                    .exists(path)
-            ) {
-                java.nio.file.Files
-                    .readAllBytes(path)
-            } else {
-                ByteArray(0)
-            }
+            attachmentRepository.findActiveById(attachmentId)
+                ?: throw NoSuchElementException("Attachment not found: $attachmentId")
+        val bytes = runCatching { storageService.load(attachment.attachmentPath) }.getOrDefault(ByteArray(0))
         return bytes to attachment
     }
 
@@ -444,6 +435,8 @@ fun Email.toResponse() =
         personId = personId,
         leadId = leadId,
         parentId = parentId,
+        messageId = messageId,
+        referenceIds = referenceIds,
         attachments = attachments.map { it.toResponse() },
         tags = tags.map { it.toResponse() },
         createdAt = createdAt,

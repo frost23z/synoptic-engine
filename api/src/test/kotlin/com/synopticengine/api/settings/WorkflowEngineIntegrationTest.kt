@@ -178,6 +178,37 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
         assertTrue(content.isNotEmpty())
     }
 
+    @Test
+    fun `lead stage_changed workflows fire when a lead is moved to another stage`() {
+        val tagName = "wf-stage-tag-${UUID.randomUUID().toString().take(8)}"
+        val wfBody =
+            post(
+                "/api/settings/workflows",
+                adminToken,
+                mapOf(
+                    "name" to "Stage change WF ${UUID.randomUUID()}",
+                    "eventName" to "lead.stage_changed",
+                    "actions" to listOf(mapOf("type" to "add_tag", "tagName" to tagName)),
+                    "isActive" to true,
+                ),
+            ).bodyAsMap()!!
+        val workflowId = UUID.fromString(wfBody["id"] as String)
+
+        val lead = leadFactory.create(adminToken, title = "Stage trigger lead")
+        val leadId = UUID.fromString(lead["id"] as String)
+        val pipelineId = lead["pipelineId"] as String
+        val currentStageId = lead["stageId"] as String
+        val targetStageId = resolveAnotherStageId(pipelineId, currentStageId)
+
+        val moved = patch("/api/leads/$leadId/stage", adminToken, mapOf("stageId" to targetStageId))
+        assertEquals(200, moved.status())
+
+        waitForRun(workflowId)
+
+        val tags = (get("/api/leads/$leadId", adminToken).bodyAsMap()!!["tags"] as List<*>)
+        assertTrue(tags.any { (it as Map<*, *>)["name"] == tagName }, "expected tag $tagName on lead")
+    }
+
     /**
      * The engine handler is `@Async`. Poll for up to ~5s for a run to appear.
      * Avoids the flake of an ill-placed Thread.sleep.
@@ -194,5 +225,26 @@ class WorkflowEngineIntegrationTest : AbstractIntegrationTest() {
             if (found) return
             Thread.sleep(100)
         }
+    }
+
+    private fun resolveAnotherStageId(
+        pipelineId: String,
+        currentStageId: String,
+    ): String {
+        @Suppress("UNCHECKED_CAST")
+        val stages = (get("/api/pipelines/$pipelineId", adminToken).bodyAsMap()!!["stages"] as List<Map<String, Any>>)
+        val existing = stages.firstOrNull { it["id"] as String != currentStageId }?.get("id") as String?
+        if (existing != null) return existing
+        val created =
+            post(
+                "/api/pipelines/$pipelineId/stages",
+                adminToken,
+                mapOf(
+                    "name" to "WF Stage ${UUID.randomUUID().toString().take(6)}",
+                    "sortOrder" to 999,
+                    "probability" to 10,
+                ),
+            ).bodyAsMap()!!
+        return created["id"] as String
     }
 }

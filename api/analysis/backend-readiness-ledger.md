@@ -12,7 +12,7 @@ It must be deleted after all tracked issues are completed.
 
 - [x] `DONE` Enforce activity meeting-overlap validation on create/update
 - [x] `DONE` Harden imports flow (replace no-op phases and remove brittle lead defaults)
-- [ ] `IN_PROGRESS` Close web-form parity gaps (create_lead behavior + remaining schema/API mismatches)
-- [ ] `TODO` Improve email readiness gaps (thread retrieval shape + safer file path handling)
-- [ ] `TODO` Expand workflow trigger coverage across CRM mutation events
-- [ ] `TODO` Align permission granularity for frontend parity
+- [x] `DONE` Close web-form parity gaps (create_lead behavior + remaining schema/API mismatches)
+- [x] `DONE` Improve email readiness gaps (thread retrieval shape + safer file path handling)
+- [x] `DONE` Expand workflow trigger coverage across CRM mutation events
+- [ ] `IN_PROGRESS` Align permission granularity for frontend parity

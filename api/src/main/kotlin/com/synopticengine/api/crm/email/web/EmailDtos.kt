@@ -26,6 +26,8 @@ data class EmailResponse(
     val personId: UUID?,
     val leadId: UUID?,
     val parentId: UUID?,
+    val messageId: String?,
+    val referenceIds: List<String>?,
     val attachments: List<EmailAttachmentResponse>,
     val tags: List<TagResponse> = emptyList(),
     val createdAt: Instant?,

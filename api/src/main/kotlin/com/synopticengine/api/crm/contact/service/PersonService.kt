@@ -120,7 +120,9 @@ class PersonService(
         person.emails = writeJson(resolvedEmails)
         person.contactNumbers = writeJson(resolvedNumbers)
         person.jobTitle = jobTitle
-        return personRepository.save(person).toResponse()
+        val saved = personRepository.save(person)
+        eventPublisher.publishEvent(DomainEvent("person.updated", "Person", saved.id!!))
+        return saved.toResponse()
     }
 
     @Transactional

@@ -27,6 +27,8 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                     "to" to "inbox+00000000-0000-0000-0000-000000000001@synoptic.dev",
                     "subject" to "Test inbound",
                     "body" to "Hello",
+                    "messageId" to "<m1@example.com>",
+                    "references" to listOf("<parent@example.com>"),
                 ),
             )
         val result =
@@ -39,6 +41,9 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                         .content(body),
                 ).andReturn()
         assertEquals(201, result.response.status, result.response.contentAsString)
+        val json = objectMapper.readTree(result.response.contentAsString)
+        assertEquals("<m1@example.com>", json["messageId"].asText())
+        assertEquals("<parent@example.com>", json["referenceIds"][0].asText())
     }
 
     @Test
