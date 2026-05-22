@@ -75,4 +75,16 @@ interface EmailRepository : JpaRepository<Email, UUID> {
     fun findThreadParentsByMessageIds(
         @Param("messageIds") messageIds: Collection<String>,
     ): List<Email>
+
+    @Query(
+        """
+        SELECT e.tenantId FROM Email e
+        WHERE e.deletedAt IS NULL
+          AND e.messageId IN :messageIds
+        ORDER BY e.createdAt DESC
+    """,
+    )
+    fun findTenantIdsByMessageIds(
+        @Param("messageIds") messageIds: Collection<String>,
+    ): List<UUID>
 }

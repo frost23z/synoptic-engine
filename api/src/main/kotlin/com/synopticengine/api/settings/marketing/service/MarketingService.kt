@@ -28,11 +28,7 @@ class MarketingService(
     fun findAllEvents(): List<MarketingEventResponse> = eventRepository.findAll().map { it.toResponse() }
 
     fun findEventById(id: UUID): MarketingEventResponse =
-        eventRepository
-            .findById(
-                id,
-            ).orElseThrow { NoSuchElementException("Marketing event not found: $id") }
-            .toResponse()
+        requireEvent(id).toResponse()
 
     @Transactional
     fun createEvent(
@@ -53,8 +49,7 @@ class MarketingService(
         name: String,
         description: String?,
     ): MarketingEventResponse {
-        val event =
-            eventRepository.findById(id).orElseThrow { NoSuchElementException("Marketing event not found: $id") }
+        val event = requireEvent(id)
         event.name = name
         event.description = description
         return eventRepository.save(event).toResponse()
@@ -62,23 +57,19 @@ class MarketingService(
 
     @Transactional
     fun deleteEvent(id: UUID) {
-        if (!eventRepository.existsById(id)) throw NoSuchElementException("Marketing event not found: $id")
-        eventRepository.deleteById(id)
+        eventRepository.delete(requireEvent(id))
     }
 
     @Transactional
     fun massDestroyEvents(ids: List<UUID>) =
-        ids.filter { eventRepository.existsById(it) }.forEach { eventRepository.deleteById(it) }
+        ids.forEach { id -> eventRepository.findActiveById(id)?.let { eventRepository.delete(it) } }
 
     // ── Marketing Campaigns ───────────────────────────────────────────────
 
     fun findAllCampaigns(): List<MarketingCampaignResponse> = campaignRepository.findAll().map { it.toResponse() }
 
     fun findCampaignById(id: UUID): MarketingCampaignResponse =
-        campaignRepository
-            .findById(id)
-            .orElseThrow { NoSuchElementException("Marketing campaign not found: $id") }
-            .toResponse()
+        requireCampaign(id).toResponse()
 
     @Transactional
     fun createCampaign(
@@ -108,8 +99,7 @@ class MarketingService(
         eventId: UUID?,
         emailTemplateId: UUID?,
     ): MarketingCampaignResponse {
-        val campaign =
-            campaignRepository.findById(id).orElseThrow { NoSuchElementException("Marketing campaign not found: $id") }
+        val campaign = requireCampaign(id)
         campaign.name = name
         campaign.subject = subject
         campaign.description = description
@@ -120,13 +110,12 @@ class MarketingService(
 
     @Transactional
     fun deleteCampaign(id: UUID) {
-        if (!campaignRepository.existsById(id)) throw NoSuchElementException("Marketing campaign not found: $id")
-        campaignRepository.deleteById(id)
+        campaignRepository.delete(requireCampaign(id))
     }
 
     @Transactional
     fun massDestroyCampaigns(ids: List<UUID>) =
-        ids.filter { campaignRepository.existsById(it) }.forEach { campaignRepository.deleteById(it) }
+        ids.forEach { id -> campaignRepository.findActiveById(id)?.let { campaignRepository.delete(it) } }
 
     @Transactional
     fun executeCampaign(
@@ -134,8 +123,7 @@ class MarketingService(
         recipients: List<String>,
         context: Map<String, String>,
     ): ExecuteMarketingCampaignResponse {
-        val campaign =
-            campaignRepository.findById(id).orElseThrow { NoSuchElementException("Marketing campaign not found: $id") }
+        val campaign = requireCampaign(id)
         val subject = interpolateTemplate(campaign.subject, context)
         val bodyTemplate =
             campaign.emailTemplateId
@@ -153,6 +141,12 @@ class MarketingService(
             sent = sentCounter.get(),
         )
     }
+
+    private fun requireEvent(id: UUID): MarketingEvent =
+        eventRepository.findActiveById(id) ?: throw NoSuchElementException("Marketing event not found: $id")
+
+    private fun requireCampaign(id: UUID): MarketingCampaign =
+        campaignRepository.findActiveById(id) ?: throw NoSuchElementException("Marketing campaign not found: $id")
 }
 
 fun MarketingEvent.toResponse() =

@@ -327,11 +327,9 @@ class EmailService(
             }.distinct()
         val detectedPersonId = extractEntityId(body, "person")
         val detectedLeadId = extractEntityId(body, "lead")
-        // The inbound endpoint is public, so no JWT has populated TenantContext.
-        // Until Phase 2 resolves the tenant from the recipient address, land the
-        // email in the seed tenant so BaseEntity.@PrePersist has a tenant to assign.
+        val tenantId = resolveInboundTenantId(to, threadMessageIds)
         val email =
-            TenantContext.runAs(TenantContext.SEED_TENANT_ID) {
+            TenantContext.runAs(tenantId) {
                 val parent =
                     if (threadMessageIds.isEmpty()) {
                         null
@@ -359,6 +357,49 @@ class EmailService(
         return email.toResponse()
     }
 
+    private fun resolveInboundTenantId(
+        to: String,
+        threadMessageIds: List<String>,
+    ): UUID {
+        resolveTenantFromRecipient(to)?.let { return it }
+        if (threadMessageIds.isNotEmpty()) {
+            emailRepository.findTenantIdsByMessageIds(threadMessageIds).firstOrNull()?.let { return it }
+        }
+        throw IllegalArgumentException("Unable to resolve tenant for inbound email recipient")
+    }
+
+    private fun resolveTenantFromRecipient(to: String): UUID? {
+        val directHit =
+            UUID_REGEX
+                .find(to)
+                ?.value
+                ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+        if (directHit != null) return directHit
+        return EMAIL_REGEX
+            .findAll(to)
+            .mapNotNull { match ->
+                val local = match.groupValues[1].lowercase()
+                candidateTenantTokens(local)
+                    .asSequence()
+                    .mapNotNull { token ->
+                        UUID_REGEX
+                            .find(token)
+                            ?.value
+                            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                    }.firstOrNull()
+            }.firstOrNull()
+    }
+
+    private fun candidateTenantTokens(localPart: String): List<String> {
+        val plusPart = localPart.substringAfter('+', "")
+        return buildList {
+            add(localPart)
+            if (plusPart.isNotBlank()) add(plusPart)
+            if (localPart.startsWith("tenant-")) add(localPart.removePrefix("tenant-"))
+            if (plusPart.startsWith("tenant-")) add(plusPart.removePrefix("tenant-"))
+        }
+    }
+
     private fun extractEntityId(
         body: String?,
         key: String,
@@ -375,6 +416,8 @@ class EmailService(
 
     private companion object {
         val ENTITY_ID_REGEX_BY_KEY: ConcurrentHashMap<String, Regex> = ConcurrentHashMap()
+        val EMAIL_REGEX: Regex = Regex("([a-zA-Z0-9._%+\\-]+)@[a-zA-Z0-9.-]+")
+        val UUID_REGEX: Regex = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 
     // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
