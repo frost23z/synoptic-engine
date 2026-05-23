@@ -1,5 +1,7 @@
 package com.synopticengine.api.crm.contact.web
 
+import com.synopticengine.api.crm.activity.service.ActivityService
+import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.crm.contact.service.PersonService
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.validation.Valid
@@ -23,6 +25,7 @@ import java.util.UUID
 @RequestMapping($$"${api.base-path}/contacts/persons")
 class PersonController(
     private val personService: PersonService,
+    private val activityService: ActivityService,
 ) {
     @GetMapping
     @PreAuthorize("hasAuthority('contacts.view')")
@@ -123,6 +126,29 @@ class PersonController(
         @PathVariable id: UUID,
         @PathVariable tagId: UUID,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.detachTag(id, tagId))
+
+    @GetMapping("/{id}/activities")
+    @PreAuthorize("hasAuthority('contacts.view')")
+    fun getActivities(
+        @PathVariable id: UUID,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<PageResponse<ActivityResponse>> {
+        val pageable = PageRequest.of(page, size, Sort.by("scheduleFrom").descending())
+        return ResponseEntity.ok(
+            activityService.filter(
+                leadId = null,
+                personId = id,
+                organizationId = null,
+                userId = null,
+                type = null,
+                isDone = null,
+                productId = null,
+                warehouseId = null,
+                pageable = pageable,
+            ),
+        )
+    }
 
     @PostMapping("/merge")
     @PreAuthorize("hasAuthority('contacts.edit')")

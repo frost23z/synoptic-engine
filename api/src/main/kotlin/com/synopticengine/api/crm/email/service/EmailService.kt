@@ -8,11 +8,11 @@ import com.synopticengine.api.crm.email.repo.EmailAttachmentRepository
 import com.synopticengine.api.crm.email.repo.EmailRepository
 import com.synopticengine.api.crm.email.web.EmailAttachmentResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
+import com.synopticengine.api.crm.email.web.EmailThreadResponse
 import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
 import com.synopticengine.api.shared.TenantContext
-import com.synopticengine.api.shared.email.MailSenderService
 import com.synopticengine.api.shared.storage.StorageService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
 @Transactional(readOnly = true)
 class EmailService(
     private val emailRepository: EmailRepository,
-    private val mailSenderService: MailSenderService,
+    private val emailDeliveryService: EmailDeliveryService,
     private val tagRepository: TagRepository,
     private val attachmentRepository: EmailAttachmentRepository,
     private val storageService: StorageService,
@@ -43,6 +43,17 @@ class EmailService(
     }
 
     fun findById(id: UUID): EmailResponse = requireEmail(id).toResponse()
+
+    fun findThreadById(id: UUID): EmailThreadResponse {
+        val requested = requireEmail(id)
+        val rootId = requested.parentId ?: requested.id!!
+        val thread = emailRepository.findThreadByRootId(rootId)
+        val root = thread.firstOrNull { it.id == rootId } ?: requireEmail(rootId)
+        return EmailThreadResponse(
+            root = root.toResponse(),
+            messages = thread.map { it.toResponse() },
+        )
+    }
 
     @Transactional
     fun compose(
@@ -112,18 +123,14 @@ class EmailService(
             )
         }
         if (!isDraft) {
-            try {
-                mailSenderService.sendEmail(to, subject ?: "", body ?: "", cc, bcc)
-                email.status = EmailStatus.SENT
-                emailRepository.save(email)
-            } catch (ex: Exception) {
-                email.status = EmailStatus.FAILED
-                emailRepository.save(email)
-                throw ex
-            }
+            email.status = EmailStatus.OUTBOX
+            email.folders = listOf("outbox")
+            emailRepository.save(email)
+            val emailId = checkNotNull(email.id) { "Saved email id must not be null" }
+            emailDeliveryService.deliver(emailId, to, subject ?: "", body ?: "", cc, bcc)
         }
         // Re-read so the attachments collection is populated for the response.
-        val refreshed = emailRepository.findById(email.id!!).get()
+        val refreshed = requireEmail(checkNotNull(email.id) { "Saved email id must not be null" })
         return refreshed.toResponse()
     }
 
@@ -135,24 +142,19 @@ class EmailService(
             throw IllegalStateException("Email $id is already SENT")
         }
         val to = email.from?.get("email") ?: throw IllegalStateException("Draft has no recipient")
-        return try {
-            email.status = EmailStatus.OUTBOX
-            emailRepository.save(email)
-            mailSenderService.sendEmail(
-                to,
-                email.subject ?: "",
-                email.body ?: "",
-                email.cc?.mapNotNull { it["email"] },
-                email.bcc?.mapNotNull { it["email"] },
-            )
-            email.status = EmailStatus.SENT
-            email.folders = listOf("sent")
-            emailRepository.save(email).toResponse()
-        } catch (ex: Exception) {
-            email.status = EmailStatus.FAILED
-            emailRepository.save(email)
-            throw ex
-        }
+        email.status = EmailStatus.OUTBOX
+        email.folders = listOf("outbox")
+        emailRepository.save(email)
+        val emailId = checkNotNull(email.id) { "Saved draft id must not be null" }
+        emailDeliveryService.deliver(
+            emailId,
+            to,
+            email.subject ?: "",
+            email.body ?: "",
+            email.cc?.mapNotNull { it["email"] },
+            email.bcc?.mapNotNull { it["email"] },
+        )
+        return requireEmail(emailId).toResponse()
     }
 
     /** P3.3: forward an existing email to a new recipient. */
@@ -193,17 +195,12 @@ class EmailService(
                     if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
                 },
             )
-        return try {
-            forwarded.status = EmailStatus.OUTBOX
-            emailRepository.save(forwarded)
-            mailSenderService.sendEmail(to, subject, combinedBody, cc, bcc)
-            forwarded.status = EmailStatus.SENT
-            emailRepository.save(forwarded).toResponse()
-        } catch (ex: Exception) {
-            forwarded.status = EmailStatus.FAILED
-            emailRepository.save(forwarded)
-            throw ex
-        }
+        forwarded.status = EmailStatus.OUTBOX
+        forwarded.folders = listOf("outbox")
+        emailRepository.save(forwarded)
+        val forwardedId = checkNotNull(forwarded.id) { "Saved forwarded email id must not be null" }
+        emailDeliveryService.deliver(forwardedId, to, subject, combinedBody, cc, bcc)
+        return requireEmail(forwardedId).toResponse()
     }
 
     @Transactional
@@ -276,8 +273,8 @@ class EmailService(
         val email = requireEmail(emailId)
         val tag =
             tagRepository
-                .findById(tagId)
-                .orElseThrow { NoSuchElementException("Tag not found: $tagId") }
+                .findActiveById(tagId)
+                ?: throw NoSuchElementException("Tag not found: $tagId")
         email.tags.add(tag)
         return emailRepository.save(email).toResponse()
     }

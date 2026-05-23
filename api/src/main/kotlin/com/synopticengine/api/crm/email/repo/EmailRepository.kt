@@ -68,6 +68,18 @@ interface EmailRepository : JpaRepository<Email, UUID> {
         """
         SELECT e FROM Email e
         WHERE e.deletedAt IS NULL
+          AND (e.id = :rootId OR e.parentId = :rootId)
+        ORDER BY e.createdAt ASC
+    """,
+    )
+    fun findThreadByRootId(
+        @Param("rootId") rootId: UUID,
+    ): List<Email>
+
+    @Query(
+        """
+        SELECT e FROM Email e
+        WHERE e.deletedAt IS NULL
           AND e.messageId IN :messageIds
         ORDER BY e.createdAt DESC
     """,
