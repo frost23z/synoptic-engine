@@ -56,6 +56,8 @@ data class RecordShareRevokedEvent(
     val shareId: UUID,
     val ownerTenantId: UUID,
     val consumerTenantId: UUID,
+    val revokedByTenantId: UUID,
+    val revokedBy: UUID,
     val resourceType: String,
     val resourceId: UUID,
     override val occurredAt: Instant = Instant.now(),

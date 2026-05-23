@@ -59,15 +59,14 @@ com.synopticengine.api
 15. Passwords hashed with BCrypt — never stored or returned in plain text
 16. AuditorAware reads UserPrincipal from SecurityContextHolder — never pass actorId manually to service methods
 
-## What needs to be built next (in order)
-1. CRM tag module (crm/tag/) — Tag entity already in DB, simplest module, no dependencies
-2. CRM contact module (crm/contact/) — Organization, Person entities, ContactsApi interface
-3. CRM product module (crm/product/) — Product entity, ProductsApi interface  
-4. CRM lead module (crm/lead/) — Lead, Pipeline, Stage, LeadSource, LeadType, LeadsApi interface
-5. CRM activity module (crm/activity/) — Activity entity, ActivitiesApi interface
-6. CRM quote module (crm/quote/) — Quote, QuoteItem, QuotesApi interface
-7. CRM dashboard module (crm/dashboard/) — reads via *Api interfaces only, no direct repo access
-8. @PreAuthorize annotations on all controllers using the seeded permissions
+## Current status / next backend priorities
+Core CRM, identity/auth, inventory, settings, sharing, and dashboard modules are implemented and integrated.
+
+Highest-priority backend work before frontend:
+1. close remaining parity gaps (inbound mail threading enrichment, advanced automation actions, richer quote economics)
+2. harden operational posture (distributed rate limiting, secret/cors profile discipline, retention jobs)
+3. expand cross-tenant UX surfaces (consumer-side shared-resource browse/filter flows)
+4. continue ERP expansion beyond CRM parity (inventory ledger/movements, transfers, reservations)
 
 ## Module structure pattern — every CRM module follows this exactly
 crm/
@@ -110,4 +109,3 @@ reports:view
 ## Test setup
 ModularityTest — verifies Spring Modulith boundaries, runs on every build
 Testcontainers with PostgreSQL for integration tests (not H2 — PostgreSQL-specific types used)
-

@@ -24,4 +24,10 @@ interface RefreshSessionRepository : JpaRepository<RefreshSession, UUID> {
         @Param("now") now: Instant,
         @Param("reason") reason: String,
     ): Int
+
+    @Modifying
+    @Query("DELETE FROM RefreshSession s WHERE s.expiresAt < :cutoff")
+    fun deleteExpiredBefore(
+        @Param("cutoff") cutoff: Instant,
+    ): Int
 }

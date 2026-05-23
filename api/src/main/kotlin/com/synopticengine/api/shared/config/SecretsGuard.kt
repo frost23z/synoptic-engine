@@ -14,8 +14,11 @@ import org.springframework.stereotype.Component
  * trivial admin login.
  *
  * Behaviour:
- *  - On the `local`, `test`, `dev` profiles (or when no profile is active), defaults
- *    are permitted; we WARN once so the operator sees the call-out in logs.
+ *  - On the `local`, `test`, `dev` profiles defaults are permitted; we WARN once so
+ *    the operator sees the call-out in logs.
+ *  - Empty-profile deployments are treated as non-dev by default to avoid silently
+ *    booting production with fallback secrets. Opt into the old behaviour with
+ *    `synoptic.security.empty-profile-is-dev=true` if needed for local runs.
  *  - On any other profile (notably `prod`), defaults trip a startup failure.
  *
  * Override the recognised-as-dev profile list with
@@ -27,6 +30,7 @@ class SecretsGuard(
     @Value("\${jwt.secret}") private val jwtSecret: String,
     @Value("\${synoptic.admin.password}") private val adminPassword: String,
     @Value("\${synoptic.security.dev-profiles:local,test,dev}") private val devProfilesCsv: String,
+    @Value("\${synoptic.security.empty-profile-is-dev:false}") private val emptyProfileIsDev: Boolean,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -39,7 +43,8 @@ class SecretsGuard(
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
                 .toSet()
-        val isDevDeployment = activeProfiles.isEmpty() || activeProfiles.any { it in devProfiles }
+        val isDevDeployment =
+            (emptyProfileIsDev && activeProfiles.isEmpty()) || activeProfiles.any { it in devProfiles }
 
         val violations = mutableListOf<String>()
         if (jwtSecret.contains(DEFAULT_JWT_SECRET_MARKER)) {
