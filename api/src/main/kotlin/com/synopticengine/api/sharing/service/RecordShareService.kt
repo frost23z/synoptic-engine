@@ -244,7 +244,6 @@ class RecordShareService(
                 ResourceType.WAREHOUSES -> {
                     inventoryApi.findWarehouseOwnerTenant(resourceId)
                 }
-
             }
         if (actualOwner == null) {
             throw NoSuchElementException("$resourceType $resourceId not found")

@@ -75,7 +75,12 @@ class RecordShareIntegrationTest : AbstractIntegrationTest() {
 
         val list = get("/api/records/leads/$leadId/shares", owner.token).bodyAsList()!!
         assertTrue(list.any { it["id"] == shareId.toString() })
-        assertTrue(get("/api/records/shared-with-me", consumer.token).bodyAsList()!!.any { it["id"] == shareId.toString() })
+        assertTrue(
+            get("/api/records/shared-with-me", consumer.token).bodyAsList()!!.any {
+                it["id"] ==
+                    shareId.toString()
+            },
+        )
 
         // Revoke: every visibility row attached to this share disappears.
         val consumerUserId = UUID.fromString(get("/auth/me", consumer.token).bodyAsMap()!!["id"] as String)
@@ -92,9 +97,18 @@ class RecordShareIntegrationTest : AbstractIntegrationTest() {
                     shareId.toString()
             },
         )
-        assertTrue(get("/api/records/shared-with-me", consumer.token).bodyAsList()!!.none { it["id"] == shareId.toString() })
+        assertTrue(
+            get("/api/records/shared-with-me", consumer.token).bodyAsList()!!.none {
+                it["id"] ==
+                    shareId.toString()
+            },
+        )
 
-        val revokeRows = auditRepository.findAll().filter { it.action == CrossTenantAction.REVOKE && it.resourceId == leadId }
+        val revokeRows =
+            auditRepository.findAll().filter {
+                it.action == CrossTenantAction.REVOKE &&
+                    it.resourceId == leadId
+            }
         assertTrue(revokeRows.isNotEmpty(), "Expected a REVOKE audit row")
         val latest = revokeRows.maxByOrNull { it.at ?: java.time.Instant.EPOCH }!!
         assertEquals(owner.tenantId, latest.ownerTenantId)

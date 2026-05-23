@@ -43,7 +43,8 @@ class SecretsGuard(
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
                 .toSet()
-        val isDevDeployment = (emptyProfileIsDev && activeProfiles.isEmpty()) || activeProfiles.any { it in devProfiles }
+        val isDevDeployment =
+            (emptyProfileIsDev && activeProfiles.isEmpty()) || activeProfiles.any { it in devProfiles }
 
         val violations = mutableListOf<String>()
         if (jwtSecret.contains(DEFAULT_JWT_SECRET_MARKER)) {
