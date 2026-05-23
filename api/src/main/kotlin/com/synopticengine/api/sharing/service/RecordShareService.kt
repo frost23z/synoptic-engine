@@ -139,6 +139,7 @@ class RecordShareService(
     fun revoke(
         shareId: UUID,
         actingTenantId: UUID,
+        actingUserId: UUID,
     ): RecordShare {
         val share =
             recordShareRepository
@@ -157,6 +158,8 @@ class RecordShareService(
                 shareId = share.id!!,
                 ownerTenantId = share.ownerTenantId,
                 consumerTenantId = share.consumerTenantId,
+                revokedByTenantId = actingTenantId,
+                revokedBy = actingUserId,
                 resourceType = share.resourceType,
                 resourceId = share.resourceId,
             ),
@@ -176,9 +179,23 @@ class RecordShareService(
                 resourceType,
                 resourceId,
             )
-        // The query returns owner-side rows (acting tenant is owner). Consumer-side
-        // listing is handled by /api/records-shared-with-me later if needed; not in scope here.
+        // The query returns owner-side rows (acting tenant is owner).
         return rows.filter { it.revokedAt == null }
+    }
+
+    @Transactional(readOnly = true)
+    fun listSharedWithMe(
+        actingTenantId: UUID,
+        resourceType: String?,
+    ): List<RecordShare> {
+        val now = Instant.now()
+        return recordShareRepository
+            .findAllByConsumerTenantId(actingTenantId)
+            .asSequence()
+            .filter { resourceType == null || it.resourceType == resourceType }
+            .filter { it.revokedAt == null && (it.expiresAt == null || it.expiresAt!!.isAfter(now)) }
+            .sortedByDescending { it.createdAt }
+            .toList()
     }
 
     /**
@@ -228,10 +245,6 @@ class RecordShareService(
                     inventoryApi.findWarehouseOwnerTenant(resourceId)
                 }
 
-                ResourceType.PRICELISTS -> {
-                    // No pricelist entity wired yet; refuse to share rather than silently trust.
-                    throw IllegalArgumentException("Sharing $resourceType is not yet supported")
-                }
             }
         if (actualOwner == null) {
             throw NoSuchElementException("$resourceType $resourceId not found")

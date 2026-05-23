@@ -2,7 +2,9 @@ package com.synopticengine.api.sharing
 
 import com.synopticengine.api.AbstractIntegrationTest
 import com.synopticengine.api.sharing.domain.AccessLevel
+import com.synopticengine.api.sharing.domain.CrossTenantAction
 import com.synopticengine.api.sharing.domain.ResourceType
+import com.synopticengine.api.sharing.repo.CrossTenantAuditRepository
 import com.synopticengine.api.sharing.repo.ResourceVisibilityRepository
 import com.synopticengine.api.support.factories.LeadFactory
 import com.synopticengine.api.support.factories.OrganizationFactory
@@ -23,6 +25,8 @@ import kotlin.test.assertTrue
  */
 class RecordShareIntegrationTest : AbstractIntegrationTest() {
     @Autowired private lateinit var visibilityRepository: ResourceVisibilityRepository
+
+    @Autowired private lateinit var auditRepository: CrossTenantAuditRepository
 
     @Autowired private lateinit var tenantProvisioner: TenantProvisioner
 
@@ -71,9 +75,11 @@ class RecordShareIntegrationTest : AbstractIntegrationTest() {
 
         val list = get("/api/records/leads/$leadId/shares", owner.token).bodyAsList()!!
         assertTrue(list.any { it["id"] == shareId.toString() })
+        assertTrue(get("/api/records/shared-with-me", consumer.token).bodyAsList()!!.any { it["id"] == shareId.toString() })
 
         // Revoke: every visibility row attached to this share disappears.
-        val revoked = delete("/api/records/share/$shareId", owner.token)
+        val consumerUserId = UUID.fromString(get("/auth/me", consumer.token).bodyAsMap()!!["id"] as String)
+        val revoked = delete("/api/records/share/$shareId", consumer.token)
         assertEquals(200, revoked.status())
         assertNotNull(revoked.bodyAsMap()!!["revokedAt"])
 
@@ -86,6 +92,14 @@ class RecordShareIntegrationTest : AbstractIntegrationTest() {
                     shareId.toString()
             },
         )
+        assertTrue(get("/api/records/shared-with-me", consumer.token).bodyAsList()!!.none { it["id"] == shareId.toString() })
+
+        val revokeRows = auditRepository.findAll().filter { it.action == CrossTenantAction.REVOKE && it.resourceId == leadId }
+        assertTrue(revokeRows.isNotEmpty(), "Expected a REVOKE audit row")
+        val latest = revokeRows.maxByOrNull { it.at ?: java.time.Instant.EPOCH }!!
+        assertEquals(owner.tenantId, latest.ownerTenantId)
+        assertEquals(consumer.tenantId, latest.actorTenantId)
+        assertEquals(consumerUserId, latest.actorUserId)
     }
 
     @Test

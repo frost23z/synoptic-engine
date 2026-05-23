@@ -88,6 +88,21 @@ class SharePolicyIntegrationTest : AbstractIntegrationTest() {
         )
     }
 
+    @Test
+    fun `activities policy accepts materialize true`() {
+        val a = tenantProvisioner.provision("actPolA")
+        val b = tenantProvisioner.provision("actPolB")
+        val relId = acceptedRelationship(a, b, "PARTNER")
+
+        val createResp =
+            post(
+                "/api/relationships/$relId/policies",
+                a.token,
+                mapOf("resourceType" to "leads.activities", "accessLevel" to "READ", "materialize" to true),
+            )
+        assertEquals(201, createResp.status(), createResp.response.contentAsString)
+    }
+
     private fun acceptedRelationship(
         source: TenantProvisioner.TenantAndToken,
         target: TenantProvisioner.TenantAndToken,

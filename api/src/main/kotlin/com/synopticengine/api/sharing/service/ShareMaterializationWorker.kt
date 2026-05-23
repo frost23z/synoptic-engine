@@ -21,11 +21,10 @@ import java.util.UUID
 /**
  * Drains [ShareMaterializationTask] rows and updates [com.synopticengine.api.sharing.domain.ResourceVisibility].
  *
- * For Sprint 2b: filter_jsonb evaluation is not implemented — every policy materializes
- * all the source tenant's records of the resource_type. The hook is in place
- * ([matchesFilter]) so a JSON-DSL evaluator can drop in later. virtual visibility
- * (materialize=false) is honoured here: such policies skip the materialization step
- * entirely and rely on the RLS / Hibernate filter to evaluate at query time.
+ * `filter_json` expressions are evaluated through [TenantSharePolicyFilterEvaluator]
+ * before each row is materialized. Virtual visibility (materialize=false) is honoured:
+ * such policies skip the materialization step entirely and rely on the RLS / Hibernate
+ * path to evaluate access on read.
  *
  * P1-1: every task carries its own `tenantId` (the policy's source tenant, captured
  * at enqueue time). [drainQueue] runs on `@Scheduled` so there's no request thread —
@@ -198,10 +197,7 @@ class ShareMaterializationWorker(
         log.info("Policy $policyId unmaterialized: removed $n visibility row(s)")
     }
 
-    /**
-     * Maps a [ResourceType] to its physical table. Returns null when no table is wired
-     * yet (e.g. activities — they're shared via cascade, not policy, in Sprint 2c).
-     */
+    /** Maps a [ResourceType] to its physical table. */
     private fun tableForResource(rt: ResourceType): String? =
         when (rt) {
             ResourceType.LEADS -> "leads"
@@ -210,7 +206,7 @@ class ShareMaterializationWorker(
             ResourceType.PRODUCTS -> "products"
             ResourceType.QUOTES -> "quotes"
             ResourceType.WAREHOUSES -> "warehouses"
-            ResourceType.ACTIVITIES, ResourceType.PRICELISTS -> null
+            ResourceType.ACTIVITIES -> "activities"
         }
 
     private fun matchesFilter(
