@@ -241,7 +241,7 @@ class CsvImportProcessor(
         } catch (e: Exception) {
             errors.add(mapOf("row" to "0", "error" to "File parse error: ${e.message}"))
         }
-        dataImport.errors = if (errors.isEmpty()) dataImport.errors else errors
+        dataImport.errors = if (errors.isEmpty()) null else errors
         dataImport.errorCount = errors.size
         dataImportRepository.save(dataImport)
     }

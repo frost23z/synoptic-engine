@@ -56,6 +56,12 @@ class EmailController(
         @PathVariable id: UUID,
     ): ResponseEntity<EmailResponse> = ResponseEntity.ok(emailService.findById(id))
 
+    @GetMapping("/{id}/thread")
+    @PreAuthorize("hasAuthority('mail.view')")
+    fun getThread(
+        @PathVariable id: UUID,
+    ): ResponseEntity<EmailThreadResponse> = ResponseEntity.ok(emailService.findThreadById(id))
+
     /**
      * Compose. Two body shapes are accepted:
      *  - `application/json` → [ComposeEmailRequest] in the body, no attachments.

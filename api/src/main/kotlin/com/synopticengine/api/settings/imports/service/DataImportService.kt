@@ -84,18 +84,32 @@ class DataImportService(
     fun validate(id: UUID): DataImportResponse {
         val imp = requireImport(id)
         if (imp.status != ImportStatus.PENDING) throw IllegalStateException("Import must be PENDING to validate")
-        csvImportProcessor.validate(imp.id!!)
+        val importId = checkNotNull(imp.id) { "Import id must not be null for validation" }
+        csvImportProcessor.validate(importId)
         return requireImport(id).toResponse()
     }
 
     @Transactional
-    fun link(id: UUID): DataImportResponse = requireImport(id).toResponse()
+    fun link(id: UUID): DataImportResponse {
+        val imp = requireImport(id)
+        if (imp.status != ImportStatus.PENDING) {
+            throw IllegalStateException("Import must be PENDING to link")
+        }
+        val importId = checkNotNull(imp.id) { "Import id must not be null for link" }
+        csvImportProcessor.validate(importId)
+        val refreshed = requireImport(id)
+        if (refreshed.errorCount > 0) {
+            throw IllegalStateException("Import has validation errors and cannot be linked")
+        }
+        return refreshed.toResponse()
+    }
 
     @Transactional
     fun indexData(id: UUID): DataImportResponse {
         val imp = requireImport(id)
         if (imp.status != ImportStatus.PENDING) throw IllegalStateException("Import must be PENDING to process")
-        csvImportProcessor.process(imp.id!!)
+        val importId = checkNotNull(imp.id) { "Import id must not be null for processing" }
+        csvImportProcessor.process(importId)
         return requireImport(id).toResponse()
     }
 
