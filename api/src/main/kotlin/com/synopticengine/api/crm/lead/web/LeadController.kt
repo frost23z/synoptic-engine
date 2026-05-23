@@ -202,7 +202,7 @@ class LeadController(
 
     @GetMapping("/{id}/activities")
     @PreAuthorize("hasAuthority('leads.view')")
-    fun listActivities(
+    fun getActivities(
         @PathVariable id: UUID,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,

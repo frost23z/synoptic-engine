@@ -47,7 +47,9 @@ class TenantSharePolicyService(
                 throw IllegalArgumentException("Unknown resource type: $resourceType")
             }
         if (materialize && parsedType in NON_MATERIALIZABLE_TYPES) {
-            throw IllegalArgumentException("Materialized policy is not supported for resource type: $resourceType")
+            throw IllegalArgumentException(
+                "Materialized policy is not supported for resource type: ${parsedType.literal}",
+            )
         }
         filterEvaluator.validate(filterJson)
         val existing = policyRepository.findByRelationshipIdAndResourceType(relationshipId, resourceType)

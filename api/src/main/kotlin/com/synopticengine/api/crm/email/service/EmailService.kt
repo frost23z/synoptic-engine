@@ -126,10 +126,11 @@ class EmailService(
             email.status = EmailStatus.OUTBOX
             email.folders = listOf("outbox")
             emailRepository.save(email)
-            emailDeliveryService.deliver(email.id!!, to, subject ?: "", body ?: "", cc, bcc)
+            val emailId = checkNotNull(email.id) { "Saved email id must not be null" }
+            emailDeliveryService.deliver(emailId, to, subject ?: "", body ?: "", cc, bcc)
         }
         // Re-read so the attachments collection is populated for the response.
-        val refreshed = requireEmail(email.id!!)
+        val refreshed = requireEmail(checkNotNull(email.id) { "Saved email id must not be null" })
         return refreshed.toResponse()
     }
 
@@ -144,15 +145,16 @@ class EmailService(
         email.status = EmailStatus.OUTBOX
         email.folders = listOf("outbox")
         emailRepository.save(email)
+        val emailId = checkNotNull(email.id) { "Saved draft id must not be null" }
         emailDeliveryService.deliver(
-            email.id!!,
+            emailId,
             to,
             email.subject ?: "",
             email.body ?: "",
             email.cc?.mapNotNull { it["email"] },
             email.bcc?.mapNotNull { it["email"] },
         )
-        return requireEmail(email.id!!).toResponse()
+        return requireEmail(emailId).toResponse()
     }
 
     /** P3.3: forward an existing email to a new recipient. */
@@ -196,8 +198,9 @@ class EmailService(
         forwarded.status = EmailStatus.OUTBOX
         forwarded.folders = listOf("outbox")
         emailRepository.save(forwarded)
-        emailDeliveryService.deliver(forwarded.id!!, to, subject, combinedBody, cc, bcc)
-        return requireEmail(forwarded.id!!).toResponse()
+        val forwardedId = checkNotNull(forwarded.id) { "Saved forwarded email id must not be null" }
+        emailDeliveryService.deliver(forwardedId, to, subject, combinedBody, cc, bcc)
+        return requireEmail(forwardedId).toResponse()
     }
 
     @Transactional
