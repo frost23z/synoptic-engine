@@ -34,6 +34,11 @@ data class EmailResponse(
     val updatedAt: Instant?,
 )
 
+data class EmailThreadResponse(
+    val root: EmailResponse,
+    val messages: List<EmailResponse>,
+)
+
 data class ComposeEmailRequest(
     val subject: String?,
     @field:NotBlank val to: String,

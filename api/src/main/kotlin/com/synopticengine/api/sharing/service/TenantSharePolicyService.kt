@@ -42,7 +42,13 @@ class TenantSharePolicyService(
         if (rel.status == RelationshipStatus.REVOKED) {
             throw IllegalStateException("Cannot create policies on a revoked relationship")
         }
-        require(ResourceType.isKnown(resourceType)) { "Unknown resource type: $resourceType" }
+        val parsedType =
+            runCatching { ResourceType.fromLiteral(resourceType) }.getOrElse {
+                throw IllegalArgumentException("Unknown resource type: $resourceType")
+            }
+        if (materialize && parsedType in NON_MATERIALIZABLE_TYPES) {
+            throw IllegalArgumentException("Materialized policy is not supported for resource type: $resourceType")
+        }
         filterEvaluator.validate(filterJson)
         val existing = policyRepository.findByRelationshipIdAndResourceType(relationshipId, resourceType)
         if (existing != null) {
@@ -160,5 +166,9 @@ class TenantSharePolicyService(
                 .orElseThrow { NoSuchElementException("Policy not found") }
         loadOwnedRelationship(policy.relationshipId, actingTenantId)
         return policy
+    }
+
+    private companion object {
+        val NON_MATERIALIZABLE_TYPES = setOf(ResourceType.ACTIVITIES, ResourceType.PRICELISTS)
     }
 }
