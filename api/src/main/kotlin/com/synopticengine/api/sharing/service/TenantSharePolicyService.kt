@@ -171,6 +171,6 @@ class TenantSharePolicyService(
     }
 
     private companion object {
-        val NON_MATERIALIZABLE_TYPES = setOf(ResourceType.ACTIVITIES, ResourceType.PRICELISTS)
+        val NON_MATERIALIZABLE_TYPES = emptySet<ResourceType>()
     }
 }

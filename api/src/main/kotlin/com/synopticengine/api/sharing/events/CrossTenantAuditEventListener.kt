@@ -71,13 +71,8 @@ class CrossTenantAuditEventListener(
     fun onRecordShareRevoked(e: RecordShareRevokedEvent) {
         auditService.record(
             ownerTenantId = e.ownerTenantId,
-            actorTenantId = e.ownerTenantId,
-            // Revoke may be triggered by the consumer (opt-out) or the owner.
-            // The event itself doesn't carry the revoker id today; use the
-            // owner tenant's nil-uuid placeholder so the row is still durable
-            // and a follow-up can backfill once the event grows a revokedBy
-            // field.
-            actorUserId = java.util.UUID(0L, 0L),
+            actorTenantId = e.revokedByTenantId,
+            actorUserId = e.revokedBy,
             resourceType = e.resourceType,
             resourceId = e.resourceId,
             action = CrossTenantAction.REVOKE,
