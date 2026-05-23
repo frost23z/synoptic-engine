@@ -31,14 +31,12 @@ class UserService(
 ) : IdentityApi {
     override fun findById(id: UUID): UserSummary? =
         userRepository
-            .findById(id)
-            .orElse(null)
-            ?.takeIf { it.deletedAt == null }
+            .findActiveById(id)
             ?.toSummary()
 
     override fun findAllActive(): List<UserSummary> = userRepository.findAllByDeletedAtIsNull().map { it.toSummary() }
 
-    override fun existsById(id: UUID): Boolean = userRepository.existsById(id)
+    override fun existsById(id: UUID): Boolean = userRepository.existsActiveById(id)
 
     override fun findCredentialsByEmail(email: String): UserCredentials? =
         userRepository.findActiveByEmailWithRolesAsList(email).firstOrNull()?.toCredentials()
@@ -170,7 +168,7 @@ class UserService(
                 .authentication
                 ?.name
                 ?: return null
-        return userRepository.findByEmail(email)?.id
+        return userRepository.findActiveByEmail(email)?.id
     }
 
     @Transactional
@@ -179,7 +177,7 @@ class UserService(
         encodedPassword: String,
     ) {
         val user =
-            userRepository.findByEmail(email)
+            userRepository.findActiveByEmail(email)
                 ?: throw NoSuchElementException("User not found: $email")
         user.passwordHash = encodedPassword
         userRepository.save(user)
@@ -198,7 +196,7 @@ class UserService(
 
     override fun resolveViewContext(requesterId: UUID): ViewContext {
         val user =
-            userRepository.findById(requesterId).orElse(null)
+            userRepository.findActiveById(requesterId)
                 ?: return ViewContext(null)
         return when (user.viewPermission) {
             ViewPermission.ALL, ViewPermission.GLOBAL -> {

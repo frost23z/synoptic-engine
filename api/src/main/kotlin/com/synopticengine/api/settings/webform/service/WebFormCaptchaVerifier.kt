@@ -17,17 +17,19 @@ class WebFormCaptchaVerifier(
         token: String?,
         remoteIp: String?,
     ): Boolean {
-        if (secret.isBlank()) return true
+        if (secret.isBlank()) return false
         if (token.isNullOrBlank()) return false
-        val response =
-            restClient
-                .post()
-                .uri(verifyUrl)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body("secret=$secret&response=$token&remoteip=${remoteIp.orEmpty()}")
-                .retrieve()
-                .body(CaptchaVerifyResponse::class.java)
-        return response?.success == true
+        return runCatching {
+            val response =
+                restClient
+                    .post()
+                    .uri(verifyUrl)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body("secret=$secret&response=$token&remoteip=${remoteIp.orEmpty()}")
+                    .retrieve()
+                    .body(CaptchaVerifyResponse::class.java)
+            response?.success == true
+        }.getOrDefault(false)
     }
 }
 

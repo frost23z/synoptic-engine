@@ -54,7 +54,7 @@ class EmailController(
     @PreAuthorize("hasAuthority('mail.view')")
     fun getById(
         @PathVariable id: UUID,
-    ): ResponseEntity<EmailThreadResponse> = ResponseEntity.ok(emailService.findThreadById(id))
+    ): ResponseEntity<EmailResponse> = ResponseEntity.ok(emailService.findById(id))
 
     @GetMapping("/{id}/thread")
     @PreAuthorize("hasAuthority('mail.view')")

@@ -152,7 +152,7 @@ class EmailService(
             email.cc?.mapNotNull { it["email"] },
             email.bcc?.mapNotNull { it["email"] },
         )
-        return email.toResponse()
+        return requireEmail(email.id!!).toResponse()
     }
 
     /** P3.3: forward an existing email to a new recipient. */
@@ -197,7 +197,7 @@ class EmailService(
         forwarded.folders = listOf("outbox")
         emailRepository.save(forwarded)
         emailDeliveryService.deliver(forwarded.id!!, to, subject, combinedBody, cc, bcc)
-        return forwarded.toResponse()
+        return requireEmail(forwarded.id!!).toResponse()
     }
 
     @Transactional

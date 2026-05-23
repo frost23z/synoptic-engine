@@ -3,9 +3,7 @@ package com.synopticengine.api.crm.email.service
 import com.synopticengine.api.crm.email.domain.EmailStatus
 import com.synopticengine.api.crm.email.repo.EmailRepository
 import com.synopticengine.api.shared.email.MailSenderService
-import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
@@ -14,8 +12,7 @@ class EmailDeliveryService(
     private val emailRepository: EmailRepository,
     private val mailSenderService: MailSenderService,
 ) {
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     fun deliver(
         emailId: UUID,
         to: String,
@@ -30,9 +27,10 @@ class EmailDeliveryService(
             email.status = EmailStatus.SENT
             email.folders = listOf("sent")
             emailRepository.save(email)
-        } catch (_: Exception) {
+        } catch (ex: Exception) {
             email.status = EmailStatus.FAILED
             emailRepository.save(email)
+            throw ex
         }
     }
 }
