@@ -1,5 +1,7 @@
 package com.synopticengine.api.crm.lead.web
 
+import com.synopticengine.api.crm.activity.service.ActivityService
+import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
 import com.synopticengine.api.crm.lead.domain.LeadStatus
 import com.synopticengine.api.crm.lead.service.LeadService
@@ -26,6 +28,7 @@ import java.util.UUID
 @RequestMapping($$"${api.base-path}/leads")
 class LeadController(
     private val leadService: LeadService,
+    private val activityService: ActivityService,
 ) {
     @GetMapping
     @PreAuthorize("hasAuthority('leads.view')")
@@ -196,6 +199,29 @@ class LeadController(
     fun listProducts(
         @PathVariable id: UUID,
     ): ResponseEntity<List<LeadProductResponse>> = ResponseEntity.ok(leadService.listProducts(id))
+
+    @GetMapping("/{id}/activities")
+    @PreAuthorize("hasAuthority('leads.view')")
+    fun listActivities(
+        @PathVariable id: UUID,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<PageResponse<ActivityResponse>> {
+        val pageable = PageRequest.of(page, size, Sort.by("scheduleFrom").descending())
+        return ResponseEntity.ok(
+            activityService.filter(
+                leadId = id,
+                personId = null,
+                organizationId = null,
+                userId = null,
+                type = null,
+                isDone = null,
+                productId = null,
+                warehouseId = null,
+                pageable = pageable,
+            ),
+        )
+    }
 
     @PostMapping("/{id}/products")
     @PreAuthorize("hasAuthority('leads.edit')")
