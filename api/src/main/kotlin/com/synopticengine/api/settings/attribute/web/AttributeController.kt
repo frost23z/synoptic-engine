@@ -4,8 +4,8 @@ import com.synopticengine.api.settings.attribute.service.AttributeService
 import jakarta.validation.Valid
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -181,7 +181,10 @@ class AttributeController(
 
     @GetMapping("/download")
     @PreAuthorize("hasAuthority('attributes.view')")
-    fun download(): ResponseEntity<ByteArray> {
+    fun download(
+        @RequestParam(required = false, defaultValue = "false") export: Boolean,
+    ): ResponseEntity<ByteArray> {
+        if (!export) return ResponseEntity.noContent().build()
         val csv = attributeService.downloadCsv()
         val headers = HttpHeaders()
         headers.contentType = MediaType("text", "csv")

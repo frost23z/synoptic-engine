@@ -12,7 +12,6 @@ import com.synopticengine.api.shared.email.MailSenderService
 import com.synopticengine.api.shared.email.interpolateTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -34,7 +33,7 @@ class MarketingService(
     fun createEvent(
         name: String,
         description: String?,
-        eventDate: LocalDate,
+        eventDate: java.time.LocalDate?,
     ): MarketingEventResponse =
         eventRepository
             .save(
@@ -50,7 +49,7 @@ class MarketingService(
         id: UUID,
         name: String,
         description: String?,
-        eventDate: LocalDate,
+        eventDate: java.time.LocalDate?,
     ): MarketingEventResponse {
         val event = requireEvent(id)
         event.name = name

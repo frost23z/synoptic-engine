@@ -449,7 +449,11 @@ class EmailService(
     }
 
     private fun currentUserEmail(): String? =
-        SecurityContextHolder.getContext().authentication?.name?.takeIf { it.isNotBlank() }
+        SecurityContextHolder
+            .getContext()
+            .authentication
+            ?.name
+            ?.takeIf { it.isNotBlank() }
 
     // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
     // `@Filter("tenantFilter")` because it goes through `EntityManager.find()`

@@ -391,4 +391,18 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         @Param("pipelineId") pipelineId: UUID?,
         @Param("scopeIds") scopeIds: Collection<UUID>,
     ): List<Lead>
+
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO lead_tags (lead_id, tag_id)
+            VALUES (:leadId, :tagId)
+            ON CONFLICT DO NOTHING
+        """,
+        nativeQuery = true,
+    )
+    fun attachTag(
+        @Param("leadId") leadId: UUID,
+        @Param("tagId") tagId: UUID,
+    ): Int
 }

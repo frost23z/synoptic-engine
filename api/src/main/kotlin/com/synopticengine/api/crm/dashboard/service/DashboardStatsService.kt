@@ -1,6 +1,7 @@
 package com.synopticengine.api.crm.dashboard.service
 
 import com.synopticengine.api.crm.activity.repo.ActivityRepository
+import com.synopticengine.api.crm.contact.repo.OrganizationRepository
 import com.synopticengine.api.crm.contact.repo.PersonRepository
 import com.synopticengine.api.crm.dashboard.DateRange
 import com.synopticengine.api.crm.dashboard.web.OpenLeadsByStateEntry
@@ -12,9 +13,8 @@ import com.synopticengine.api.crm.dashboard.web.RevenueStatsResponse
 import com.synopticengine.api.crm.dashboard.web.TimeSeriesBucket
 import com.synopticengine.api.crm.dashboard.web.TopPersonEntry
 import com.synopticengine.api.crm.dashboard.web.TopProductEntry
-import com.synopticengine.api.crm.dashboard.web.TotalLeadsSeries
 import com.synopticengine.api.crm.dashboard.web.TotalLeadsResponse
-import com.synopticengine.api.crm.contact.repo.OrganizationRepository
+import com.synopticengine.api.crm.dashboard.web.TotalLeadsSeries
 import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.lead.repo.LeadSourceRepository
 import com.synopticengine.api.crm.lead.repo.LeadTypeRepository
@@ -98,8 +98,18 @@ class DashboardStatsService(
         val organizationsCurrent =
             organizationRepository.countCreatedInRangeNative(range.startInstant, range.endInstant).toInt()
         val organizationsPrevious =
-            organizationRepository.countCreatedInRangeNative(range.previousStartInstant, range.previousEndInstant).toInt()
-        val avgLeadValueCurrent = leadRepository.avgAmountInRangeNative(range.startInstant, range.endInstant, sb.hasScope, sb.ids)
+            organizationRepository
+                .countCreatedInRangeNative(
+                    range.previousStartInstant,
+                    range.previousEndInstant,
+                ).toInt()
+        val avgLeadValueCurrent =
+            leadRepository.avgAmountInRangeNative(
+                range.startInstant,
+                range.endInstant,
+                sb.hasScope,
+                sb.ids,
+            )
         val avgLeadValuePrevious =
             leadRepository.avgAmountInRangeNative(
                 range.previousStartInstant,
@@ -107,7 +117,13 @@ class DashboardStatsService(
                 sb.hasScope,
                 sb.ids,
             )
-        val periodDaysCurrent = java.time.Duration.between(range.startInstant, range.endInstant).toDays().coerceAtLeast(1)
+        val periodDaysCurrent =
+            java.time.Duration
+                .between(
+                    range.startInstant,
+                    range.endInstant,
+                ).toDays()
+                .coerceAtLeast(1)
         val periodDaysPrevious =
             java.time.Duration
                 .between(range.previousStartInstant, range.previousEndInstant)
@@ -187,6 +203,7 @@ class DashboardStatsService(
         if (scope?.isEmpty() == true) {
             return TotalLeadsResponse(
                 bucket = bucket,
+                series = emptyList(),
                 all = TotalLeadsSeries(emptyList()),
                 won = TotalLeadsSeries(emptyList()),
                 lost = TotalLeadsSeries(emptyList()),
@@ -227,6 +244,13 @@ class DashboardStatsService(
             )
         return TotalLeadsResponse(
             bucket = pgBucket,
+            series =
+                allRows.map { row ->
+                    TimeSeriesBucket(
+                        date = toLocalDate(row[0]),
+                        count = (row[1] as Number).toInt(),
+                    )
+                },
             all =
                 TotalLeadsSeries(
                     allRows.map { row ->

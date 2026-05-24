@@ -47,6 +47,7 @@ data class TotalLeadsSeries(
 
 data class TotalLeadsResponse(
     val bucket: String,
+    val series: List<TimeSeriesBucket>,
     val all: TotalLeadsSeries,
     val won: TotalLeadsSeries,
     val lost: TotalLeadsSeries,

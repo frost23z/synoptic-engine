@@ -127,6 +127,7 @@ class UserService(
         }
         ensureNotLastAdmin(user)
         user.isActive = false
+        user.deletedAt = java.time.Instant.now()
         userRepository.save(user)
     }
 
@@ -145,16 +146,20 @@ class UserService(
         ids: List<UUID>,
         isActive: Boolean,
     ) {
+        if (isActive) {
+            val tenantId = TenantContext.get() ?: throw IllegalStateException("Tenant context missing")
+            userRepository.reactivateByIds(ids, tenantId)
+            return
+        }
         val selfId = currentUserId()
         ids.forEach { id ->
             val user = requireUser(id)
-            if (!isActive && id == selfId) {
+            if (id == selfId) {
                 throw IllegalStateException("You cannot deactivate your own account.")
             }
-            if (!isActive) {
-                ensureNotLastAdmin(user)
-            }
-            user.isActive = isActive
+            ensureNotLastAdmin(user)
+            user.isActive = false
+            user.deletedAt = java.time.Instant.now()
             userRepository.save(user)
         }
     }
@@ -170,6 +175,7 @@ class UserService(
             userRepository.findActiveByIdWithRolesAsList(id).firstOrNull()?.let { user ->
                 if (runCatching { ensureNotLastAdmin(user) }.isSuccess) {
                     user.isActive = false
+                    user.deletedAt = java.time.Instant.now()
                     userRepository.save(user)
                 }
             }

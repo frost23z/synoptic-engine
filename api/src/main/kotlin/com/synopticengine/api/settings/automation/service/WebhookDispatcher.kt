@@ -7,9 +7,9 @@ import com.synopticengine.api.shared.DomainEvent
 import com.synopticengine.api.shared.TenantContext
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
+import org.springframework.http.MediaType
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
-import org.springframework.http.MediaType
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 import tools.jackson.databind.ObjectMapper
