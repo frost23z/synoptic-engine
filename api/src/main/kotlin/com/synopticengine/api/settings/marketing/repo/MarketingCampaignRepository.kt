@@ -11,4 +11,9 @@ interface MarketingCampaignRepository : JpaRepository<MarketingCampaign, UUID> {
     fun findActiveById(
         @Param("id") id: UUID,
     ): MarketingCampaign?
+
+    @Query("SELECT COUNT(c) > 0 FROM MarketingCampaign c WHERE c.eventId = :eventId AND c.deletedAt IS NULL")
+    fun existsActiveByEventId(
+        @Param("eventId") eventId: UUID,
+    ): Boolean
 }

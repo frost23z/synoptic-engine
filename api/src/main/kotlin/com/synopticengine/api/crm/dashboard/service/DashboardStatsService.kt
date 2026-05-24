@@ -6,12 +6,15 @@ import com.synopticengine.api.crm.dashboard.DateRange
 import com.synopticengine.api.crm.dashboard.web.OpenLeadsByStateEntry
 import com.synopticengine.api.crm.dashboard.web.OverAllStatsResponse
 import com.synopticengine.api.crm.dashboard.web.PeriodCount
+import com.synopticengine.api.crm.dashboard.web.PeriodValue
 import com.synopticengine.api.crm.dashboard.web.RevenueByDimensionEntry
 import com.synopticengine.api.crm.dashboard.web.RevenueStatsResponse
 import com.synopticengine.api.crm.dashboard.web.TimeSeriesBucket
 import com.synopticengine.api.crm.dashboard.web.TopPersonEntry
 import com.synopticengine.api.crm.dashboard.web.TopProductEntry
+import com.synopticengine.api.crm.dashboard.web.TotalLeadsSeries
 import com.synopticengine.api.crm.dashboard.web.TotalLeadsResponse
+import com.synopticengine.api.crm.contact.repo.OrganizationRepository
 import com.synopticengine.api.crm.lead.repo.LeadRepository
 import com.synopticengine.api.crm.lead.repo.LeadSourceRepository
 import com.synopticengine.api.crm.lead.repo.LeadTypeRepository
@@ -32,6 +35,7 @@ class DashboardStatsService(
     private val activityRepository: ActivityRepository,
     private val quoteRepository: QuoteRepository,
     private val personRepository: PersonRepository,
+    private val organizationRepository: OrganizationRepository,
     private val stageRepository: StageRepository,
     private val leadSourceRepository: LeadSourceRepository,
     private val leadTypeRepository: LeadTypeRepository,
@@ -45,7 +49,7 @@ class DashboardStatsService(
         val scope = scopeResolver.userIdsForCurrentUser()
         if (scope?.isEmpty() == true) {
             // User has no view scope → everything is zero.
-            return OverAllStatsResponse(zero, zero, zero, zero)
+            return OverAllStatsResponse(zero, zeroValue, zeroValue, zero, zero, zero, zero)
         }
         val tenantId = requireTenant()
         val sb = scopeBinding(scope)
@@ -91,11 +95,36 @@ class DashboardStatsService(
             personRepository.countCreatedInRangeNative(range.startInstant, range.endInstant).toInt()
         val personsPrevious =
             personRepository.countCreatedInRangeNative(range.previousStartInstant, range.previousEndInstant).toInt()
+        val organizationsCurrent =
+            organizationRepository.countCreatedInRangeNative(range.startInstant, range.endInstant).toInt()
+        val organizationsPrevious =
+            organizationRepository.countCreatedInRangeNative(range.previousStartInstant, range.previousEndInstant).toInt()
+        val avgLeadValueCurrent = leadRepository.avgAmountInRangeNative(range.startInstant, range.endInstant, sb.hasScope, sb.ids)
+        val avgLeadValuePrevious =
+            leadRepository.avgAmountInRangeNative(
+                range.previousStartInstant,
+                range.previousEndInstant,
+                sb.hasScope,
+                sb.ids,
+            )
+        val periodDaysCurrent = java.time.Duration.between(range.startInstant, range.endInstant).toDays().coerceAtLeast(1)
+        val periodDaysPrevious =
+            java.time.Duration
+                .between(range.previousStartInstant, range.previousEndInstant)
+                .toDays()
+                .coerceAtLeast(1)
+        val avgLeadsPerDayCurrent =
+            BigDecimal(leadsCurrent).divide(BigDecimal(periodDaysCurrent), 2, java.math.RoundingMode.HALF_UP)
+        val avgLeadsPerDayPrevious =
+            BigDecimal(leadsPrevious).divide(BigDecimal(periodDaysPrevious), 2, java.math.RoundingMode.HALF_UP)
         return OverAllStatsResponse(
             leads = period(leadsCurrent, leadsPrevious),
+            averageLeadValue = periodValue(avgLeadValueCurrent, avgLeadValuePrevious),
+            averageLeadsPerDay = periodValue(avgLeadsPerDayCurrent, avgLeadsPerDayPrevious),
             activities = period(activitiesCurrent, activitiesPrevious),
             quotes = period(quotesCurrent, quotesPrevious),
             persons = period(personsCurrent, personsPrevious),
+            organizations = period(organizationsCurrent, organizationsPrevious),
         )
     }
 
@@ -156,7 +185,12 @@ class DashboardStatsService(
     ): TotalLeadsResponse {
         val scope = scopeResolver.userIdsForCurrentUser()
         if (scope?.isEmpty() == true) {
-            return TotalLeadsResponse(bucket = bucket, series = emptyList())
+            return TotalLeadsResponse(
+                bucket = bucket,
+                all = TotalLeadsSeries(emptyList()),
+                won = TotalLeadsSeries(emptyList()),
+                lost = TotalLeadsSeries(emptyList()),
+            )
         }
         val sb = scopeBinding(scope)
         val pgBucket =
@@ -165,7 +199,7 @@ class DashboardStatsService(
                 "week" -> "week"
                 else -> "day"
             }
-        val rows =
+        val allRows =
             leadRepository.countCreatedByBucketNative(
                 pgBucket,
                 range.startInstant,
@@ -173,15 +207,53 @@ class DashboardStatsService(
                 sb.hasScope,
                 sb.ids,
             )
+        val wonRows =
+            leadRepository.countStatusByBucketNative(
+                pgBucket,
+                "won",
+                range.startInstant,
+                range.endInstant,
+                sb.hasScope,
+                sb.ids,
+            )
+        val lostRows =
+            leadRepository.countStatusByBucketNative(
+                pgBucket,
+                "lost",
+                range.startInstant,
+                range.endInstant,
+                sb.hasScope,
+                sb.ids,
+            )
         return TotalLeadsResponse(
             bucket = pgBucket,
-            series =
-                rows.map { row ->
-                    TimeSeriesBucket(
-                        date = toLocalDate(row[0]),
-                        count = (row[1] as Number).toInt(),
-                    )
-                },
+            all =
+                TotalLeadsSeries(
+                    allRows.map { row ->
+                        TimeSeriesBucket(
+                            date = toLocalDate(row[0]),
+                            count = (row[1] as Number).toInt(),
+                        )
+                    },
+                ),
+            won =
+                TotalLeadsSeries(
+                    wonRows.map { row ->
+                        TimeSeriesBucket(
+                            date = toLocalDate(row[0]),
+                            count = (row[1] as Number).toInt(),
+                        )
+                    },
+                ),
+            lost =
+                TotalLeadsSeries(
+                    lostRows.map { row ->
+                        TimeSeriesBucket(
+                            date = toLocalDate(row[0]),
+                            count = (row[1] as Number).toInt(),
+                        )
+                    },
+                ),
         )
     }
 
@@ -343,6 +415,20 @@ class DashboardStatsService(
         return PeriodCount(current = current, previous = previous, delta = delta, changePercent = pct)
     }
 
+    private fun periodValue(
+        current: BigDecimal,
+        previous: BigDecimal,
+    ): PeriodValue {
+        val delta = current.subtract(previous)
+        val pct =
+            if (previous.compareTo(BigDecimal.ZERO) == 0) {
+                if (current.compareTo(BigDecimal.ZERO) == 0) BigDecimal.ZERO else BigDecimal(100)
+            } else {
+                delta.multiply(BigDecimal(100)).divide(previous, 2, java.math.RoundingMode.HALF_UP)
+            }
+        return PeriodValue(current = current, previous = previous, delta = delta, changePercent = pct)
+    }
+
     /**
      * Native `IN (:list)` won't accept an empty collection, so when scope is unrestricted
      * we pass [PLACEHOLDER_IDS] and [hasScope] = false; the SQL skips the IN check.
@@ -368,5 +454,6 @@ class DashboardStatsService(
     companion object {
         private val PLACEHOLDER_IDS: Collection<UUID> = listOf(UUID(0L, 0L))
         private val zero = PeriodCount(0, 0, 0, BigDecimal.ZERO)
+        private val zeroValue = PeriodValue(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
     }
 }

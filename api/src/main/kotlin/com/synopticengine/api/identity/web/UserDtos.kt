@@ -39,6 +39,17 @@ data class MassDeactivateRequest(
     val ids: List<UUID>,
 )
 
+data class UpdateUsersStatusRequest(
+    val ids: List<UUID>,
+    val isActive: Boolean,
+)
+
+data class UpdateUserPasswordRequest(
+    @field:NotBlank(message = "Password is required")
+    @field:Size(min = 8, message = "Password must be at least 8 characters")
+    val password: String,
+)
+
 data class UserResponse(
     val id: UUID,
     val email: String,

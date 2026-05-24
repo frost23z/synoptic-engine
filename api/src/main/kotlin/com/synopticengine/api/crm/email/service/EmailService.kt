@@ -16,6 +16,7 @@ import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.storage.StorageService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
@@ -73,6 +74,7 @@ class EmailService(
         // Draft goes to "drafts" folder regardless of what the caller asked for —
         // a draft in "sent" or "inbox" makes no sense for the UI's folder filters.
         val effectiveFolders = if (isDraft) listOf("drafts") else folders.ifEmpty { listOf("sent") }
+        val senderEmail = currentUserEmail()
         val email =
             emailRepository.save(
                 Email().apply {
@@ -83,7 +85,8 @@ class EmailService(
                     this.parentId = parentId
                     this.folders = effectiveFolders
                     this.status = if (isDraft) EmailStatus.DRAFT else EmailStatus.OUTBOX
-                    this.from = mapOf("email" to to)
+                    this.from = senderEmail?.let { mapOf("email" to it) }
+                    this.to = listOf(mapOf("email" to to))
                     if (cc != null) this.cc = cc.map { mapOf("email" to it) }
                     if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
                 },
@@ -141,7 +144,10 @@ class EmailService(
         if (email.status == EmailStatus.SENT) {
             throw IllegalStateException("Email $id is already SENT")
         }
-        val to = email.from?.get("email") ?: throw IllegalStateException("Draft has no recipient")
+        val to =
+            email.to?.firstOrNull()?.get("email")
+                ?: email.from?.get("email")
+                ?: throw IllegalStateException("Draft has no recipient")
         email.status = EmailStatus.OUTBOX
         email.folders = listOf("outbox")
         emailRepository.save(email)
@@ -180,6 +186,7 @@ class EmailService(
                 appendLine(original.body.orEmpty())
             }
         val subject = "Fwd: ${original.subject.orEmpty()}"
+        val senderEmail = currentUserEmail()
         val forwarded =
             emailRepository.save(
                 Email().apply {
@@ -190,7 +197,8 @@ class EmailService(
                     this.parentId = original.id
                     this.folders = listOf("sent")
                     this.status = EmailStatus.SENT
-                    this.from = mapOf("email" to to)
+                    this.from = senderEmail?.let { mapOf("email" to it) }
+                    this.to = listOf(mapOf("email" to to))
                     if (cc != null) this.cc = cc.map { mapOf("email" to it) }
                     if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
                 },
@@ -201,6 +209,37 @@ class EmailService(
         val forwardedId = checkNotNull(forwarded.id) { "Saved forwarded email id must not be null" }
         emailDeliveryService.deliver(forwardedId, to, subject, combinedBody, cc, bcc)
         return requireEmail(forwardedId).toResponse()
+    }
+
+    @Transactional
+    fun reply(
+        id: UUID,
+        message: String?,
+        cc: List<String>?,
+        bcc: List<String>?,
+        attachmentIds: List<UUID>,
+    ): EmailResponse {
+        val original = requireEmail(id)
+        val to = original.from?.get("email") ?: throw IllegalStateException("Original email has no sender address")
+        val subject =
+            if ((original.subject ?: "").startsWith("Re:", ignoreCase = true)) {
+                original.subject
+            } else {
+                "Re: ${original.subject.orEmpty()}"
+            }
+        return compose(
+            subject = subject,
+            to = to,
+            cc = cc,
+            bcc = bcc,
+            body = message,
+            personId = original.personId,
+            leadId = original.leadId,
+            parentId = original.id,
+            folders = listOf("sent"),
+            isDraft = false,
+            attachmentIds = attachmentIds,
+        )
     }
 
     @Transactional
@@ -327,6 +366,7 @@ class EmailService(
                 emailRepository.save(
                     Email().apply {
                         this.from = mapOf("email" to from)
+                        this.to = listOf(mapOf("email" to to))
                         this.subject = subject
                         this.body = body
                         this.folders = listOf("inbox")
@@ -408,6 +448,9 @@ class EmailService(
         val UUID_REGEX: Regex = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 
+    private fun currentUserEmail(): String? =
+        SecurityContextHolder.getContext().authentication?.name?.takeIf { it.isNotBlank() }
+
     // Tenant-aware load. JpaRepository.findById bypasses Hibernate's
     // `@Filter("tenantFilter")` because it goes through `EntityManager.find()`
     // rather than a query. `findActiveById` uses JPQL so the filter applies
@@ -426,6 +469,7 @@ fun Email.toResponse() =
         status = status.name,
         folders = folders,
         from = from,
+        to = to,
         cc = cc,
         bcc = bcc,
         body = body,

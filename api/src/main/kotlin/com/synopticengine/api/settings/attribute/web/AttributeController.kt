@@ -2,6 +2,9 @@ package com.synopticengine.api.settings.attribute.web
 
 import com.synopticengine.api.settings.attribute.service.AttributeService
 import jakarta.validation.Valid
+import org.springframework.http.ContentDisposition
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -178,5 +181,12 @@ class AttributeController(
 
     @GetMapping("/download")
     @PreAuthorize("hasAuthority('attributes.view')")
-    fun download(): ResponseEntity<Void> = ResponseEntity.noContent().build()
+    fun download(): ResponseEntity<ByteArray> {
+        val csv = attributeService.downloadCsv()
+        val headers = HttpHeaders()
+        headers.contentType = MediaType("text", "csv")
+        headers.contentDisposition =
+            ContentDisposition.attachment().filename("attributes.csv").build()
+        return ResponseEntity.ok().headers(headers).body(csv.toByteArray(Charsets.UTF_8))
+    }
 }

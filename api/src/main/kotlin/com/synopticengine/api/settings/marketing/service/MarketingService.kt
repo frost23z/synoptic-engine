@@ -12,6 +12,7 @@ import com.synopticengine.api.shared.email.MailSenderService
 import com.synopticengine.api.shared.email.interpolateTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -33,12 +34,14 @@ class MarketingService(
     fun createEvent(
         name: String,
         description: String?,
+        eventDate: LocalDate,
     ): MarketingEventResponse =
         eventRepository
             .save(
                 MarketingEvent().apply {
                     this.name = name
                     this.description = description
+                    this.eventDate = eventDate
                 },
             ).toResponse()
 
@@ -47,21 +50,30 @@ class MarketingService(
         id: UUID,
         name: String,
         description: String?,
+        eventDate: LocalDate,
     ): MarketingEventResponse {
         val event = requireEvent(id)
         event.name = name
         event.description = description
+        event.eventDate = eventDate
         return eventRepository.save(event).toResponse()
     }
 
     @Transactional
     fun deleteEvent(id: UUID) {
+        if (campaignRepository.existsActiveByEventId(id)) {
+            throw IllegalStateException("Cannot delete marketing event with active campaigns")
+        }
         eventRepository.delete(requireEvent(id))
     }
 
     @Transactional
     fun massDestroyEvents(ids: List<UUID>) =
-        ids.forEach { id -> eventRepository.findActiveById(id)?.let { eventRepository.delete(it) } }
+        ids.forEach { id ->
+            if (!campaignRepository.existsActiveByEventId(id)) {
+                eventRepository.findActiveById(id)?.let { eventRepository.delete(it) }
+            }
+        }
 
     // ── Marketing Campaigns ───────────────────────────────────────────────
 
@@ -152,6 +164,7 @@ fun MarketingEvent.toResponse() =
         id = id!!,
         name = name,
         description = description,
+        eventDate = eventDate,
         createdAt = createdAt,
         updatedAt = updatedAt,
     )

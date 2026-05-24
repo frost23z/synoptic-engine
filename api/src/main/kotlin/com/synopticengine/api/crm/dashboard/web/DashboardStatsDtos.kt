@@ -14,9 +14,19 @@ data class PeriodCount(
 
 data class OverAllStatsResponse(
     val leads: PeriodCount,
+    val averageLeadValue: PeriodValue,
+    val averageLeadsPerDay: PeriodValue,
     val activities: PeriodCount,
     val quotes: PeriodCount,
     val persons: PeriodCount,
+    val organizations: PeriodCount,
+)
+
+data class PeriodValue(
+    val current: BigDecimal,
+    val previous: BigDecimal,
+    val delta: BigDecimal,
+    val changePercent: BigDecimal,
 )
 
 data class RevenueStatsResponse(
@@ -31,9 +41,15 @@ data class TimeSeriesBucket(
     val count: Int,
 )
 
+data class TotalLeadsSeries(
+    val overTime: List<TimeSeriesBucket>,
+)
+
 data class TotalLeadsResponse(
     val bucket: String,
-    val series: List<TimeSeriesBucket>,
+    val all: TotalLeadsSeries,
+    val won: TotalLeadsSeries,
+    val lost: TotalLeadsSeries,
 )
 
 data class RevenueByDimensionEntry(

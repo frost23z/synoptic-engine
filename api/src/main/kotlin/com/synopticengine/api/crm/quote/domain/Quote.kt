@@ -46,6 +46,9 @@ class Quote :
     @Column(precision = 5, scale = 2, nullable = false)
     var tax: BigDecimal = BigDecimal.ZERO
 
+    @Column(precision = 12, scale = 2, nullable = false)
+    var adjustment: BigDecimal = BigDecimal.ZERO
+
     @Column(columnDefinition = "TEXT")
     var terms: String? = null
 
@@ -58,12 +61,12 @@ class Quote :
     /** Billing address as JSON: `{ street, city, state, country, postcode }`. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    var billingAddress: String? = null
+    var billingAddress: Map<String, Any?>? = null
 
     /** Shipping address as JSON: same shape as billingAddress. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    var shippingAddress: String? = null
+    var shippingAddress: Map<String, Any?>? = null
 
     @Column
     override var deletedAt: Instant? = null

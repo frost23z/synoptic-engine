@@ -26,6 +26,9 @@ class Webhook :
     @Column(name = "payload_url", nullable = false, length = 2048)
     var payloadUrl: String = ""
 
+    @Column(name = "secret", length = 255)
+    var secret: String? = null
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
     var events: List<String> = emptyList()

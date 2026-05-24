@@ -106,6 +106,7 @@ class AutomationService(
     fun createWebhook(
         name: String,
         payloadUrl: String,
+        secret: String?,
         events: List<String>,
         isActive: Boolean,
     ): WebhookResponse =
@@ -114,6 +115,7 @@ class AutomationService(
                 Webhook().apply {
                     this.name = name
                     this.payloadUrl = payloadUrl
+                    this.secret = secret?.takeIf { it.isNotBlank() }
                     this.events = events
                     this.isActive = isActive
                 },
@@ -124,12 +126,14 @@ class AutomationService(
         id: UUID,
         name: String,
         payloadUrl: String,
+        secret: String?,
         events: List<String>,
         isActive: Boolean,
     ): WebhookResponse {
         val webhook = requireWebhook(id)
         webhook.name = name
         webhook.payloadUrl = payloadUrl
+        webhook.secret = secret?.takeIf { it.isNotBlank() }
         webhook.events = events
         webhook.isActive = isActive
         return webhookRepository.save(webhook).toResponse()
@@ -178,6 +182,7 @@ fun Webhook.toResponse() =
         id = id!!,
         name = name,
         payloadUrl = payloadUrl,
+        hasSecret = !secret.isNullOrBlank(),
         events = events,
         isActive = isActive,
         createdAt = createdAt,

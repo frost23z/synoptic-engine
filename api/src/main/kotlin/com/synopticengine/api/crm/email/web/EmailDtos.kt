@@ -20,6 +20,7 @@ data class EmailResponse(
     val status: String,
     val folders: List<String>,
     val from: Map<String, String>?,
+    val to: List<Map<String, String>>?,
     val cc: List<Map<String, String>>?,
     val bcc: List<Map<String, String>>?,
     val body: String?,
@@ -60,6 +61,13 @@ data class ForwardEmailRequest(
     val message: String? = null,
     val cc: List<String>? = null,
     val bcc: List<String>? = null,
+)
+
+data class ReplyEmailRequest(
+    val body: String?,
+    val cc: List<String>? = null,
+    val bcc: List<String>? = null,
+    val attachmentIds: List<UUID> = emptyList(),
 )
 
 data class MoveFolderRequest(

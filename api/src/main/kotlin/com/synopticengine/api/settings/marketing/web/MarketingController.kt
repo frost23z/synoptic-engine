@@ -37,7 +37,7 @@ class MarketingEventController(
     ): ResponseEntity<MarketingEventResponse> =
         ResponseEntity
             .status(HttpStatus.CREATED)
-            .body(marketingService.createEvent(request.name, request.description))
+            .body(marketingService.createEvent(request.name, request.description, request.eventDate))
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('marketing.edit')")
@@ -45,7 +45,7 @@ class MarketingEventController(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateMarketingEventRequest,
     ): ResponseEntity<MarketingEventResponse> =
-        ResponseEntity.ok(marketingService.updateEvent(id, request.name, request.description))
+        ResponseEntity.ok(marketingService.updateEvent(id, request.name, request.description, request.eventDate))
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('marketing.edit')")
