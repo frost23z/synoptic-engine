@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -77,6 +78,39 @@ class QuoteIntegrationTest : AbstractIntegrationTest() {
         assertEquals(leadId.toString(), body["leadId"])
         assertEquals(2, (body["items"] as List<*>).size)
         assertTrue((body["grandTotal"] as Number).toDouble() > 0)
+    }
+
+    @Test
+    fun `create quote persists person and address fields and includes adjustment in grand total`() {
+        val leadId = leadFactory.id(adminToken)
+        val personId = UUID.randomUUID()
+        val result =
+            post(
+                "/api/quotes",
+                adminToken,
+                mapOf(
+                    "leadId" to leadId.toString(),
+                    "title" to "Quote with parity fields",
+                    "personId" to personId.toString(),
+                    "discount" to 10,
+                    "tax" to 5,
+                    "adjustment" to 15,
+                    "billingAddress" to mapOf("street" to "1 Billing St", "city" to "Billing City"),
+                    "shippingAddress" to mapOf("street" to "2 Shipping St", "city" to "Shipping City"),
+                    "items" to listOf(mapOf("quantity" to 1, "unitPrice" to 100.00, "discount" to 0)),
+                ),
+            )
+        assertEquals(201, result.status())
+        val body = result.bodyAsMap()!!
+        assertEquals(personId.toString(), body["personId"])
+        @Suppress("UNCHECKED_CAST")
+        val billing = body["billingAddress"] as Map<String, Any>
+        @Suppress("UNCHECKED_CAST")
+        val shipping = body["shippingAddress"] as Map<String, Any>
+        assertEquals("1 Billing St", billing["street"])
+        assertEquals("2 Shipping St", shipping["street"])
+        val grandTotal = (body["grandTotal"] as Number).toDouble()
+        assertTrue(abs(grandTotal - 109.5) < 0.001, "expected grandTotal 109.5 but got $grandTotal")
     }
 
     @Test

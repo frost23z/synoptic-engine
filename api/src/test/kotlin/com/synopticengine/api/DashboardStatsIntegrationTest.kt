@@ -40,12 +40,20 @@ class DashboardStatsIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `over-all returns the four period counters with deltas`() {
+    fun `over-all returns period counters and value metrics with deltas`() {
         val body = get("/api/dashboard/stats?type=over-all", adminToken).bodyAsMap()!!
-        listOf("leads", "activities", "quotes", "persons").forEach { assertNotNull(body[it]) }
+        listOf("leads", "activities", "quotes", "persons", "organizations").forEach { assertNotNull(body[it]) }
         @Suppress("UNCHECKED_CAST")
         val leads = body["leads"] as Map<String, Any>
         listOf("current", "previous", "delta", "changePercent").forEach { assertNotNull(leads[it]) }
+        @Suppress("UNCHECKED_CAST")
+        val averageLeadValue = body["averageLeadValue"] as Map<String, Any>
+        @Suppress("UNCHECKED_CAST")
+        val averageLeadsPerDay = body["averageLeadsPerDay"] as Map<String, Any>
+        listOf("current", "previous", "delta", "changePercent").forEach {
+            assertNotNull(averageLeadValue[it])
+            assertNotNull(averageLeadsPerDay[it])
+        }
     }
 
     @Test

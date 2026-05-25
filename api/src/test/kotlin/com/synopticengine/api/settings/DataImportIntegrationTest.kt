@@ -175,6 +175,32 @@ class DataImportIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
+    fun `lead import keeps partial success and captures row-level errors`() {
+        val csv =
+            "title,description,amount\nValid Deal,ok,500\n,missing title,250"
+                .toByteArray()
+        val importId =
+            multipart("/api/settings/imports", adminToken, csv, "leads-partial.csv", mapOf("entityType" to "Lead"))
+                .bodyAsMap()!!["id"] as String
+        assertEquals(200, post("/api/settings/imports/$importId/start", adminToken, null).status())
+
+        var stats = get("/api/settings/imports/$importId/stats", adminToken).bodyAsMap()!!
+        repeat(10) {
+            if (stats["status"] != "PROCESSING") return@repeat
+            Thread.sleep(200)
+            stats = get("/api/settings/imports/$importId/stats", adminToken).bodyAsMap()!!
+        }
+
+        assertEquals("COMPLETED", stats["status"])
+        assertEquals(1, stats["successCount"])
+        assertEquals(1, stats["errorCount"])
+        @Suppress("UNCHECKED_CAST")
+        val errors = stats["errors"] as List<Map<String, Any>>
+        assertEquals("3", errors.first()["row"]?.toString())
+        assertTrue(errors.first()["error"]?.toString()?.contains("title is required") == true)
+    }
+
+    @Test
     fun `upload product CSV returns 201`() {
         val result =
             multipart(
