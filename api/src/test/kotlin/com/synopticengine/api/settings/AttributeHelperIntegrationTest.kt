@@ -2,6 +2,7 @@ package com.synopticengine.api.settings
 
 import com.synopticengine.api.AbstractIntegrationTest
 import org.junit.jupiter.api.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
@@ -56,5 +57,14 @@ class AttributeHelperIntegrationTest : AbstractIntegrationTest() {
         val token = adminToken()
         val result = get("/api/settings/attributes/download", token)
         assertEquals(204, result.status())
+    }
+
+    @Test
+    fun `GET attributes-download export true returns csv`() {
+        val token = adminToken()
+        val result = get("/api/settings/attributes/download?export=true", token)
+        assertEquals(200, result.status())
+        assertContains(result.response.contentType ?: "", "text/csv")
+        assertContains(result.response.contentAsString, "id,code,admin_name,type,entity_type,sort_order,is_user_defined")
     }
 }

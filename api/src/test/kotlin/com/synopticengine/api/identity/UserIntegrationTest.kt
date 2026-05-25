@@ -196,6 +196,40 @@ class UserIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
+    fun `set password endpoint allows login with new password`() {
+        val request = validCreateRequest()
+        val created = post("/api/users", adminToken, request).bodyAsMap()!!
+        val id = created["id"] as String
+        val email = request["email"] as String
+        val newPassword = "new-password-123"
+        assertEquals(
+            204,
+            put(
+                "/api/users/$id/password",
+                adminToken,
+                mapOf("password" to newPassword),
+            ).status(),
+        )
+        assertTrue(login(email, newPassword).isNotBlank())
+    }
+
+    @Test
+    fun `mass update can reactivate previously deactivated users`() {
+        val id = createUserViaApi()
+        assertEquals(204, delete("/api/users/$id", adminToken).status())
+        assertEquals(404, get("/api/users/$id", adminToken).status())
+        assertEquals(
+            204,
+            post(
+                "/api/users/mass-update",
+                adminToken,
+                mapOf("ids" to listOf(id), "isActive" to true),
+            ).status(),
+        )
+        assertEquals(200, get("/api/users/$id", adminToken).status())
+    }
+
+    @Test
     fun `mass destroy without token returns 401`() {
         assertEquals(401, post("/api/users/mass-destroy", null, mapOf("ids" to emptyList<String>())).status())
     }
