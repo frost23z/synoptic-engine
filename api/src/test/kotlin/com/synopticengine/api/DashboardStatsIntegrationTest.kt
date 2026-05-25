@@ -48,6 +48,7 @@ class DashboardStatsIntegrationTest : AbstractIntegrationTest() {
         listOf("current", "previous", "delta", "changePercent").forEach { assertNotNull(leads[it]) }
         @Suppress("UNCHECKED_CAST")
         val averageLeadValue = body["averageLeadValue"] as Map<String, Any>
+
         @Suppress("UNCHECKED_CAST")
         val averageLeadsPerDay = body["averageLeadsPerDay"] as Map<String, Any>
         listOf("current", "previous", "delta", "changePercent").forEach {

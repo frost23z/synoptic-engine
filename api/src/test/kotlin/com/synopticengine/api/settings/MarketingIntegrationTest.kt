@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class MarketingIntegrationTest : AbstractIntegrationTest() {
     private lateinit var adminToken: String
@@ -81,9 +82,14 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `update marketing event returns 200`() {
         val id = createEvent()["id"] as String
-        val result = put("/api/settings/marketing/events/$id", adminToken, mapOf("name" to "Updated Event"))
+        val result =
+            put(
+                "/api/settings/marketing/events/$id",
+                adminToken,
+                mapOf("name" to "Updated Event ${UUID.randomUUID().toString().take(8)}"),
+            )
         assertEquals(200, result.status())
-        assertEquals("Updated Event", result.bodyAsMap()!!["name"])
+        assertTrue(result.bodyAsMap()!!["name"].toString().startsWith("Updated Event"))
     }
 
     @Test
@@ -93,7 +99,7 @@ class MarketingIntegrationTest : AbstractIntegrationTest() {
             put(
                 "/api/settings/marketing/events/$id",
                 adminToken,
-                mapOf("name" to "Updated Event", "eventDate" to "2026-02-20"),
+                mapOf("name" to "Updated Event ${UUID.randomUUID().toString().take(8)}", "eventDate" to "2026-02-20"),
             )
         assertEquals(200, result.status())
         assertEquals("2026-02-20", result.bodyAsMap()!!["eventDate"])

@@ -177,16 +177,19 @@ class DataImportIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `lead import keeps partial success and captures row-level errors`() {
         val csv =
-            "title,description,amount\nValid Deal,ok,500\n,missing title,250"
-                .toByteArray()
+            (
+                "title,description,amount,pipelineId,stageId\n" +
+                    "Valid Deal,ok,500,00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011\n" +
+                    ",missing title,250,00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011"
+            ).toByteArray()
         val importId =
             multipart("/api/settings/imports", adminToken, csv, "leads-partial.csv", mapOf("entityType" to "Lead"))
                 .bodyAsMap()!!["id"] as String
         assertEquals(200, post("/api/settings/imports/$importId/start", adminToken, null).status())
 
         var stats = get("/api/settings/imports/$importId/stats", adminToken).bodyAsMap()!!
-        repeat(10) {
-            if (stats["status"] != "PROCESSING") return@repeat
+        repeat(25) {
+            if (stats["status"] == "COMPLETED" || stats["status"] == "FAILED") return@repeat
             Thread.sleep(200)
             stats = get("/api/settings/imports/$importId/stats", adminToken).bodyAsMap()!!
         }

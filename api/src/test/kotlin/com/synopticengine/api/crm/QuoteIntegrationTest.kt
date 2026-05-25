@@ -2,6 +2,7 @@ package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
 import com.synopticengine.api.support.factories.LeadFactory
+import com.synopticengine.api.support.factories.PersonFactory
 import com.synopticengine.api.support.factories.QuoteFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -16,6 +17,8 @@ class QuoteIntegrationTest : AbstractIntegrationTest() {
     @Autowired private lateinit var leadFactory: LeadFactory
 
     @Autowired private lateinit var quoteFactory: QuoteFactory
+
+    @Autowired private lateinit var personFactory: PersonFactory
 
     private lateinit var adminToken: String
     private lateinit var viewerToken: String
@@ -83,7 +86,7 @@ class QuoteIntegrationTest : AbstractIntegrationTest() {
     @Test
     fun `create quote persists person and address fields and includes adjustment in grand total`() {
         val leadId = leadFactory.id(adminToken)
-        val personId = UUID.randomUUID()
+        val personId = personFactory.id(adminToken)
         val result =
             post(
                 "/api/quotes",
@@ -105,6 +108,7 @@ class QuoteIntegrationTest : AbstractIntegrationTest() {
         assertEquals(personId.toString(), body["personId"])
         @Suppress("UNCHECKED_CAST")
         val billing = body["billingAddress"] as Map<String, Any>
+
         @Suppress("UNCHECKED_CAST")
         val shipping = body["shippingAddress"] as Map<String, Any>
         assertEquals("1 Billing St", billing["street"])
