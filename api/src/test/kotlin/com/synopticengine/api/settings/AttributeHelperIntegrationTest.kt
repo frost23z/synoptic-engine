@@ -65,6 +65,9 @@ class AttributeHelperIntegrationTest : AbstractIntegrationTest() {
         val result = get("/api/settings/attributes/download?export=true", token)
         assertEquals(200, result.status())
         assertContains(result.response.contentType ?: "", "text/csv")
-        assertContains(result.response.contentAsString, "id,code,admin_name,type,entity_type,sort_order,is_user_defined")
+        assertContains(
+            result.response.contentAsString,
+            "id,code,admin_name,type,entity_type,sort_order,is_user_defined",
+        )
     }
 }
