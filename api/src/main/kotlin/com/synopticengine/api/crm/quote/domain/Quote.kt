@@ -28,7 +28,7 @@ class Quote :
     AuditableEntity(),
     SoftDeletable {
     @Column(nullable = false)
-    var leadId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000000")
+    lateinit var leadId: UUID
 
     @Column
     var userId: UUID? = null

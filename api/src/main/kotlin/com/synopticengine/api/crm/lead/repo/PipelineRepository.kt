@@ -13,4 +13,6 @@ interface PipelineRepository : JpaRepository<Pipeline, UUID> {
     fun findActiveById(id: UUID): Pipeline?
 
     fun existsByIsDefaultTrueAndDeletedAtIsNull(): Boolean
+
+    fun findFirstByIsDefaultTrueAndDeletedAtIsNullOrderByCreatedAtAsc(): Pipeline?
 }

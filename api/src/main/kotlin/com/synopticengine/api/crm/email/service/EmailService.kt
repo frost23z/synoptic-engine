@@ -141,8 +141,8 @@ class EmailService(
     @Transactional
     fun sendDraft(id: UUID): EmailResponse {
         val email = requireEmail(id)
-        if (email.status == EmailStatus.SENT) {
-            throw IllegalStateException("Email $id is already SENT")
+        if (email.status == EmailStatus.SENT || email.status == EmailStatus.OUTBOX) {
+            throw IllegalStateException("Email $id is already ${email.status} and cannot be sent again")
         }
         val to =
             email.to?.firstOrNull()?.get("email")
@@ -195,17 +195,14 @@ class EmailService(
                     this.personId = original.personId
                     this.leadId = original.leadId
                     this.parentId = original.id
-                    this.folders = listOf("sent")
-                    this.status = EmailStatus.SENT
+                    this.folders = listOf("outbox")
+                    this.status = EmailStatus.OUTBOX
                     this.from = senderEmail?.let { mapOf("email" to it) }
                     this.to = listOf(mapOf("email" to to))
                     if (cc != null) this.cc = cc.map { mapOf("email" to it) }
                     if (bcc != null) this.bcc = bcc.map { mapOf("email" to it) }
                 },
             )
-        forwarded.status = EmailStatus.OUTBOX
-        forwarded.folders = listOf("outbox")
-        emailRepository.save(forwarded)
         val forwardedId = checkNotNull(forwarded.id) { "Saved forwarded email id must not be null" }
         emailDeliveryService.deliver(forwardedId, to, subject, combinedBody, cc, bcc)
         return requireEmail(forwardedId).toResponse()
