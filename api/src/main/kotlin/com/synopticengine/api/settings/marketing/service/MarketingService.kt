@@ -8,6 +8,7 @@ import com.synopticengine.api.settings.marketing.repo.MarketingEventRepository
 import com.synopticengine.api.settings.marketing.web.ExecuteMarketingCampaignResponse
 import com.synopticengine.api.settings.marketing.web.MarketingCampaignResponse
 import com.synopticengine.api.settings.marketing.web.MarketingEventResponse
+import com.synopticengine.api.shared.email.HtmlSanitizer
 import com.synopticengine.api.shared.email.MailSenderService
 import com.synopticengine.api.shared.email.interpolateTemplate
 import org.springframework.stereotype.Service
@@ -139,9 +140,10 @@ class MarketingService(
                 ?.let { emailTemplateRepository.findActiveById(it)?.content }
                 ?: campaign.description.orEmpty()
         val body = interpolateTemplate(bodyTemplate, context)
+        val sanitizedBody = HtmlSanitizer.sanitize(body)
         val sentCounter = AtomicInteger(0)
         recipients.filter { it.isNotBlank() }.distinct().forEach { recipient ->
-            mailSenderService.sendHtmlEmail(recipient, subject, body)
+            mailSenderService.sendHtmlEmail(recipient, subject, sanitizedBody)
             sentCounter.incrementAndGet()
         }
         return ExecuteMarketingCampaignResponse(

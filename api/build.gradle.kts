@@ -40,6 +40,8 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.apache.commons:commons-csv:1.12.0")
+    implementation("org.jsoup:jsoup:1.18.3")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.2.0")
     implementation("com.github.librepdf:openpdf:2.0.3")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
