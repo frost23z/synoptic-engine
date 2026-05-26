@@ -265,6 +265,7 @@ class QuoteService(
         copy.items.addAll(
             source.items.map { item ->
                 QuoteItem().apply {
+                    this.quote = copy
                     this.quoteId = copy.id!!
                     this.productId = item.productId
                     this.quantity = item.quantity
@@ -311,6 +312,21 @@ fun Quote.toResponse(): QuoteResponse {
     )
 }
 
+/**
+ * Single source of truth for a quote line's pre-tax total: `unitPrice * quantity`
+ * less a percentage discount. The discount division carries an explicit scale +
+ * [RoundingMode]; an unscoped `divide` throws [ArithmeticException] on a
+ * non-terminating quotient.
+ */
+internal fun quoteLineTotal(
+    unitPrice: BigDecimal,
+    quantity: Int,
+    discountPercent: BigDecimal,
+): BigDecimal =
+    unitPrice
+        .multiply(BigDecimal(quantity))
+        .multiply(BigDecimal.ONE.subtract(discountPercent.divide(BigDecimal(100), 10, RoundingMode.HALF_UP)))
+
 fun QuoteItem.toResponse() =
     QuoteItemResponse(
         id = id!!,
@@ -318,5 +334,5 @@ fun QuoteItem.toResponse() =
         quantity = quantity,
         unitPrice = unitPrice,
         discount = discount,
-        lineTotal = lineTotal.setScale(2, RoundingMode.HALF_UP),
+        lineTotal = quoteLineTotal(unitPrice, quantity, discount).setScale(2, RoundingMode.HALF_UP),
     )

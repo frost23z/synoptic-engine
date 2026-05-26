@@ -55,10 +55,10 @@ class Lead :
     var closedAt: Instant? = null
 
     @Column(nullable = false)
-    var pipelineId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000010")
+    lateinit var pipelineId: UUID
 
     @Column(nullable = false)
-    var stageId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000011")
+    lateinit var stageId: UUID
 
     @Column(nullable = false)
     var stageUpdatedAt: Instant = Instant.now()
