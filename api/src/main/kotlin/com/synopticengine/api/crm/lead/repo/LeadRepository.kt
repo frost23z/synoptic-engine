@@ -405,4 +405,22 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         @Param("leadId") leadId: UUID,
         @Param("tagId") tagId: UUID,
     ): Int
+
+    /**
+     * Aggregate stage statistics: count + sum(amount) per stageId for non-deleted
+     * leads. Used by the dashboard to replace the OOM `PageRequest.of(0, Int.MAX_VALUE)` load.
+     * Returns rows of [stageId, count, sum(amount)].
+     */
+    @Query(
+        value = """
+            SELECT l.stage_id,
+                   COUNT(*)                        AS lead_count,
+                   COALESCE(SUM(l.amount), 0)      AS total_amount
+            FROM leads l
+            WHERE l.deleted_at IS NULL
+            GROUP BY l.stage_id
+        """,
+        nativeQuery = true,
+    )
+    fun countAndSumByStageNative(): List<Array<Any>>
 }
