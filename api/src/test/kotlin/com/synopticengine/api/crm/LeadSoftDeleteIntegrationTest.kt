@@ -40,6 +40,8 @@ class LeadSoftDeleteIntegrationTest : AbstractIntegrationTest() {
                 leadRepository.save(
                     Lead().apply {
                         title = "SoftDelete-${UUID.randomUUID().toString().take(8)}"
+                        pipelineId = UUID.fromString("00000000-0000-0000-0000-000000000010")
+                        stageId = UUID.fromString("00000000-0000-0000-0000-000000000011")
                     },
                 )
             }

@@ -16,7 +16,7 @@ import java.util.UUID
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 class QuoteItem : BaseEntity() {
     @Column(name = "quote_id", insertable = false, updatable = false)
-    var quoteId: UUID = UUID.randomUUID()
+    lateinit var quoteId: UUID
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "quote_id", nullable = false)
@@ -33,11 +33,4 @@ class QuoteItem : BaseEntity() {
 
     @Column(precision = 5, scale = 2, nullable = false)
     var discount: BigDecimal = BigDecimal.ZERO
-
-    val lineTotal: BigDecimal
-        get() =
-            unitPrice
-                .multiply(
-                    BigDecimal(quantity),
-                ).multiply(BigDecimal.ONE.subtract(discount.divide(BigDecimal(100))))
 }
