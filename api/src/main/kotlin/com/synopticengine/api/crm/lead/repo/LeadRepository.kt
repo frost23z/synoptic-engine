@@ -223,6 +223,46 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
 
     @Query(
         value = """
+            SELECT DATE_TRUNC(:bucket, closed_at)::date AS bucket_date, COUNT(*) AS cnt
+            FROM leads
+            WHERE deleted_at IS NULL
+              AND status = :status
+              AND closed_at IS NOT NULL
+              AND closed_at >= :start AND closed_at < :end
+              AND (:hasScope = false OR user_id IN (:scopeIds))
+            GROUP BY bucket_date
+            ORDER BY bucket_date
+        """,
+        nativeQuery = true,
+    )
+    fun countStatusByBucketNative(
+        @Param("bucket") bucket: String,
+        @Param("status") status: String,
+        @Param("start") start: Instant,
+        @Param("end") end: Instant,
+        @Param("hasScope") hasScope: Boolean,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): List<Array<Any>>
+
+    @Query(
+        value = """
+            SELECT COALESCE(AVG(amount), 0) FROM leads
+            WHERE deleted_at IS NULL
+              AND amount IS NOT NULL
+              AND created_at >= :start AND created_at < :end
+              AND (:hasScope = false OR user_id IN (:scopeIds))
+        """,
+        nativeQuery = true,
+    )
+    fun avgAmountInRangeNative(
+        @Param("start") start: Instant,
+        @Param("end") end: Instant,
+        @Param("hasScope") hasScope: Boolean,
+        @Param("scopeIds") scopeIds: Collection<UUID>,
+    ): BigDecimal
+
+    @Query(
+        value = """
             SELECT lead_source_id, COALESCE(SUM(amount), 0), COUNT(*)
             FROM leads
             WHERE deleted_at IS NULL
@@ -351,4 +391,18 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         @Param("pipelineId") pipelineId: UUID?,
         @Param("scopeIds") scopeIds: Collection<UUID>,
     ): List<Lead>
+
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO lead_tags (lead_id, tag_id)
+            VALUES (:leadId, :tagId)
+            ON CONFLICT DO NOTHING
+        """,
+        nativeQuery = true,
+    )
+    fun attachTag(
+        @Param("leadId") leadId: UUID,
+        @Param("tagId") tagId: UUID,
+    ): Int
 }

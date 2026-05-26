@@ -16,7 +16,6 @@ import com.synopticengine.api.shared.config.TenantSession
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
 import java.util.UUID
 
 @Service
@@ -128,8 +127,41 @@ class UserService(
         }
         ensureNotLastAdmin(user)
         user.isActive = false
-        user.deletedAt = Instant.now()
+        user.deletedAt = java.time.Instant.now()
         userRepository.save(user)
+    }
+
+    @Transactional
+    fun setPassword(
+        id: UUID,
+        newPassword: String,
+    ) {
+        val user = requireUser(id)
+        user.passwordHash = passwordEncoder.encode(newPassword) ?: error("Password encoding failed")
+        userRepository.save(user)
+    }
+
+    @Transactional
+    fun setActiveStatus(
+        ids: List<UUID>,
+        isActive: Boolean,
+    ) {
+        if (isActive) {
+            val tenantId = TenantContext.get() ?: throw IllegalStateException("Tenant context missing")
+            userRepository.reactivateByIds(ids, tenantId)
+            return
+        }
+        val selfId = currentUserId()
+        ids.forEach { id ->
+            val user = requireUser(id)
+            if (id == selfId) {
+                throw IllegalStateException("You cannot deactivate your own account.")
+            }
+            ensureNotLastAdmin(user)
+            user.isActive = false
+            user.deletedAt = java.time.Instant.now()
+            userRepository.save(user)
+        }
     }
 
     @Transactional
@@ -143,7 +175,7 @@ class UserService(
             userRepository.findActiveByIdWithRolesAsList(id).firstOrNull()?.let { user ->
                 if (runCatching { ensureNotLastAdmin(user) }.isSuccess) {
                     user.isActive = false
-                    user.deletedAt = Instant.now()
+                    user.deletedAt = java.time.Instant.now()
                     userRepository.save(user)
                 }
             }
@@ -230,8 +262,12 @@ class UserService(
         UserSummary(
             id = id!!,
             email = email,
+            firstName = firstName,
+            lastName = lastName,
             fullName = fullName,
             isActive = isActive,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
         )
 
     private fun User.toCredentials(): UserCredentials {

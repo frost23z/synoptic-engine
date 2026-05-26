@@ -50,6 +50,9 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
         assertEquals("Test Subject", body["subject"])
         assertEquals(false, body["isRead"])
         assertTrue((body["folders"] as List<*>).contains("sent"))
+        @Suppress("UNCHECKED_CAST")
+        val recipients = body["to"] as List<Map<String, String>>
+        assertEquals("recipient@example.com", recipients.first()["email"])
     }
 
     @Test
@@ -101,6 +104,18 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
         val id = composeAndGetId()
         assertEquals(204, delete("/api/mail/$id", adminToken).status())
         assertEquals(404, get("/api/mail/$id", adminToken).status())
+    }
+
+    @Test
+    fun `reply endpoint creates a reply with Re subject`() {
+        val id = composeAndGetId()
+        val result = post("/api/mail/$id/reply", adminToken, mapOf("body" to "Reply body"))
+        assertEquals(200, result.status())
+        val body = result.bodyAsMap()!!
+        assertTrue((body["subject"] as String).startsWith("Re:"))
+        @Suppress("UNCHECKED_CAST")
+        val recipients = body["to"] as List<Map<String, String>>
+        assertTrue(recipients.isNotEmpty())
     }
 
     // ── Lead email pivot ──────────────────────────────────────────────────

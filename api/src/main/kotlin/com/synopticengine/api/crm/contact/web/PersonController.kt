@@ -28,7 +28,7 @@ class PersonController(
     private val activityService: ActivityService,
 ) {
     @GetMapping
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
     fun listAll(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
@@ -38,7 +38,7 @@ class PersonController(
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
     fun search(
         @RequestParam q: String,
         @RequestParam(defaultValue = "0") page: Int,
@@ -49,13 +49,13 @@ class PersonController(
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('contacts.create')")
+    @PreAuthorize("hasAnyAuthority('contacts.create', 'contacts.persons.create')")
     fun create(
         @Valid @RequestBody request: CreatePersonRequest,
     ): ResponseEntity<PersonResponse> =
@@ -75,7 +75,7 @@ class PersonController(
             )
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdatePersonRequest,
@@ -95,7 +95,7 @@ class PersonController(
         )
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.delete')")
+    @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.persons.delete')")
     fun delete(
         @PathVariable id: UUID,
     ): ResponseEntity<Void> {
@@ -104,7 +104,7 @@ class PersonController(
     }
 
     @PostMapping("/mass-destroy")
-    @PreAuthorize("hasAuthority('contacts.delete')")
+    @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.persons.delete')")
     fun massDestroy(
         @RequestBody request: MassDestroyPersonRequest,
     ): ResponseEntity<Map<String, Any>> {
@@ -114,21 +114,21 @@ class PersonController(
     }
 
     @PostMapping("/{id}/tags")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun attachTag(
         @PathVariable id: UUID,
         @RequestBody request: TagAttachRequest,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.attachTag(id, request.tagId))
 
     @DeleteMapping("/{id}/tags/{tagId}")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun detachTag(
         @PathVariable id: UUID,
         @PathVariable tagId: UUID,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.detachTag(id, tagId))
 
     @GetMapping("/{id}/activities")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.persons.view')")
     fun getActivities(
         @PathVariable id: UUID,
         @RequestParam(defaultValue = "0") page: Int,
@@ -151,7 +151,7 @@ class PersonController(
     }
 
     @PostMapping("/merge")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun merge(
         @RequestBody request: MergePersonRequest,
     ): ResponseEntity<MergePersonResponse> = ResponseEntity.ok(personService.merge(request.sourceId, request.targetId))
