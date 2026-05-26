@@ -13,10 +13,10 @@ import java.util.UUID
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 class LeadProduct : BaseEntity() {
     @Column(nullable = false)
-    var leadId: UUID = UUID.randomUUID()
+    lateinit var leadId: UUID
 
     @Column(nullable = false)
-    var productId: UUID = UUID.randomUUID()
+    lateinit var productId: UUID
 
     @Column(nullable = false)
     var quantity: Int = 1

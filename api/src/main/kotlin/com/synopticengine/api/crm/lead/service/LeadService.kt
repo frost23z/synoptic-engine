@@ -136,14 +136,28 @@ class LeadService(
         description: String?,
         amount: BigDecimal?,
         expectedCloseDate: LocalDate?,
-        pipelineId: UUID,
-        stageId: UUID,
+        pipelineId: UUID?,
+        stageId: UUID?,
         personId: UUID?,
         organizationId: UUID?,
         leadSourceId: UUID?,
         leadTypeId: UUID?,
         userId: UUID?,
     ): LeadResponse {
+        // Resolve the tenant's own default pipeline/stage when the caller omits them.
+        // Seed sentinel UUIDs only exist in the seed tenant, so defaulting to them would
+        // point freshly-provisioned tenants at non-existent / cross-tenant rows.
+        val resolvedPipelineId =
+            pipelineId
+                ?: pipelineRepository.findFirstByIsDefaultTrueAndDeletedAtIsNullOrderByCreatedAtAsc()?.id
+                ?: throw NoSuchElementException("No default pipeline configured for this tenant")
+        val resolvedStageId =
+            stageId
+                ?: stageRepository
+                    .findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(resolvedPipelineId)
+                    .firstOrNull()
+                    ?.id
+                ?: throw NoSuchElementException("Pipeline $resolvedPipelineId has no stages")
         val lead =
             leadRepository.save(
                 Lead().apply {
@@ -151,8 +165,8 @@ class LeadService(
                     this.description = description
                     this.amount = amount
                     this.expectedCloseDate = expectedCloseDate
-                    this.pipelineId = pipelineId
-                    this.stageId = stageId
+                    this.pipelineId = resolvedPipelineId
+                    this.stageId = resolvedStageId
                     this.personId = personId
                     this.organizationId = organizationId
                     this.leadSourceId = leadSourceId
@@ -162,7 +176,12 @@ class LeadService(
                 },
             )
         eventPublisher.publishEvent(
-            DomainEvent("lead.created", "Lead", lead.id!!, mapOf("status" to lead.status.value, "stageId" to stageId)),
+            DomainEvent(
+                "lead.created",
+                "Lead",
+                lead.id!!,
+                mapOf("status" to lead.status.value, "stageId" to resolvedStageId),
+            ),
         )
         return lead.toResponse()
     }
@@ -259,9 +278,12 @@ class LeadService(
         ids.forEach { id ->
             leadRepository.findActiveById(id)?.let { lead ->
                 if (userId != null) lead.userId = userId
+                val stageChanged = stageId != null && stageId != lead.stageId
                 if (stageId != null) lead.stageId = stageId
                 if (status != null) lead.status = status
-                leadRepository.save(lead)
+                if (stageChanged) lead.stageUpdatedAt = Instant.now()
+                val saved = leadRepository.save(lead)
+                if (stageChanged) publishLeadStageChanged(saved.id!!, saved.stageId, saved.status.value)
             }
         }
     }
