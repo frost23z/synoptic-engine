@@ -331,10 +331,8 @@ class LeadService(
     ): LeadResponse {
         val lead = requireLead(leadId)
         val email =
-            emailRepository
-                .findById(
-                    emailId,
-                ).orElseThrow { NoSuchElementException("Email not found: $emailId") }
+            emailRepository.findActiveById(emailId)
+                ?: throw NoSuchElementException("Email not found: $emailId")
         lead.emails.add(email)
         return leadRepository.save(lead).toResponse()
     }

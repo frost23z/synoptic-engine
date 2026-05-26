@@ -292,7 +292,10 @@ class ActivityService(
         participantId: UUID,
     ): ActivityResponse {
         val activity = requireActivity(activityId)
-        activityParticipantRepository.deleteById(participantId)
+        val participant =
+            activityParticipantRepository.findByIdAndActivityId(participantId, activityId)
+                ?: throw NoSuchElementException("Participant not found: $participantId")
+        activityParticipantRepository.delete(participant)
         return activity.toResponseWithParticipants()
     }
 
@@ -332,9 +335,8 @@ class ActivityService(
         activityRepository.findByIdAndDeletedAtIsNull(activityId)
             ?: throw NoSuchElementException("Activity not found: $activityId")
         val file =
-            activityFileRepository
-                .findById(fileId)
-                .orElseThrow { NoSuchElementException("File not found: $fileId") }
+            activityFileRepository.findByIdAndActivityId(fileId, activityId)
+                ?: throw NoSuchElementException("File not found: $fileId")
         val bytes = storageService.load(file.path)
         return Triple(bytes, file.contentType ?: "application/octet-stream", file.name)
     }
