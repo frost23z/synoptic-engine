@@ -3,6 +3,7 @@ package com.synopticengine.api.identity.repo
 import com.synopticengine.api.identity.domain.User
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
@@ -104,4 +105,19 @@ interface UserRepository :
         @Param("groupId") groupId: UUID,
         @Param("tenantId") tenantId: UUID,
     ): List<UUID>
+
+    @Modifying
+    @Query(
+        value = """
+            UPDATE users
+            SET is_active = true, deleted_at = NULL
+            WHERE tenant_id = :tenantId
+              AND id IN (:ids)
+        """,
+        nativeQuery = true,
+    )
+    fun reactivateByIds(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("tenantId") tenantId: UUID,
+    ): Int
 }

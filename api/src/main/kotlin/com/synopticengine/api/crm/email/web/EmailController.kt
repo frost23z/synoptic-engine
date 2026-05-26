@@ -131,6 +131,22 @@ class EmailController(
             emailService.forward(id, request.to, request.message, request.cc, request.bcc),
         )
 
+    @PostMapping("/{id}/reply")
+    @PreAuthorize("hasAuthority('mail.edit')")
+    fun reply(
+        @PathVariable id: UUID,
+        @RequestBody request: ReplyEmailRequest,
+    ): ResponseEntity<EmailResponse> =
+        ResponseEntity.ok(
+            emailService.reply(
+                id = id,
+                message = request.body,
+                cc = request.cc,
+                bcc = request.bcc,
+                attachmentIds = request.attachmentIds,
+            ),
+        )
+
     @PatchMapping("/{id}/folder")
     @PreAuthorize("hasAuthority('mail.edit')")
     fun moveFolder(

@@ -5,8 +5,12 @@ import java.util.UUID
 data class UserSummary(
     val id: UUID,
     val email: String,
+    val firstName: String,
+    val lastName: String,
     val fullName: String,
     val isActive: Boolean,
+    val createdAt: java.time.Instant?,
+    val updatedAt: java.time.Instant?,
 )
 
 data class UserCredentials(

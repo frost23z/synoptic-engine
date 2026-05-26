@@ -88,10 +88,9 @@ class CrmWorkflowTargetAdapter(
         tagId: UUID?,
         tagName: String?,
     ): UUID? {
-        val lead = leadRepository.findActiveById(leadId) ?: return null
+        if (leadRepository.findActiveById(leadId) == null) return null
         val tag = resolveTag(tagId, tagName) ?: return null
-        lead.tags.add(tag)
-        leadRepository.save(lead)
+        leadRepository.attachTag(leadId, tag.id!!)
         return tag.id
     }
 
@@ -100,10 +99,9 @@ class CrmWorkflowTargetAdapter(
         tagId: UUID?,
         tagName: String?,
     ): UUID? {
-        val person = personRepository.findActiveById(personId) ?: return null
+        if (personRepository.findActiveById(personId) == null) return null
         val tag = resolveTag(tagId, tagName) ?: return null
-        person.tags.add(tag)
-        personRepository.save(person)
+        personRepository.attachTag(personId, tag.id!!)
         return tag.id
     }
 

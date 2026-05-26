@@ -99,12 +99,9 @@ class CsvImportProcessor(
             }
         }
 
-        if (errors.isNotEmpty()) {
-            throw IllegalStateException("CSV import aborted: ${errors.size} row(s) failed validation")
-        }
         dataImport.successCount = successCount
-        dataImport.errorCount = 0
-        dataImport.errors = null
+        dataImport.errorCount = errors.size
+        dataImport.errors = errors.takeIf { it.isNotEmpty() }
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
@@ -166,12 +163,9 @@ class CsvImportProcessor(
             }
         }
 
-        if (errors.isNotEmpty()) {
-            throw IllegalStateException("CSV import aborted: ${errors.size} row(s) failed validation")
-        }
         dataImport.successCount = successCount
-        dataImport.errorCount = 0
-        dataImport.errors = null
+        dataImport.errorCount = errors.size
+        dataImport.errors = errors.takeIf { it.isNotEmpty() }
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }
@@ -204,12 +198,9 @@ class CsvImportProcessor(
             }
         }
 
-        if (errors.isNotEmpty()) {
-            throw IllegalStateException("CSV import aborted: ${errors.size} row(s) failed validation")
-        }
         dataImport.successCount = successCount
-        dataImport.errorCount = 0
-        dataImport.errors = null
+        dataImport.errorCount = errors.size
+        dataImport.errors = errors.takeIf { it.isNotEmpty() }
         dataImport.status = ImportStatus.COMPLETED
         dataImportRepository.save(dataImport)
     }

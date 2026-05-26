@@ -10,6 +10,7 @@ import org.hibernate.annotations.Filter
 import org.hibernate.annotations.SQLDelete
 import org.hibernate.annotations.SQLRestriction
 import java.time.Instant
+import java.time.LocalDate
 
 @Entity
 @Table(
@@ -32,6 +33,9 @@ class MarketingEvent :
 
     @Column(columnDefinition = "TEXT")
     var description: String? = null
+
+    @Column(name = "event_date")
+    var eventDate: LocalDate? = null
 
     @Column
     override var deletedAt: Instant? = null

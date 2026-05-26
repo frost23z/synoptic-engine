@@ -7,16 +7,22 @@ import com.synopticengine.api.shared.DomainEvent
 import com.synopticengine.api.shared.TenantContext
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
+import org.springframework.http.MediaType
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
+import tools.jackson.databind.ObjectMapper
+import java.nio.charset.StandardCharsets
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 @Component
 class WebhookDispatcher(
     private val webhookRepository: com.synopticengine.api.settings.automation.repo.WebhookRepository,
     private val deliveryRunRepository: WebhookDeliveryRunRepository,
     private val restClient: RestClient,
+    private val objectMapper: ObjectMapper,
 ) {
     private val log = LoggerFactory.getLogger(WebhookDispatcher::class.java)
 
@@ -48,11 +54,17 @@ class WebhookDispatcher(
 
         for (webhook in matching) {
             try {
+                val payloadJson = objectMapper.writeValueAsString(payload)
                 val response =
                     restClient
                         .post()
                         .uri(webhook.payloadUrl)
-                        .body(payload)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .let { req ->
+                            webhook.secret?.takeIf { it.isNotBlank() }?.let { secret ->
+                                req.header("X-Synoptic-Signature", signPayload(secret, payloadJson))
+                            } ?: req
+                        }.body(payloadJson)
                         .retrieve()
                         .toEntity(String::class.java)
                 recordSuccess(webhook.id!!, event, response.statusCode.value(), response.body)
@@ -107,5 +119,15 @@ class WebhookDispatcher(
                 this.errorMessage = error?.take(2_000)
             },
         )
+    }
+
+    private fun signPayload(
+        secret: String,
+        payloadJson: String,
+    ): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
+        val digest = mac.doFinal(payloadJson.toByteArray(StandardCharsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 }

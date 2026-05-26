@@ -28,7 +28,7 @@ class OrganizationController(
     private val activityService: ActivityService,
 ) {
     @GetMapping
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.organizations.view')")
     fun listAll(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
@@ -38,7 +38,7 @@ class OrganizationController(
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.organizations.view')")
     fun search(
         @RequestParam q: String,
         @RequestParam(defaultValue = "0") page: Int,
@@ -49,13 +49,13 @@ class OrganizationController(
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.organizations.view')")
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<OrganizationResponse> = ResponseEntity.ok(organizationService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('contacts.create')")
+    @PreAuthorize("hasAnyAuthority('contacts.create', 'contacts.organizations.create')")
     fun create(
         @Valid @RequestBody request: CreateOrganizationRequest,
     ): ResponseEntity<OrganizationResponse> =
@@ -72,7 +72,7 @@ class OrganizationController(
             )
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.edit')")
+    @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.organizations.edit')")
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateOrganizationRequest,
@@ -89,7 +89,7 @@ class OrganizationController(
         )
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('contacts.delete')")
+    @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.organizations.delete')")
     fun delete(
         @PathVariable id: UUID,
     ): ResponseEntity<Void> {
@@ -98,7 +98,7 @@ class OrganizationController(
     }
 
     @PostMapping("/mass-destroy")
-    @PreAuthorize("hasAuthority('contacts.delete')")
+    @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.organizations.delete')")
     fun massDestroy(
         @RequestBody request: MassDestroyOrganizationRequest,
     ): ResponseEntity<Void> {
@@ -107,7 +107,7 @@ class OrganizationController(
     }
 
     @GetMapping("/{id}/activities")
-    @PreAuthorize("hasAuthority('contacts.view')")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.organizations.view')")
     fun getActivities(
         @PathVariable id: UUID,
         @RequestParam(defaultValue = "0") page: Int,
