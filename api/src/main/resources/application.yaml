@@ -24,6 +24,7 @@ spring:
                         enable: ${MAIL_SMTP_STARTTLS:false}
 server:
     port: 8090
+    forward-headers-strategy: framework
 api:
     base-path: /api
 mail:
@@ -33,7 +34,7 @@ jwt:
     access-token-expiry: 900000      # 15 minutes
     refresh-token-expiry: 604800000  # 7 days
 cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://0.0.0.0:3000,http://192.168.*:3000,http://192.168.*.*:3000}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
 synoptic:
     admin:
         email: ${SYNOPTIC_ADMIN_EMAIL:admin@synoptic.dev}

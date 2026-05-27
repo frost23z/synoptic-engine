@@ -2,6 +2,7 @@ package com.synopticengine.api.auth.web
 
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import java.util.UUID
 
 data class LoginRequest(
@@ -9,6 +10,7 @@ data class LoginRequest(
     @field:NotBlank(message = "Email is required")
     val email: String,
     @field:NotBlank(message = "Password is required")
+    @field:Size(max = 1000, message = "Password must not exceed 1000 characters")
     val password: String,
 )
 
@@ -36,12 +38,17 @@ data class MeResponse(
 )
 
 data class ForgotPasswordRequest(
-    @field:jakarta.validation.constraints.Email val email: String,
+    @field:Email(message = "Valid email required")
+    @field:NotBlank(message = "Email is required")
+    val email: String,
 )
 
 data class ResetPasswordRequest(
+    @field:NotBlank(message = "Token is required")
     val token: String,
+    @field:NotBlank(message = "Email is required")
+    @field:Email(message = "Valid email required")
     val email: String,
-    @field:jakarta.validation.constraints.Size(min = 8, message = "Password must be at least 8 characters")
+    @field:Size(min = 8, max = 1000, message = "Password must be 8–1000 characters")
     val newPassword: String,
 )

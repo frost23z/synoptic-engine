@@ -26,6 +26,22 @@ interface RefreshSessionRepository : JpaRepository<RefreshSession, UUID> {
     ): Int
 
     @Modifying
+    @Query(
+        """
+        UPDATE RefreshSession s
+        SET s.revokedAt = :now,
+            s.revokedReason = :reason
+        WHERE s.userId = :userId
+          AND s.revokedAt IS NULL
+    """,
+    )
+    fun revokeAllByUserId(
+        @Param("userId") userId: UUID,
+        @Param("now") now: Instant,
+        @Param("reason") reason: String,
+    ): Int
+
+    @Modifying
     @Query("DELETE FROM RefreshSession s WHERE s.expiresAt < :cutoff")
     fun deleteExpiredBefore(
         @Param("cutoff") cutoff: Instant,

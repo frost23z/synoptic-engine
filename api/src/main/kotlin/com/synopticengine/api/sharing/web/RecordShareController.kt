@@ -28,6 +28,7 @@ import java.util.UUID
 class RecordShareController(
     private val service: RecordShareService,
 ) {
+    /** Owner-side share: only the owner tenant may call this endpoint. */
     @PostMapping("/records/share")
     @PreAuthorize("hasAuthority('${SharingPermissions.RECORDS_SHARE}')")
     fun share(
@@ -42,6 +43,32 @@ class RecordShareController(
                 resourceId = request.resourceId!!,
                 accessLevel = request.accessLevel!!,
                 sharedBy = principal.id,
+                expiresAt = request.expiresAt,
+                note = request.note,
+            )
+        return ResponseEntity.status(HttpStatus.CREATED).body(RecordShareResponse.from(share))
+    }
+
+    /**
+     * Consumer-initiated reshare: a consumer with MANAGE access may share the
+     * record onward to another tenant. Gated on [SharingPermissions.RECORDS_RESHARE];
+     * the service additionally checks [AccessLevel.canReshare] on the effective
+     * access level of the calling tenant.
+     */
+    @PostMapping("/records/reshare")
+    @PreAuthorize("hasAuthority('${SharingPermissions.RECORDS_RESHARE}')")
+    fun reshare(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: ReshareRecordRequest,
+    ): ResponseEntity<RecordShareResponse> {
+        val share =
+            service.reshare(
+                actingTenantId = principal.tenantId,
+                actingUserId = principal.id,
+                consumerTenantId = request.consumerTenantId!!,
+                resourceType = request.resourceType!!,
+                resourceId = request.resourceId!!,
+                accessLevel = request.accessLevel!!,
                 expiresAt = request.expiresAt,
                 note = request.note,
             )
@@ -83,6 +110,23 @@ class RecordShareController(
 }
 
 data class ShareRecordRequest(
+    @field:NotNull
+    val consumerTenantId: UUID?,
+    @field:NotBlank
+    val resourceType: String?,
+    @field:NotNull
+    val resourceId: UUID?,
+    @field:NotNull
+    val accessLevel: AccessLevel?,
+    val expiresAt: Instant? = null,
+    val note: String? = null,
+)
+
+/**
+ * Request DTO for the consumer-initiated reshare endpoint.
+ * Same fields as [ShareRecordRequest]; separate type for clarity.
+ */
+data class ReshareRecordRequest(
     @field:NotNull
     val consumerTenantId: UUID?,
     @field:NotBlank

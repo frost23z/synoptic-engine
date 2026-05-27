@@ -60,9 +60,7 @@ class CrmApiImpl(
 
     override fun findOrganizationById(id: UUID): OrganizationSummary? =
         organizationRepository
-            .findById(id)
-            .orElse(null)
-            ?.takeIf { it.deletedAt == null }
+            .findActiveById(id)
             ?.let { OrganizationSummary(id = it.id!!, name = it.name) }
 
     override fun existsPersonById(id: UUID): Boolean = personRepository.findActiveById(id) != null
@@ -153,21 +151,25 @@ class CrmApiImpl(
         val lostLeads = leadRepository.countByStatusAndDeletedAtIsNull(LeadStatus.LOST)
         val totalRevenue = leadRepository.sumAmountByStatus(LeadStatus.WON)
 
-        // Leads grouped by stage
-        val allActiveLeads = leadRepository.findAllByDeletedAtIsNull(PageRequest.of(0, Int.MAX_VALUE)).content
-        val leadsByStageId = allActiveLeads.groupBy { it.stageId }
+        // Use aggregate query instead of loading all leads — prevents OOM on large datasets.
+        val stageRows = leadRepository.countAndSumByStageNative()
+        val stageIdToRow =
+            stageRows.associate { row ->
+                (row[0] as java.util.UUID) to Pair((row[1] as Number).toInt(), row[2] as java.math.BigDecimal)
+            }
         val allStages = stageRepository.findAll().filter { it.deletedAt == null }
         val leadsByStage =
             allStages
-                .map { stage ->
-                    val stageLeads = leadsByStageId[stage.id] ?: emptyList()
+                .mapNotNull { stage ->
+                    val (count, value) = stageIdToRow[stage.id] ?: return@mapNotNull null
+                    if (count == 0) return@mapNotNull null
                     StageStats(
                         stageId = stage.id!!,
                         stageName = stage.name,
-                        count = stageLeads.size,
-                        value = stageLeads.sumOf { it.amount ?: BigDecimal.ZERO },
+                        count = count,
+                        value = value,
                     )
-                }.filter { it.count > 0 }
+                }
 
         // Top salespeople (userId, count, revenue) from JPQL result
         val topRows = leadRepository.findTopSalespeople(PageRequest.of(0, 5))
