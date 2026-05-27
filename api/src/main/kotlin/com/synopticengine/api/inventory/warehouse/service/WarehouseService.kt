@@ -54,14 +54,14 @@ class WarehouseService(
             WarehouseProductEntry(
                 productId = it.productId,
                 warehouseLocationId = it.warehouseLocationId,
-                quantity = it.quantity,
+                quantity = it.onHand,
             )
         }
     }
 
     fun getLocations(warehouseId: UUID): List<WarehouseLocationResponse> {
         requireWarehouse(warehouseId)
-        return locationRepository.findAllByWarehouseId(warehouseId).map { it.toResponse() }
+        return locationRepository.findAllByWarehouseIdAndDeletedAtIsNull(warehouseId).map { it.toResponse() }
     }
 
     @Transactional
@@ -135,7 +135,7 @@ class WarehouseService(
         name: String,
     ): WarehouseLocationResponse {
         val location =
-            locationRepository.findByIdAndWarehouseId(locationId, warehouseId)
+            locationRepository.findByIdAndWarehouseIdAndDeletedAtIsNull(locationId, warehouseId)
                 ?: throw NoSuchElementException("Location not found: $locationId")
         location.name = name
         return locationRepository.save(location).toResponse()
@@ -147,9 +147,15 @@ class WarehouseService(
         locationId: UUID,
     ) {
         val location =
-            locationRepository.findByIdAndWarehouseId(locationId, warehouseId)
+            locationRepository.findByIdAndWarehouseIdAndDeletedAtIsNull(locationId, warehouseId)
                 ?: throw NoSuchElementException("Location not found: $locationId")
-        locationRepository.delete(location)
+        val stock =
+            inventoryRepository.findAllByWarehouseId(warehouseId)
+                .filter { it.warehouseLocationId == locationId }
+                .sumOf { it.onHand + it.reserved + it.inTransit }
+        check(stock == 0) { "Cannot delete location: stock present" }
+        location.deletedAt = java.time.Instant.now()
+        locationRepository.save(location)
     }
 
     @Transactional

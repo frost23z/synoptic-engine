@@ -67,3 +67,10 @@ synoptic:
         # Generate: openssl rand -base64 32
         # REQUIRED in non-dev profiles; SecretsGuard refuses to start if absent.
         key: ${SYNOPTIC_ENCRYPTION_KEY:}
+    inventory:
+        reorder:
+            cron: "0 0 6 * * *"
+    marketing:
+        send-batch-size: 100
+        send-fixed-delay-ms: 30000
+        send-initial-delay-ms: 60000
