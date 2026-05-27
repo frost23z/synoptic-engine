@@ -1,6 +1,16 @@
 spring:
     application:
         name: synoptic-engine-api
+    servlet:
+        multipart:
+            # T4.3 — impose a hard ceiling at the servlet layer before any controller
+            # handler sees the bytes. Per-endpoint limits are enforced additionally
+            # by FileUploadGuard (activity files: 10 MB, email attachments: 25 MB,
+            # CSV imports: 10 MB). The max-request-size is set to 200 MB to permit
+            # one compose request with several large attachments; per-file cap is
+            # enforced in FileUploadGuard.validateEmailAttachment.
+            max-file-size: 25MB
+            max-request-size: 200MB
     jpa:
         hibernate:
             ddl-auto: validate

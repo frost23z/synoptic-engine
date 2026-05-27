@@ -2,6 +2,7 @@ package com.synopticengine.api.crm.activity.web
 
 import com.synopticengine.api.crm.activity.domain.ActivityType
 import com.synopticengine.api.crm.activity.service.ActivityService
+import com.synopticengine.api.shared.upload.FileUploadGuard
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
@@ -29,6 +30,7 @@ import java.util.UUID
 @RequestMapping($$"${api.base-path}/activities")
 class ActivityController(
     private val activityService: ActivityService,
+    private val fileUploadGuard: FileUploadGuard,
 ) {
     @GetMapping
     @PreAuthorize("hasAuthority('activities.view')")
@@ -135,7 +137,7 @@ class ActivityController(
     @PostMapping("/mass-update")
     @PreAuthorize("hasAuthority('activities.edit')")
     fun massUpdate(
-        @RequestBody request: MassUpdateActivityRequest,
+        @Valid @RequestBody request: MassUpdateActivityRequest,
     ): ResponseEntity<Void> {
         activityService.massUpdate(request.ids, request.userId, request.isDone)
         return ResponseEntity.noContent().build()
@@ -144,7 +146,7 @@ class ActivityController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('activities.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyActivityRequest,
+        @Valid @RequestBody request: MassDestroyActivityRequest,
     ): ResponseEntity<Void> {
         activityService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()
@@ -158,21 +160,21 @@ class ActivityController(
     @PreAuthorize("hasAuthority('activities.edit')")
     fun addParticipant(
         @PathVariable id: UUID,
-        @RequestBody request: AddParticipantRequest,
+        @Valid @RequestBody request: AddParticipantRequest,
     ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.addUserParticipant(id, request.userId))
 
     @PostMapping("/{id}/participants/users")
     @PreAuthorize("hasAuthority('activities.edit')")
     fun addUserParticipant(
         @PathVariable id: UUID,
-        @RequestBody request: AddUserParticipantRequest,
+        @Valid @RequestBody request: AddUserParticipantRequest,
     ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.addUserParticipant(id, request.userId))
 
     @PostMapping("/{id}/participants/persons")
     @PreAuthorize("hasAuthority('activities.edit')")
     fun addPersonParticipant(
         @PathVariable id: UUID,
-        @RequestBody request: AddPersonParticipantRequest,
+        @Valid @RequestBody request: AddPersonParticipantRequest,
     ): ResponseEntity<ActivityResponse> = ResponseEntity.ok(activityService.addPersonParticipant(id, request.personId))
 
     @DeleteMapping("/{id}/participants/users/{userId}")
@@ -225,8 +227,10 @@ class ActivityController(
     fun uploadFile(
         @PathVariable id: UUID,
         @RequestParam("file") file: MultipartFile,
-    ): ResponseEntity<ActivityFileResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(
+    ): ResponseEntity<ActivityFileResponse> {
+        // T4.3 — validate MIME type and enforce max size before touching the service layer.
+        fileUploadGuard.validateActivityFile(file)
+        return ResponseEntity.status(HttpStatus.CREATED).body(
             activityService.uploadFile(
                 activityId = id,
                 originalFilename = file.originalFilename ?: file.name,
@@ -234,6 +238,7 @@ class ActivityController(
                 contentType = file.contentType ?: "application/octet-stream",
             ),
         )
+    }
 
     @GetMapping("/{id}/file/{fileId}/download")
     @PreAuthorize("hasAuthority('activities.view')")

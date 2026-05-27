@@ -3,6 +3,7 @@ package com.synopticengine.api.settings.attribute.web
 import com.synopticengine.api.settings.attribute.domain.AttributeType
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.util.UUID
 
@@ -90,14 +91,24 @@ data class AttributeValueResponse(
 )
 
 data class MassUpdateAttributeRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot update more than $MAX_BATCH_SIZE attributes at once")
     val ids: List<UUID>,
     val adminName: String? = null,
     val sortOrder: Int? = null,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}
 
 data class MassDestroyAttributeRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot delete more than $MAX_BATCH_SIZE attributes at once")
     val ids: List<UUID>,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}
 
 data class AttributeLookupItem(
     val id: String,
