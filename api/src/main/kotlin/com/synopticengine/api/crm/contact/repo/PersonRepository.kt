@@ -97,4 +97,12 @@ interface PersonRepository : JpaRepository<Person, UUID> {
         @Param("personId") personId: UUID,
         @Param("tagId") tagId: UUID,
     ): Int
+
+    // T5.2 — replace per-entity find+save loop with a single UPDATE statement.
+    @Modifying
+    @Query("UPDATE Person p SET p.deletedAt = :now WHERE p.id IN :ids AND p.deletedAt IS NULL")
+    fun bulkSoftDelete(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("now") now: Instant,
+    ): Int
 }

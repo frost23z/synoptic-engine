@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
+// T5.1 / T5.2 — see batch-fetch note in application.yaml and bulk-update methods below.
 
 interface LeadRepository : JpaRepository<Lead, UUID> {
     @Query("SELECT l FROM Lead l LEFT JOIN FETCH l.tags WHERE l.id = :id AND l.deletedAt IS NULL")
@@ -18,14 +19,25 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
 
     fun findAllByDeletedAtIsNull(pageable: Pageable): Page<Lead>
 
-    fun findAllByPipelineIdAndDeletedAtIsNull(pipelineId: UUID): List<Lead>
-
+    // T5.1 — kanban path: LEFT JOIN FETCH tags so toResponse() doesn't trigger N+1.
+    // Non-paginated list → no in-memory pagination risk.
     @Query(
         """
-        SELECT l FROM Lead l
-        WHERE l.deletedAt IS NULL
-        AND l.pipelineId = :pipelineId
+        SELECT DISTINCT l FROM Lead l LEFT JOIN FETCH l.tags
+        WHERE l.pipelineId = :pipelineId AND l.deletedAt IS NULL
+    """,
+    )
+    fun findAllByPipelineIdAndDeletedAtIsNull(
+        @Param("pipelineId") pipelineId: UUID,
+    ): List<Lead>
+
+    // T5.1 — scoped kanban path: same JOIN FETCH treatment.
+    @Query(
+        """
+        SELECT DISTINCT l FROM Lead l LEFT JOIN FETCH l.tags
+        WHERE l.pipelineId = :pipelineId
         AND l.userId IN :scopeIds
+        AND l.deletedAt IS NULL
     """,
     )
     fun findAllByPipelineIdScopedAndDeletedAtIsNull(
@@ -37,6 +49,8 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         pipelineId: UUID,
         stageId: UUID,
     ): List<Lead>
+
+    fun existsByPipelineIdAndDeletedAtIsNull(pipelineId: UUID): Boolean
 
     fun findAllByUserIdAndDeletedAtIsNull(
         userId: UUID,
@@ -431,6 +445,117 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         @Param("leadId") leadId: UUID,
         @Param("tagId") tagId: UUID,
     ): Int
+
+    // ── T5.2 Bulk mutations ─────────────────────────────────────────────────────
+    //
+    // Replace per-id find+save loops with single UPDATE statements so that mass
+    // operations on 500 leads issue O(1) SQL rather than O(N) round-trips.
+
+    /** Soft-delete all matching active leads in one shot. */
+    @Modifying
+    @Query("UPDATE Lead l SET l.deletedAt = :now WHERE l.id IN :ids AND l.deletedAt IS NULL")
+    fun bulkSoftDelete(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("now") now: Instant,
+    ): Int
+
+    /** Bulk-reassign the owning user. */
+    @Modifying
+    @Query("UPDATE Lead l SET l.userId = :userId WHERE l.id IN :ids AND l.deletedAt IS NULL")
+    fun bulkSetUserId(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("userId") userId: UUID,
+    ): Int
+
+    /**
+     * Bulk-move to a new stage and stamp [stageUpdatedAt].
+     * Only active leads are updated; caller must pre-compute which ones actually
+     * change stage (via [findIdsWithDifferentStage]) to publish domain events.
+     */
+    @Modifying
+    @Query(
+        "UPDATE Lead l SET l.stageId = :stageId, l.stageUpdatedAt = :now " +
+            "WHERE l.id IN :ids AND l.deletedAt IS NULL",
+    )
+    fun bulkSetStageId(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("stageId") stageId: UUID,
+        @Param("now") now: Instant,
+    ): Int
+
+    /** Bulk-set status field. */
+    @Modifying
+    @Query("UPDATE Lead l SET l.status = :status WHERE l.id IN :ids AND l.deletedAt IS NULL")
+    fun bulkSetStatus(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("status") status: LeadStatus,
+    ): Int
+
+    /**
+     * Returns IDs from [ids] whose current stageId differs from [stageId].
+     * Used by [massUpdate] to determine which leads will change stage so
+     * [lead.stage.changed] events can be published accurately.
+     */
+    @Query(
+        "SELECT l.id FROM Lead l " +
+            "WHERE l.id IN :ids AND l.deletedAt IS NULL AND l.stageId <> :stageId",
+    )
+    fun findIdsWithDifferentStage(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("stageId") stageId: UUID,
+    ): List<UUID>
+
+    /**
+     * Returns (id, status) pairs for the given IDs.
+     * Used to include the correct current status in stage-changed events when
+     * massUpdate does not override status.
+     */
+    @Query("SELECT l.id, l.status FROM Lead l WHERE l.id IN :ids AND l.deletedAt IS NULL")
+    fun findIdAndStatusByIds(
+        @Param("ids") ids: Collection<UUID>,
+    ): List<Array<Any>>
+
+    /**
+     * Bulk-reparent all active leads from one pipeline to another.
+     * Used by [PipelineService.delete] instead of a load+loop.
+     */
+    @Modifying
+    @Query(
+        "UPDATE Lead l SET l.pipelineId = :toPipelineId, l.stageId = :toStageId " +
+            "WHERE l.pipelineId = :fromPipelineId AND l.deletedAt IS NULL",
+    )
+    fun bulkReparentToDefaultPipeline(
+        @Param("fromPipelineId") fromPipelineId: UUID,
+        @Param("toPipelineId") toPipelineId: UUID,
+        @Param("toStageId") toStageId: UUID,
+    ): Int
+
+    /**
+     * Bulk-move all active leads in [pipelineId] from [fromStageId] to [toStageId].
+     * Used by [PipelineService.deleteStage] instead of a load+loop.
+     */
+    @Modifying
+    @Query(
+        "UPDATE Lead l SET l.stageId = :toStageId " +
+            "WHERE l.stageId = :fromStageId AND l.pipelineId = :pipelineId AND l.deletedAt IS NULL",
+    )
+    fun bulkReparentToStage(
+        @Param("fromStageId") fromStageId: UUID,
+        @Param("pipelineId") pipelineId: UUID,
+        @Param("toStageId") toStageId: UUID,
+    ): Int
+
+    /**
+     * Returns the subset of [personIds] that own at least one active lead.
+     * Used by [PersonService.massDestroy] to skip persons that cannot be deleted.
+     */
+    @Query(
+        "SELECT DISTINCT l.personId FROM Lead l " +
+            "WHERE l.personId IN :personIds AND l.deletedAt IS NULL",
+    )
+    fun findPersonIdsHavingOpenLeads(
+        @Param("personIds") personIds: Collection<UUID>,
+    ): List<UUID>
 
     /**
      * Aggregate stage statistics: count + sum(amount) per stageId for non-deleted

@@ -141,20 +141,18 @@ class PersonService(
      * Soft-deletes each person that has no open leads; persons with leads are skipped.
      * Returns the ids that were actually deleted so the API can tell the caller which
      * mass-delete entries succeeded.
+     *
+     * T5.2 — replaced per-id find+save loop with two O(1) bulk queries:
+     *   1. find which persons own open leads (skip them),
+     *   2. bulk soft-delete the rest.
      */
     @Transactional
     fun massDestroy(ids: List<UUID>): List<UUID> {
-        val deleted = mutableListOf<UUID>()
-        ids.forEach { id ->
-            personRepository.findActiveById(id)?.let { person ->
-                if (!leadRepository.existsByPersonIdAndDeletedAtIsNull(id)) {
-                    person.deletedAt = Instant.now()
-                    personRepository.save(person)
-                    deleted.add(id)
-                }
-            }
-        }
-        return deleted
+        if (ids.isEmpty()) return emptyList()
+        val withLeads = leadRepository.findPersonIdsHavingOpenLeads(ids).toSet()
+        val toDelete = ids.filter { it !in withLeads }
+        if (toDelete.isNotEmpty()) personRepository.bulkSoftDelete(toDelete, Instant.now())
+        return toDelete
     }
 
     @Transactional
