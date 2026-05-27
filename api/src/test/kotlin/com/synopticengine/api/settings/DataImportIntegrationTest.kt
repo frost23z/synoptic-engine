@@ -81,11 +81,17 @@ class DataImportIntegrationTest : AbstractIntegrationTest() {
         val id = uploadPersonCsv()
         val result = post("/api/settings/imports/$id/start", adminToken, null)
         assertEquals(200, result.status())
-        // Give async processor time to finish
-        Thread.sleep(500)
-        val stats = get("/api/settings/imports/$id/stats", adminToken).bodyAsMap()!!
-        // Status should be PROCESSING or COMPLETED after async
-        assertTrue(stats["status"] == "PROCESSING" || stats["status"] == "COMPLETED")
+
+        var stats = get("/api/settings/imports/$id/stats", adminToken).bodyAsMap()!!
+        repeat(30) {
+            if (stats["status"] == "COMPLETED" || stats["status"] == "FAILED") return@repeat
+            Thread.sleep(100)
+            stats = get("/api/settings/imports/$id/stats", adminToken).bodyAsMap()!!
+        }
+        assertTrue(
+            stats["status"] == "PROCESSING" || stats["status"] == "COMPLETED",
+            "Unexpected import status after polling: ${stats["status"]}",
+        )
     }
 
     @Test

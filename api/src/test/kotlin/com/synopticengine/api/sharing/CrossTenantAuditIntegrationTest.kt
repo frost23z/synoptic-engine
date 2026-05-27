@@ -123,6 +123,45 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
         assertTrue(rows.isEmpty(), "Same-tenant edit should not append to cross_tenant_audit (got ${rows.size} row(s))")
     }
 
+    // ── T7.2 — CrossTenantAction.SHARE audit row ─────────────────────────────
+
+    @Test
+    fun `sharing a record via HTTP emits a SHARE audit row`() {
+        val owner = tenantProvisioner.provision("audit-share-o")
+        val consumer = tenantProvisioner.provision("audit-share-c")
+
+        val ownerUserId = UUID.fromString(get("/auth/me", owner.token).bodyAsMap()!!["id"] as String)
+        val leadId = createLeadInTenant(owner.tenantId, "Share audit probe")
+
+        // Owner shares the lead with the consumer tenant via the HTTP endpoint.
+        val shareResp =
+            post(
+                "/api/records/share",
+                owner.token,
+                mapOf(
+                    "consumerTenantId" to consumer.tenantId.toString(),
+                    "resourceType" to "leads",
+                    "resourceId" to leadId.toString(),
+                    "accessLevel" to "READ",
+                ),
+            )
+        assertEquals(201, shareResp.status(), shareResp.response.contentAsString)
+
+        // A SHARE audit row must exist: owner is both the owner and the actor.
+        val rows = auditRepository.findAll().filter { it.resourceId == leadId }
+        assertEquals(1, rows.size, "Expected exactly one audit row for the share action, got ${rows.size}")
+        val row = rows.first()
+        assertEquals(CrossTenantAction.SHARE, row.action)
+        assertEquals(owner.tenantId, row.ownerTenantId)
+        assertEquals(owner.tenantId, row.actorTenantId, "SHARE action: actor tenant == owner tenant")
+        assertEquals(ownerUserId, row.actorUserId)
+        assertEquals("leads", row.resourceType)
+        assertEquals(leadId, row.resourceId)
+        assertNotNull(row.at)
+        assertTrue(row.payloadJson!!.contains(consumer.tenantId.toString()), "Payload must include consumer tenant id")
+        assertTrue(row.payloadJson!!.contains("READ"), "Payload must include access level")
+    }
+
     /**
      * Create a Lead directly through the repository, skipping `LeadService.create`
      * (and the `lead.created` event that triggers an async workflow). The seed
