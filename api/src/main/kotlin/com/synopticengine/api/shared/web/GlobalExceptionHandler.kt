@@ -1,6 +1,9 @@
 package com.synopticengine.api.shared.web
 
+import com.synopticengine.api.shared.upload.FileSizeLimitExceededException
+import com.synopticengine.api.shared.upload.UnsupportedMediaTypeException
 import jakarta.persistence.OptimisticLockException
+import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
@@ -21,10 +24,27 @@ class GlobalExceptionHandler {
     fun handleNotFound(ex: NoSuchElementException): ProblemDetail =
         problem(HttpStatus.NOT_FOUND, ex.message ?: "Resource not found")
 
-    // 400 — bad input, wrong IDs, business rule violations
-    @ExceptionHandler(IllegalArgumentException::class)
-    fun handleBadRequest(ex: IllegalArgumentException): ProblemDetail =
+    // 400 — bad input, wrong IDs, business rule violations (incl. file-size exceeded)
+    @ExceptionHandler(IllegalArgumentException::class, FileSizeLimitExceededException::class)
+    fun handleBadRequest(ex: RuntimeException): ProblemDetail =
         problem(HttpStatus.BAD_REQUEST, ex.message ?: "Bad request")
+
+    // 400 — @Validated constraint violations on @RequestParam / @PathVariable
+    @ExceptionHandler(ConstraintViolationException::class)
+    fun handleConstraintViolation(ex: ConstraintViolationException): ProblemDetail {
+        val errors =
+            ex.constraintViolations.associate { v ->
+                val field = v.propertyPath.toString().substringAfterLast('.')
+                field to (v.message ?: "Invalid value")
+            }
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Validation failed")
+            .also { it.setProperty("errors", errors) }
+    }
+
+    // 415 — unsupported MIME type on file upload (T4.3)
+    @ExceptionHandler(UnsupportedMediaTypeException::class)
+    fun handleUnsupportedMediaType(ex: UnsupportedMediaTypeException): ProblemDetail =
+        problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ex.message ?: "Unsupported media type")
 
     // 409 — conflict, duplicate, invalid state transition
     @ExceptionHandler(IllegalStateException::class)

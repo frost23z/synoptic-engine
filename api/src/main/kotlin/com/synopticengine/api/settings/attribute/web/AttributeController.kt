@@ -131,7 +131,7 @@ class AttributeController(
     @PostMapping("/values")
     @PreAuthorize("hasAuthority('attributes.edit')")
     fun setValue(
-        @RequestBody request: SetAttributeValueRequest,
+        @Valid @RequestBody request: SetAttributeValueRequest,
     ): ResponseEntity<AttributeValueResponse> =
         ResponseEntity.ok(
             attributeService.setValue(request.attributeId, request.entityId, request.entityType, request.value),
@@ -140,7 +140,7 @@ class AttributeController(
     @PostMapping("/mass-update")
     @PreAuthorize("hasAuthority('attributes.edit')")
     fun massUpdate(
-        @RequestBody request: MassUpdateAttributeRequest,
+        @Valid @RequestBody request: MassUpdateAttributeRequest,
     ): ResponseEntity<Void> {
         attributeService.massUpdate(request.ids, request.adminName, request.sortOrder)
         return ResponseEntity.noContent().build()
@@ -149,7 +149,7 @@ class AttributeController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('attributes.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyAttributeRequest,
+        @Valid @RequestBody request: MassDestroyAttributeRequest,
     ): ResponseEntity<Void> {
         attributeService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()

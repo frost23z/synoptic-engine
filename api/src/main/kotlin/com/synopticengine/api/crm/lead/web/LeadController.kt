@@ -129,7 +129,7 @@ class LeadController(
     @PreAuthorize("hasAuthority('leads.edit')")
     fun moveStage(
         @PathVariable id: UUID,
-        @RequestBody request: MoveStageRequest,
+        @Valid @RequestBody request: MoveStageRequest,
     ): ResponseEntity<LeadResponse> =
         ResponseEntity.ok(leadService.moveStage(id, request.stageId, request.status, request.lostReason))
 
@@ -145,7 +145,7 @@ class LeadController(
     @PostMapping("/mass-update")
     @PreAuthorize("hasAuthority('leads.edit')")
     fun massUpdate(
-        @RequestBody request: MassUpdateLeadRequest,
+        @Valid @RequestBody request: MassUpdateLeadRequest,
     ): ResponseEntity<Void> {
         leadService.massUpdate(request.ids, request.userId, request.stageId, request.status)
         return ResponseEntity.noContent().build()
@@ -154,7 +154,7 @@ class LeadController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('leads.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyLeadRequest,
+        @Valid @RequestBody request: MassDestroyLeadRequest,
     ): ResponseEntity<Void> {
         leadService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()
@@ -164,7 +164,7 @@ class LeadController(
     @PreAuthorize("hasAuthority('leads.edit')")
     fun attachTag(
         @PathVariable id: UUID,
-        @RequestBody request: TagAttachLeadRequest,
+        @Valid @RequestBody request: TagAttachLeadRequest,
     ): ResponseEntity<LeadResponse> = ResponseEntity.ok(leadService.attachTag(id, request.tagId))
 
     @DeleteMapping("/{id}/tags/{tagId}")
@@ -184,7 +184,7 @@ class LeadController(
     @PreAuthorize("hasAuthority('leads.edit')")
     fun attachEmail(
         @PathVariable id: UUID,
-        @RequestBody request: EmailAttachLeadRequest,
+        @Valid @RequestBody request: EmailAttachLeadRequest,
     ): ResponseEntity<LeadResponse> = ResponseEntity.ok(leadService.attachEmail(id, request.emailId))
 
     @DeleteMapping("/{id}/emails/{emailId}")
@@ -227,7 +227,7 @@ class LeadController(
     @PreAuthorize("hasAuthority('leads.edit')")
     fun addProduct(
         @PathVariable id: UUID,
-        @RequestBody request: AddLeadProductRequest,
+        @Valid @RequestBody request: AddLeadProductRequest,
     ): ResponseEntity<LeadProductResponse> =
         ResponseEntity.ok(leadService.addProduct(id, request.productId, request.quantity, request.unitPrice))
 

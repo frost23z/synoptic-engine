@@ -3,6 +3,7 @@ package com.synopticengine.api.crm.activity.web
 import com.synopticengine.api.crm.activity.domain.ActivityType
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.util.UUID
 
@@ -90,14 +91,24 @@ data class AddPersonParticipantRequest(
 )
 
 data class MassUpdateActivityRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot update more than $MAX_BATCH_SIZE activities at once")
     val ids: List<UUID>,
     val userId: UUID? = null,
     val isDone: Boolean? = null,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}
 
 data class MassDestroyActivityRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot delete more than $MAX_BATCH_SIZE activities at once")
     val ids: List<UUID>,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}
 
 data class ActivityFileResponse(
     val id: UUID,
@@ -112,7 +123,9 @@ data class ActivityFileResponse(
 data class CheckOverlapRequest(
     @field:NotNull val scheduleFrom: Instant,
     @field:NotNull val scheduleTo: Instant,
+    @field:Size(max = 500, message = "Cannot check more than 500 user IDs at once")
     val userIds: List<UUID> = emptyList(),
+    @field:Size(max = 500, message = "Cannot check more than 500 person IDs at once")
     val personIds: List<UUID> = emptyList(),
     /** Pass when editing an existing meeting so it doesn't overlap with itself. */
     val excludeActivityId: UUID? = null,

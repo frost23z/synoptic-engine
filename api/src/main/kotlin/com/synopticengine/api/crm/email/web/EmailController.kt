@@ -1,6 +1,7 @@
 package com.synopticengine.api.crm.email.web
 
 import com.synopticengine.api.crm.email.service.EmailService
+import com.synopticengine.api.shared.upload.FileUploadGuard
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
@@ -34,6 +35,7 @@ class EmailController(
     private val emailService: EmailService,
     private val inboundMailSignatureVerifier: InboundMailSignatureVerifier,
     private val objectMapper: ObjectMapper,
+    private val fileUploadGuard: FileUploadGuard,
 ) {
     /**
      * Folder listings are gated on `mail.view` AND a per-folder permission
@@ -93,10 +95,12 @@ class EmailController(
     @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @PreAuthorize("hasAuthority('mail.edit')")
     fun composeMultipart(
-        @RequestPart("request") request: ComposeEmailRequest,
+        @Valid @RequestPart("request") request: ComposeEmailRequest,
         @RequestPart("attachments", required = false) attachments: List<MultipartFile>?,
-    ): ResponseEntity<EmailResponse> =
-        ResponseEntity
+    ): ResponseEntity<EmailResponse> {
+        // T4.3 — validate every attachment: MIME type + max 25 MB each.
+        attachments?.forEach { fileUploadGuard.validateEmailAttachment(it) }
+        return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(
                 emailService.compose(
@@ -114,6 +118,7 @@ class EmailController(
                     uploads = attachments ?: emptyList(),
                 ),
             )
+    }
 
     @PostMapping("/{id}/send")
     @PreAuthorize("hasAuthority('mail.edit')")
@@ -135,7 +140,7 @@ class EmailController(
     @PreAuthorize("hasAuthority('mail.edit')")
     fun reply(
         @PathVariable id: UUID,
-        @RequestBody request: ReplyEmailRequest,
+        @Valid @RequestBody request: ReplyEmailRequest,
     ): ResponseEntity<EmailResponse> =
         ResponseEntity.ok(
             emailService.reply(
@@ -158,7 +163,7 @@ class EmailController(
     @PreAuthorize("hasAuthority('mail.edit')")
     fun markRead(
         @PathVariable id: UUID,
-        @RequestBody request: MarkReadRequest,
+        @Valid @RequestBody request: MarkReadRequest,
     ): ResponseEntity<EmailResponse> = ResponseEntity.ok(emailService.markRead(id, request.isRead))
 
     @DeleteMapping("/{id}")
@@ -173,7 +178,7 @@ class EmailController(
     @PostMapping("/mass-update")
     @PreAuthorize("hasAuthority('mail.edit')")
     fun massUpdate(
-        @RequestBody request: MassMoveRequest,
+        @Valid @RequestBody request: MassMoveRequest,
     ): ResponseEntity<Void> {
         emailService.massMoveFolder(request.ids, request.folder)
         return ResponseEntity.noContent().build()
@@ -182,7 +187,7 @@ class EmailController(
     @PostMapping("/mass-mark-read")
     @PreAuthorize("hasAuthority('mail.edit')")
     fun massMarkRead(
-        @RequestBody request: MassMarkReadRequest,
+        @Valid @RequestBody request: MassMarkReadRequest,
     ): ResponseEntity<Void> {
         emailService.massMarkRead(request.ids, request.isRead)
         return ResponseEntity.noContent().build()
@@ -191,7 +196,7 @@ class EmailController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('mail.edit')")
     fun massDestroy(
-        @RequestBody request: MassDestroyMailRequest,
+        @Valid @RequestBody request: MassDestroyMailRequest,
     ): ResponseEntity<Void> {
         emailService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()
@@ -201,7 +206,7 @@ class EmailController(
     @PreAuthorize("hasAuthority('mail.edit')")
     fun attachTag(
         @PathVariable id: UUID,
-        @RequestBody request: AttachTagRequest,
+        @Valid @RequestBody request: AttachTagRequest,
     ): ResponseEntity<EmailResponse> = ResponseEntity.ok(emailService.attachTag(id, request.tagId))
 
     @DeleteMapping("/{id}/tags/{tagId}")

@@ -3,6 +3,8 @@ package com.synopticengine.api.inventory.product.web
 import com.synopticengine.api.crm.TagDto
 import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
@@ -40,10 +42,12 @@ data class ProductResponse(
 )
 
 data class TagAttachProductRequest(
+    @field:NotNull(message = "Tag ID is required")
     val tagId: UUID,
 )
 
 data class SetInventoryRequest(
+    @field:NotNull(message = "Warehouse ID is required")
     val warehouseId: UUID,
     val warehouseLocationId: UUID? = null,
     val quantity: Int,
@@ -58,5 +62,10 @@ data class InventoryEntryResponse(
 )
 
 data class MassDestroyProductRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot delete more than $MAX_BATCH_SIZE products at once")
     val ids: List<UUID>,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}

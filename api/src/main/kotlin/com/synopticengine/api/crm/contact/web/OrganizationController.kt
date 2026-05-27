@@ -100,7 +100,7 @@ class OrganizationController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.organizations.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyOrganizationRequest,
+        @Valid @RequestBody request: MassDestroyOrganizationRequest,
     ): ResponseEntity<Void> {
         organizationService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()
