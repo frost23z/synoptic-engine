@@ -36,13 +36,23 @@ data class UpdateUserRequest(
 )
 
 data class MassDeactivateRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot deactivate more than $MAX_BATCH_SIZE users at once")
     val ids: List<UUID>,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}
 
 data class UpdateUsersStatusRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot update more than $MAX_BATCH_SIZE users at once")
     val ids: List<UUID>,
     val isActive: Boolean,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}
 
 data class UpdateUserPasswordRequest(
     @field:NotBlank(message = "Password is required")

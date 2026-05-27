@@ -110,7 +110,7 @@ class WarehouseController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('warehouses.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyWarehouseRequest,
+        @Valid @RequestBody request: MassDestroyWarehouseRequest,
     ): ResponseEntity<Void> {
         warehouseService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()
@@ -147,7 +147,7 @@ class WarehouseController(
     @PreAuthorize("hasAuthority('warehouses.edit')")
     fun attachTag(
         @PathVariable id: UUID,
-        @RequestBody request: TagAttachWarehouseRequest,
+        @Valid @RequestBody request: TagAttachWarehouseRequest,
     ): ResponseEntity<WarehouseResponse> = ResponseEntity.ok(warehouseService.attachTag(id, request.tagId))
 
     @DeleteMapping("/{id}/tags/{tagId}")

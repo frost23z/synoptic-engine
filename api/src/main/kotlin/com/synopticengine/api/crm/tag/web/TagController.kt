@@ -64,7 +64,7 @@ class TagController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_DELETE}')")
     fun massDestroy(
-        @RequestBody request: MassDestroyTagRequest,
+        @Valid @RequestBody request: MassDestroyTagRequest,
     ): ResponseEntity<Void> {
         tagService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()

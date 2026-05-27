@@ -1,6 +1,8 @@
 package com.synopticengine.api.settings.automation.web
 
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
+import org.hibernate.validator.constraints.URL
 import java.time.Instant
 import java.util.UUID
 
@@ -68,16 +70,28 @@ data class WebhookResponse(
 
 data class CreateWebhookRequest(
     @field:NotBlank val name: String,
-    @field:NotBlank val payloadUrl: String,
+    /**
+     * Outbound webhook URL. Must be a valid URL (https preferred; http allowed for local/dev).
+     * The SSRF validator in [OutboundUrlValidator] also enforces non-RFC-1918 hosts at runtime.
+     */
+    @field:NotBlank
+    @field:URL(message = "Payload URL must be a valid URL")
+    val payloadUrl: String,
+    @field:Size(max = 500, message = "Secret must not exceed 500 characters")
     val secret: String? = null,
+    @field:Size(max = 100, message = "Cannot subscribe to more than 100 events")
     val events: List<String> = emptyList(),
     val isActive: Boolean = true,
 )
 
 data class UpdateWebhookRequest(
     @field:NotBlank val name: String,
-    @field:NotBlank val payloadUrl: String,
+    @field:NotBlank
+    @field:URL(message = "Payload URL must be a valid URL")
+    val payloadUrl: String,
+    @field:Size(max = 500, message = "Secret must not exceed 500 characters")
     val secret: String? = null,
+    @field:Size(max = 100, message = "Cannot subscribe to more than 100 events")
     val events: List<String> = emptyList(),
     val isActive: Boolean = true,
 )

@@ -1,6 +1,7 @@
 package com.synopticengine.api.crm.tag.web
 
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.util.UUID
 
@@ -25,5 +26,10 @@ data class TagResponse(
 )
 
 data class MassDestroyTagRequest(
+    @field:Size(max = MAX_BATCH_SIZE, message = "Cannot delete more than $MAX_BATCH_SIZE tags at once")
     val ids: List<UUID>,
-)
+) {
+    companion object {
+        const val MAX_BATCH_SIZE = 500
+    }
+}
