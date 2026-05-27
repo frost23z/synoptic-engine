@@ -268,6 +268,7 @@ class LeadService(
         leadRepository.save(lead)
     }
 
+    // T5.2 — replaced per-id findActiveById+save loops with O(1) bulk UPDATE statements.
     @Transactional
     fun massUpdate(
         ids: List<UUID>,
@@ -275,27 +276,43 @@ class LeadService(
         stageId: UUID?,
         status: LeadStatus?,
     ) {
-        ids.forEach { id ->
-            leadRepository.findActiveById(id)?.let { lead ->
-                if (userId != null) lead.userId = userId
-                val stageChanged = stageId != null && stageId != lead.stageId
-                if (stageId != null) lead.stageId = stageId
-                if (status != null) lead.status = status
-                if (stageChanged) lead.stageUpdatedAt = Instant.now()
-                val saved = leadRepository.save(lead)
-                if (stageChanged) publishLeadStageChanged(saved.id!!, saved.stageId, saved.status.value)
+        if (ids.isEmpty()) return
+        val now = Instant.now()
+
+        // Pre-compute which leads will actually change stage so we can publish
+        // domain events after the bulk update without loading full entities.
+        val stageChangingIds: List<UUID> =
+            if (stageId != null) leadRepository.findIdsWithDifferentStage(ids, stageId)
+            else emptyList()
+
+        // When status isn't being overridden we need each lead's current status to
+        // include the correct value in the stage-changed event payload.
+        val currentStatusById: Map<UUID, String> =
+            if (stageChangingIds.isNotEmpty() && status == null) {
+                leadRepository.findIdAndStatusByIds(stageChangingIds)
+                    .associate { row -> (row[0] as UUID) to (row[1] as LeadStatus).value }
+            } else {
+                emptyMap()
             }
+
+        if (userId != null) leadRepository.bulkSetUserId(ids, userId)
+        if (stageId != null) leadRepository.bulkSetStageId(ids, stageId, now)
+        if (status != null) leadRepository.bulkSetStatus(ids, status)
+
+        // Publish stage-changed events for leads whose stage actually moved.
+        val overriddenStatus = status?.value
+        stageChangingIds.forEach { id ->
+            val finalStatus = overriddenStatus
+                ?: currentStatusById.getOrDefault(id, LeadStatus.OPEN.value)
+            publishLeadStageChanged(id, stageId!!, finalStatus)
         }
     }
 
+    // T5.2 — one UPDATE instead of N find+save round-trips.
     @Transactional
     fun massDestroy(ids: List<UUID>) {
-        ids.forEach { id ->
-            leadRepository.findActiveById(id)?.let { lead ->
-                lead.deletedAt = Instant.now()
-                leadRepository.save(lead)
-            }
-        }
+        if (ids.isEmpty()) return
+        leadRepository.bulkSoftDelete(ids, Instant.now())
     }
 
     @Transactional

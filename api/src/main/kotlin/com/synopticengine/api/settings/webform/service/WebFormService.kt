@@ -15,10 +15,10 @@ import java.util.UUID
 class WebFormService(
     private val webFormRepository: WebFormRepository,
 ) {
+    // T5.1 — previously called findAll() then findByIdWithFields() per form (N+1).
+    // Now a single DISTINCT LEFT JOIN FETCH query loads all forms and their fields.
     fun findAll(): List<WebFormResponse> =
-        webFormRepository.findAll().map { form ->
-            (webFormRepository.findByIdWithFields(form.id!!) ?: form).toResponse()
-        }
+        webFormRepository.findAllWithFields().map { it.toResponse() }
 
     fun findById(id: UUID): WebFormResponse =
         (
