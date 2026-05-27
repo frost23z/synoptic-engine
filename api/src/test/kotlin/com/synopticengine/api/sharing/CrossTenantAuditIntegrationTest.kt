@@ -150,5 +150,5 @@ class CrossTenantAuditIntegrationTest : AbstractIntegrationTest() {
                     saved.id!!
                 }
             }
-        } ?: error("createLeadInTenant returned null")
+        }!!
 }

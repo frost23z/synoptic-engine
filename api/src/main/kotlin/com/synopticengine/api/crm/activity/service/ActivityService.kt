@@ -288,19 +288,6 @@ class ActivityService(
     }
 
     @Transactional
-    fun removeParticipantById(
-        activityId: UUID,
-        participantId: UUID,
-    ): ActivityResponse {
-        val activity = requireActivity(activityId)
-        val participant =
-            activityParticipantRepository.findByIdAndActivityId(participantId, activityId)
-                ?: throw NoSuchElementException("Participant not found: $participantId")
-        activityParticipantRepository.delete(participant)
-        return activity.toResponseWithParticipants()
-    }
-
-    @Transactional
     fun uploadFile(
         activityId: UUID,
         originalFilename: String,

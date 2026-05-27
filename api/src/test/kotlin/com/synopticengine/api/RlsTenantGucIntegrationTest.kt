@@ -14,18 +14,21 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Phase 4 P0-1: the application must run `SET LOCAL app.current_tenant = '<uuid>'`
- * inside every transaction so the RLS policies in `V007__sharing_and_rls.sql`
- * actually resolve. Pre-fix, the GUC was never set and every policy fell
- * through the `app_current_tenant() IS NULL OR …` bypass clause.
+ * Verifies that `SET LOCAL app.current_tenant = '<uuid>'` is issued inside
+ * every `@Transactional` method when [TenantContext] is set, so the RLS
+ * policies in `V007__sharing_and_rls.sql` resolve correctly.
  *
- * The test reads back the GUC inside a `@Transactional` method (which the
- * `RlsTenantGucAspect` intercepts) and asserts it matches the [TenantContext].
- * We can't assert "RLS filtered out a row from another tenant" here because
- * Testcontainers' default Postgres user is superuser (BYPASSRLS = true) —
- * the policies don't take effect for tests. The GUC's presence is the only
- * thing this PR can verify in CI; deployment to a non-superuser app role
- * makes the policies live.
+ * The test reads back the GUC from inside a `@Transactional` method
+ * (intercepted by [com.synopticengine.api.shared.config.RlsTenantGucAspect])
+ * and asserts it matches the active [TenantContext].
+ *
+ * **RLS enforcement in tests:** Testcontainers wires the test suite against
+ * the `synoptic_app` role (NOBYPASSRLS = true), so RLS policies *do* fire
+ * for integration tests. Cross-tenant row isolation is therefore validated
+ * end-to-end (see `PersonTenantIsolationIntegrationTest`,
+ * `CrossTenantVisibilityIntegrationTest`). This test focuses solely on the
+ * GUC-setting path — confirming the aspect runs and the value is correct —
+ * rather than asserting filtered-row counts.
  */
 @Import(GucReader::class)
 class RlsTenantGucIntegrationTest : AbstractIntegrationTest() {
