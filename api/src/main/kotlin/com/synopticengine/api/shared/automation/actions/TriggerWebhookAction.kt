@@ -3,6 +3,7 @@ package com.synopticengine.api.shared.automation.actions
 import com.synopticengine.api.settings.SettingsApi
 import com.synopticengine.api.shared.automation.WorkflowAction
 import com.synopticengine.api.shared.automation.WorkflowActionContext
+import com.synopticengine.api.shared.security.OutboundUrlValidator
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import java.util.UUID
@@ -16,6 +17,7 @@ import java.util.UUID
 class TriggerWebhookAction(
     private val settingsApi: SettingsApi,
     private val restClient: RestClient,
+    private val outboundUrlValidator: OutboundUrlValidator,
 ) : WorkflowAction {
     override val type: String = "trigger_webhook"
 
@@ -30,6 +32,11 @@ class TriggerWebhookAction(
         if (!webhook.isActive) {
             return mapOf("webhookId" to webhookId, "skipped" to true)
         }
+
+        // T1.2 — re-validate at send time (defense-in-depth; the URL was validated
+        // when the webhook was saved via AutomationService).
+        outboundUrlValidator.validate(webhook.payloadUrl)
+
         val body =
             mapOf(
                 "event" to ctx.event.eventName,

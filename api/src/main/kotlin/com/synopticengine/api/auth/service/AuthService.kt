@@ -43,6 +43,11 @@ class AuthService(
 
         val credentials = identityApi.findCredentialsByEmail(email)
         if (credentials == null) {
+            // Timing-oracle equalization: perform a dummy bcrypt match so the
+            // response time for an unknown email is similar to that for a known
+            // email with a wrong password. Without this, timing differences let
+            // attackers enumerate valid email addresses.
+            passwordEncoder.matches(password, DUMMY_BCRYPT_HASH)
             loginAttemptTracker.recordFailure(email, clientIp)
             throw IllegalArgumentException("Invalid email or password")
         }
@@ -149,7 +154,7 @@ class AuthService(
         clientIp: String? = null,
     ) {
         forgotPasswordAttemptTracker.assertNotLocked(email, clientIp)
-        forgotPasswordAttemptTracker.recordAttempt(email, clientIp)
+        forgotPasswordAttemptTracker.recordFailure(email, clientIp)
         identityApi.findCredentialsByEmail(email) ?: return // silent: don't reveal if email exists
         // H7 — token sent to user is high-entropy random; stored hash is BCrypt.
         // A read-only leak of `user_password_resets` (e.g. backup snapshot)
@@ -195,7 +200,33 @@ class AuthService(
             passwordEncoder.encode(newPassword)
                 ?: throw IllegalStateException("Password encoding failed")
         identityApi.updatePassword(email, encodedPassword)
+        // Revoke all existing sessions so the old-password holder can no longer use any refresh tokens.
+        val user = identityApi.findCredentialsByEmail(email)
+        if (user != null) {
+            refreshSessionRepository.revokeAllByUserId(user.id, Instant.now(), "PASSWORD_RESET")
+        }
         passwordResetRepository.deleteByEmail(email)
+    }
+
+    @Transactional
+    fun logout(
+        userId: UUID,
+        refreshToken: String,
+    ) {
+        if (!jwtTokenProvider.validateToken(refreshToken)) return // already invalid
+        if (!jwtTokenProvider.isRefreshToken(refreshToken)) return
+        val sessionId =
+            runCatching { jwtTokenProvider.getRefreshSessionIdFromToken(refreshToken) }.getOrNull() ?: return
+        val session = refreshSessionRepository.findById(sessionId).orElse(null) ?: return
+        if (session.userId != userId || session.revokedAt != null) return
+        session.revokedAt = Instant.now()
+        session.revokedReason = "LOGOUT"
+        refreshSessionRepository.save(session)
+    }
+
+    @Transactional
+    fun logoutAll(userId: UUID) {
+        refreshSessionRepository.revokeAllByUserId(userId, Instant.now(), "LOGOUT_ALL")
     }
 
     private fun generateResetToken(): String {
@@ -207,6 +238,13 @@ class AuthService(
 
     companion object {
         private val secureRandom = SecureRandom()
+
+        // A pre-computed BCrypt hash of a random string. Used to perform a
+        // constant-time dummy password check when the supplied email does not
+        // exist, so that timing differences cannot reveal whether an email is
+        // registered (email-enumeration timing oracle, T1.4).
+        // Re-generate with: BCrypt.hashpw(UUID.randomUUID().toString(), BCrypt.gensalt(10))
+        private const val DUMMY_BCRYPT_HASH = "\$2a\$10\$X9ztv7bG1Ym0Uf8U3PqrOuZ0W2XL0NxoZKx6K8oX/OtR5oL6BUHK."
     }
 
     private fun issueRefreshToken(

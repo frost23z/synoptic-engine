@@ -40,12 +40,13 @@ class MailSenderService(
         subject: String,
         htmlBody: String,
     ) {
+        val sanitized = HtmlSanitizer.sanitize(htmlBody)
         val message = mailSender.createMimeMessage()
         val helper = MimeMessageHelper(message, true, "UTF-8")
         helper.setFrom(fromAddress)
         helper.setTo(to)
         helper.setSubject(subject)
-        helper.setText(htmlBody, true)
+        helper.setText(sanitized, true)
         mailSender.send(message)
     }
 }
