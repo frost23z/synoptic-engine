@@ -57,6 +57,7 @@ class ProductService(
         price: BigDecimal,
         sku: String?,
         isActive: Boolean,
+        reorderThreshold: Int? = null,
     ): ProductResponse {
         if (sku != null && productRepository.existsBySkuAndDeletedAtIsNull(sku)) {
             throw IllegalStateException("SKU already in use: $sku")
@@ -69,6 +70,7 @@ class ProductService(
                     this.price = price
                     this.sku = sku
                     this.isActive = isActive
+                    this.reorderThreshold = reorderThreshold
                 },
             ).toResponse()
     }
@@ -81,6 +83,7 @@ class ProductService(
         price: BigDecimal,
         sku: String?,
         isActive: Boolean,
+        reorderThreshold: Int? = null,
     ): ProductResponse {
         val product = requireProduct(id)
         if (sku != null && productRepository.existsBySkuAndIdNotAndDeletedAtIsNull(sku, id)) {
@@ -91,6 +94,7 @@ class ProductService(
         product.price = price
         product.sku = sku
         product.isActive = isActive
+        product.reorderThreshold = reorderThreshold
         return productRepository.save(product).toResponse()
     }
 
@@ -133,7 +137,7 @@ class ProductService(
                 warehouseLocationId,
             )
         return if (existing != null) {
-            existing.quantity = quantity
+            existing.onHand = quantity
             productInventoryRepository.save(existing).toResponse()
         } else {
             productInventoryRepository
@@ -142,7 +146,7 @@ class ProductService(
                         this.productId = productId
                         this.warehouseId = warehouseId
                         this.warehouseLocationId = warehouseLocationId
-                        this.quantity = quantity
+                        this.onHand = quantity
                     },
                 ).toResponse()
         }
@@ -186,6 +190,7 @@ fun Product.toResponse(tags: List<com.synopticengine.api.crm.TagDto> = emptyList
         price = price,
         sku = sku,
         isActive = isActive,
+        reorderThreshold = reorderThreshold,
         tags = tags,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -197,5 +202,9 @@ fun com.synopticengine.api.inventory.warehouse.domain.ProductInventory.toRespons
         productId = productId,
         warehouseId = warehouseId,
         warehouseLocationId = warehouseLocationId,
-        quantity = quantity,
+        onHand = onHand,
+        reserved = reserved,
+        inTransit = inTransit,
+        damaged = damaged,
+        available = onHand - reserved,
     )

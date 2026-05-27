@@ -61,7 +61,7 @@ class ProductController(
         ResponseEntity
             .status(HttpStatus.CREATED)
             .body(
-                productService.create(request.name, request.description, request.price, request.sku, request.isActive),
+                productService.create(request.name, request.description, request.price, request.sku, request.isActive, request.reorderThreshold),
             )
 
     @PutMapping("/{id}")
@@ -71,7 +71,7 @@ class ProductController(
         @Valid @RequestBody request: UpdateProductRequest,
     ): ResponseEntity<ProductResponse> =
         ResponseEntity.ok(
-            productService.update(id, request.name, request.description, request.price, request.sku, request.isActive),
+            productService.update(id, request.name, request.description, request.price, request.sku, request.isActive, request.reorderThreshold),
         )
 
     @PutMapping("/{id}/inventory")

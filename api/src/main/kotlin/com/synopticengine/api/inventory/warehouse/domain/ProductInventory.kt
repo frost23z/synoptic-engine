@@ -5,6 +5,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
+import java.math.BigDecimal
 import java.util.UUID
 
 @Entity
@@ -20,6 +21,18 @@ class ProductInventory : BaseEntity() {
     @Column
     var warehouseLocationId: UUID? = null
 
+    @Column(name = "on_hand", nullable = false)
+    var onHand: Int = 0
+
     @Column(nullable = false)
-    var quantity: Int = 0
+    var reserved: Int = 0
+
+    @Column(name = "in_transit", nullable = false)
+    var inTransit: Int = 0
+
+    @Column(nullable = false)
+    var damaged: Int = 0
+
+    @Column(name = "unit_cost", precision = 15, scale = 4)
+    var unitCost: BigDecimal = BigDecimal.ZERO
 }
