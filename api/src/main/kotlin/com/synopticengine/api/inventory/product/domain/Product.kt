@@ -39,6 +39,9 @@ class Product :
     @Column(nullable = false)
     var isActive: Boolean = true
 
+    @Column(name = "reorder_threshold")
+    var reorderThreshold: Int? = null
+
     @Column
     override var deletedAt: Instant? = null
 }
