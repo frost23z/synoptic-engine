@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -70,14 +71,24 @@ class WebhookDispatcher(
 
             try {
                 val payloadJson = objectMapper.writeValueAsString(payload)
+                val nowEpochSeconds = Instant.now().epochSecond
                 val response =
                     restClient
                         .post()
                         .uri(webhook.payloadUrl)
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Synoptic-Timestamp", nowEpochSeconds.toString())
                         .let { req ->
                             webhook.secret?.takeIf { it.isNotBlank() }?.let { secret ->
-                                req.header("X-Synoptic-Signature", signPayload(secret, payloadJson))
+                                // T3.3 — sign both the timestamp and the payload body so
+                                // a replay attack cannot reuse a previously captured signature:
+                                // the timestamp is included in the signed content, so an
+                                // attacker cannot change `X-Synoptic-Timestamp` without
+                                // invalidating the signature.
+                                req.header(
+                                    "X-Synoptic-Signature",
+                                    signPayload(secret, nowEpochSeconds, payloadJson),
+                                )
                             } ?: req
                         }.body(payloadJson)
                         .retrieve()
@@ -136,13 +147,23 @@ class WebhookDispatcher(
         )
     }
 
+    /**
+     * T3.3 — Sign `"$timestampEpochSeconds.$payloadJson"` so the signature is
+     * bound to the timestamp. A receiver that validates both headers
+     * (`X-Synoptic-Timestamp` and `X-Synoptic-Signature`) gets replay
+     * protection: changing the timestamp to extend the window invalidates
+     * the HMAC, and replaying both headers within the 5-minute window is the
+     * only legitimate use — which is what the window allows.
+     */
     private fun signPayload(
         secret: String,
+        timestampEpochSeconds: Long,
         payloadJson: String,
     ): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
-        val digest = mac.doFinal(payloadJson.toByteArray(StandardCharsets.UTF_8))
+        val input = "$timestampEpochSeconds.$payloadJson"
+        val digest = mac.doFinal(input.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
     }
 }

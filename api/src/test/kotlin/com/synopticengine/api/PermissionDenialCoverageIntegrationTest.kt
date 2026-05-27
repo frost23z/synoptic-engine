@@ -81,7 +81,18 @@ class PermissionDenialCoverageIntegrationTest : AbstractIntegrationTest() {
                 // ── CRM: reports + pipelines + tags ────────────────────────
                 Arguments.of("GET", "/api/dashboard/stats?type=over-all", "reports.view", null),
                 Arguments.of("POST", "/api/pipelines", "pipelines.create", mapOf("name" to "x")),
+                Arguments.of("GET", "/api/tags", "tags.view", null),
                 Arguments.of("POST", "/api/tags", "tags.create", mapOf("name" to "x")),
+                Arguments.of("PUT", "/api/tags/$ANY_ID", "tags.edit", mapOf("name" to "x")),
+                Arguments.of("DELETE", "/api/tags/$ANY_ID", "tags.delete", null),
+                // ── CRM: datagrid saved filters ────────────────────────────
+                Arguments.of("GET", "/api/datagrid/saved-filters", "datagrid-filters.view", null),
+                Arguments.of(
+                    "POST",
+                    "/api/datagrid/saved-filters",
+                    "datagrid-filters.edit",
+                    mapOf("name" to "x", "src" to "leads", "applied" to emptyMap<String, Any>()),
+                ),
                 // ── Settings: imports ──────────────────────────────────────
                 Arguments.of("GET", "/api/settings/imports", "imports.view", null),
                 Arguments.of("GET", "/api/settings/imports/$ANY_ID", "imports.view", null),

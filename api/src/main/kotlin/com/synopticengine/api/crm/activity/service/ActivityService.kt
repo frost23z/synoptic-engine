@@ -12,6 +12,7 @@ import com.synopticengine.api.crm.activity.web.ActivityParticipantResponse
 import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.shared.security.requireOwnership
 import com.synopticengine.api.shared.storage.StorageService
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
@@ -384,8 +385,13 @@ class ActivityService(
             ).map { it.toResponseWithParticipants() }
     }
 
-    private fun requireActivity(id: UUID): Activity =
-        activityRepository.findByIdAndDeletedAtIsNull(id) ?: throw NoSuchElementException("Activity not found: $id")
+    private fun requireActivity(id: UUID): Activity {
+        val a =
+            activityRepository.findByIdAndDeletedAtIsNull(id)
+                ?: throw NoSuchElementException("Activity not found: $id")
+        a.requireOwnership()
+        return a
+    }
 
     private fun Activity.toResponseWithParticipants(): ActivityResponse {
         val participants = activityParticipantRepository.findAllByActivityId(id!!)
