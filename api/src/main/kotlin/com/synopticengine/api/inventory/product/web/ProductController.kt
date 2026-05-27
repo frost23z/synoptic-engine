@@ -78,7 +78,7 @@ class ProductController(
     @PreAuthorize("hasAuthority('products.edit')")
     fun setInventory(
         @PathVariable id: UUID,
-        @RequestBody request: SetInventoryRequest,
+        @Valid @RequestBody request: SetInventoryRequest,
     ): ResponseEntity<InventoryEntryResponse> =
         ResponseEntity.ok(
             productService.setInventory(id, request.warehouseId, request.warehouseLocationId, request.quantity),
@@ -96,7 +96,7 @@ class ProductController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('products.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyProductRequest,
+        @Valid @RequestBody request: MassDestroyProductRequest,
     ): ResponseEntity<Void> {
         productService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()
@@ -106,7 +106,7 @@ class ProductController(
     @PreAuthorize("hasAuthority('products.edit')")
     fun attachTag(
         @PathVariable id: UUID,
-        @RequestBody request: TagAttachProductRequest,
+        @Valid @RequestBody request: TagAttachProductRequest,
     ): ResponseEntity<ProductResponse> = ResponseEntity.ok(productService.attachTag(id, request.tagId))
 
     @DeleteMapping("/{id}/tags/{tagId}")

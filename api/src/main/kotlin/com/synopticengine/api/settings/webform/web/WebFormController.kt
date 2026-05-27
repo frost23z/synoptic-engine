@@ -108,7 +108,7 @@ class PublicWebFormController(
     @PostMapping("/{id}/submit")
     fun submit(
         @PathVariable id: UUID,
-        @RequestBody request: WebFormSubmitRequest,
+        @Valid @RequestBody request: WebFormSubmitRequest,
         servletRequest: HttpServletRequest,
     ): ResponseEntity<WebFormSubmitResponse> {
         val ip = clientIp(servletRequest)

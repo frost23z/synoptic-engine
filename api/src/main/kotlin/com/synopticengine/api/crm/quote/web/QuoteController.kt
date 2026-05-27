@@ -116,7 +116,7 @@ class QuoteController(
     @PreAuthorize("hasAuthority('quotes.edit')")
     fun updateStatus(
         @PathVariable id: UUID,
-        @RequestBody request: UpdateQuoteStatusRequest,
+        @Valid @RequestBody request: UpdateQuoteStatusRequest,
     ): ResponseEntity<QuoteResponse> = ResponseEntity.ok(quoteService.updateStatus(id, request.status))
 
     @DeleteMapping("/{id}")
@@ -131,7 +131,7 @@ class QuoteController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('quotes.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyQuoteRequest,
+        @Valid @RequestBody request: MassDestroyQuoteRequest,
     ): ResponseEntity<Void> {
         quoteService.massDestroy(request.ids)
         return ResponseEntity.noContent().build()
@@ -147,7 +147,7 @@ class QuoteController(
     @PreAuthorize("hasAuthority('quotes.edit')")
     fun sendMail(
         @PathVariable id: UUID,
-        @RequestBody request: SendQuoteMailRequest,
+        @Valid @RequestBody request: SendQuoteMailRequest,
     ): ResponseEntity<SendQuoteMailResponse> =
         ResponseEntity.ok(quoteService.sendMail(id, request.to, request.subject, request.message))
 
