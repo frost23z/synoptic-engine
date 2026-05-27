@@ -84,14 +84,11 @@ class OrganizationService(
         organizationRepository.save(org)
     }
 
+    // T5.2 — one UPDATE instead of N find+save round-trips.
     @Transactional
     fun massDestroy(ids: List<UUID>) {
-        ids.forEach { id ->
-            organizationRepository.findActiveById(id)?.let { org ->
-                org.deletedAt = Instant.now()
-                organizationRepository.save(org)
-            }
-        }
+        if (ids.isEmpty()) return
+        organizationRepository.bulkSoftDelete(ids, Instant.now())
     }
 
     // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.

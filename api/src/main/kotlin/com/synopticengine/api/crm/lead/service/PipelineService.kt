@@ -72,12 +72,12 @@ class PipelineService(
         return pipeline.toResponseWithStages(stages)
     }
 
+    // T5.2 — replaced load-all-leads+loop with existsBy check + single bulk UPDATE.
     @Transactional
     fun delete(id: UUID) {
         val pipeline = requirePipeline(id)
         if (pipeline.isDefault) throw IllegalStateException("Cannot delete the default pipeline")
-        val leads = leadRepository.findAllByPipelineIdAndDeletedAtIsNull(id)
-        if (leads.isNotEmpty()) {
+        if (leadRepository.existsByPipelineIdAndDeletedAtIsNull(id)) {
             val defaultPipeline =
                 pipelineRepository.findAllActive().firstOrNull { it.isDefault }
                     ?: throw IllegalStateException("No default pipeline configured; cannot reparent leads.")
@@ -86,11 +86,7 @@ class PipelineService(
                     .findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(defaultPipeline.id!!)
                     .firstOrNull()
                     ?: throw IllegalStateException("Default pipeline has no stages; cannot reparent leads.")
-            leads.forEach { lead ->
-                lead.pipelineId = defaultPipeline.id!!
-                lead.stageId = firstStage.id!!
-                leadRepository.save(lead)
-            }
+            leadRepository.bulkReparentToDefaultPipeline(id, defaultPipeline.id!!, firstStage.id!!)
         }
         pipeline.deletedAt = Instant.now()
         pipelineRepository.save(pipeline)
@@ -143,6 +139,7 @@ class PipelineService(
         return stageRepository.save(stage).toResponse()
     }
 
+    // T5.2 — replaced load-all-leads+loop with a single bulk UPDATE.
     @Transactional
     fun deleteStage(
         pipelineId: UUID,
@@ -160,12 +157,7 @@ class PipelineService(
             throw IllegalStateException("Cannot delete the last stage in a pipeline.")
         }
         val target = siblingStages.first()
-        leadRepository
-            .findAllByPipelineIdAndStageIdAndDeletedAtIsNull(pipelineId, stageId)
-            .forEach { lead ->
-                lead.stageId = target.id!!
-                leadRepository.save(lead)
-            }
+        leadRepository.bulkReparentToStage(stageId, pipelineId, target.id!!)
         stage.deletedAt = Instant.now()
         stageRepository.save(stage)
     }
