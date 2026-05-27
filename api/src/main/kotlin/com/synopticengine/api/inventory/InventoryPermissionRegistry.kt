@@ -18,6 +18,14 @@ class InventoryPermissionRegistry : PermissionRegistry {
             def(InventoryPermissions.WAREHOUSES_CREATE, "Create warehouses"),
             def(InventoryPermissions.WAREHOUSES_EDIT, "Edit warehouses"),
             def(InventoryPermissions.WAREHOUSES_DELETE, "Delete warehouses"),
+            def(InventoryPermissions.INVENTORY_MOVEMENTS, "Manage inventory movements"),
+            def(InventoryPermissions.INVENTORY_MOVEMENTS_VIEW, "View inventory movements and stock states"),
+            def(InventoryPermissions.INVENTORY_MOVEMENTS_CREATE, "Create inventory movements and reservations"),
+            def(InventoryPermissions.INVENTORY_TRANSFERS, "Manage transfer orders"),
+            def(InventoryPermissions.INVENTORY_TRANSFERS_VIEW, "View transfer orders"),
+            def(InventoryPermissions.INVENTORY_TRANSFERS_CREATE, "Create transfer orders"),
+            def(InventoryPermissions.INVENTORY_TRANSFERS_MANAGE, "Dispatch, receive, and cancel transfer orders"),
+            def(InventoryPermissions.INVENTORY_REORDER_VIEW, "View low-stock reorder alerts"),
         )
 
     private fun def(

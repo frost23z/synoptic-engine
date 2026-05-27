@@ -17,6 +17,7 @@ data class CreateProductRequest(
     val price: BigDecimal = BigDecimal.ZERO,
     val sku: String? = null,
     val isActive: Boolean = true,
+    val reorderThreshold: Int? = null,
 )
 
 data class UpdateProductRequest(
@@ -27,6 +28,7 @@ data class UpdateProductRequest(
     val price: BigDecimal = BigDecimal.ZERO,
     val sku: String? = null,
     val isActive: Boolean = true,
+    val reorderThreshold: Int? = null,
 )
 
 data class ProductResponse(
@@ -36,6 +38,7 @@ data class ProductResponse(
     val price: BigDecimal,
     val sku: String?,
     val isActive: Boolean,
+    val reorderThreshold: Int? = null,
     val tags: List<TagDto> = emptyList(),
     val createdAt: Instant?,
     val updatedAt: Instant?,
@@ -58,7 +61,11 @@ data class InventoryEntryResponse(
     val productId: UUID,
     val warehouseId: UUID,
     val warehouseLocationId: UUID?,
-    val quantity: Int,
+    val onHand: Int,
+    val reserved: Int,
+    val inTransit: Int,
+    val damaged: Int,
+    val available: Int,
 )
 
 data class MassDestroyProductRequest(
