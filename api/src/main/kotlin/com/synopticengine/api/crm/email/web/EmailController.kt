@@ -240,12 +240,26 @@ class EmailController(
     ): ResponseEntity<EmailResponse> {
         inboundMailSignatureVerifier.verify(request, rawBody)
         val parsed = parseInboundBody(rawBody)
+        // T2.5(b) — cap body before regex scanning in parseInbound to prevent ReDoS /
+        // unbounded memory usage. 512 KiB is generous for a real email body; anything
+        // larger is almost certainly abuse. The full body is still stored as-is (parsed
+        // upstream before this point); only the in-memory scan is capped.
+        val cappedBody =
+            parsed.body?.let {
+                if (it.length >
+                    INBOUND_BODY_MAX_CHARS
+                ) {
+                    it.take(INBOUND_BODY_MAX_CHARS)
+                } else {
+                    it
+                }
+            }
         return ResponseEntity.status(HttpStatus.CREATED).body(
             emailService.parseInbound(
                 from = parsed.from,
                 to = parsed.to,
                 subject = parsed.subject,
-                body = parsed.body,
+                body = cappedBody,
                 messageId = parsed.messageId,
                 inReplyTo = parsed.inReplyTo,
                 references = parsed.references,
@@ -274,5 +288,8 @@ class EmailController(
     private companion object {
         val WELL_KNOWN_FOLDER_PERMISSIONS =
             setOf("mail.inbox", "mail.sent", "mail.drafts", "mail.trash", "mail.spam", "mail.outbox")
+
+        /** T2.5(b) — maximum body length passed to regex scanning in parseInbound. */
+        const val INBOUND_BODY_MAX_CHARS = 512 * 1024
     }
 }

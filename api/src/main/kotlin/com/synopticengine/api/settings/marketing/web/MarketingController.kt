@@ -138,7 +138,7 @@ class MarketingCampaignController(
     @PreAuthorize("hasAuthority('marketing.edit')")
     fun execute(
         @PathVariable id: UUID,
-        @RequestBody request: ExecuteMarketingCampaignRequest,
+        @Valid @RequestBody request: ExecuteMarketingCampaignRequest,
     ): ResponseEntity<ExecuteMarketingCampaignResponse> =
         ResponseEntity.ok(marketingService.executeCampaign(id, request.recipients, request.context))
 }
