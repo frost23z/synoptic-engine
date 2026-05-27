@@ -63,15 +63,23 @@ interface PersonRepository : JpaRepository<Person, UUID> {
         pageable: Pageable,
     ): Page<Person>
 
+    /**
+     * Count persons created in the given time window for a specific tenant.
+     * The explicit `tenant_id = :tenantId` predicate mirrors
+     * [ActivityRepository.countCreatedInRangeNative] — native SQL bypasses the
+     * Hibernate `@Filter`, so we add the predicate explicitly. T2.2.
+     */
     @Query(
         value = """
             SELECT COUNT(*) FROM persons
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND created_at >= :start AND created_at < :end
         """,
         nativeQuery = true,
     )
     fun countCreatedInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
     ): Long

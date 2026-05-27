@@ -48,14 +48,36 @@ class DataImportService(
         file: MultipartFile,
         entityType: String,
     ): DataImportResponse {
-        val filename = "${UUID.randomUUID()}_${file.originalFilename ?: "import.csv"}"
-        val filePath = uploadDir.resolve(filename)
+        // T2.5(a) — path-traversal protection on the original filename.
+        // Normalise the filename: strip directory separators so a caller cannot
+        // supply "../../etc/passwd" as the filename.  Then assert the resolved
+        // path stays under uploadDir as a belt-and-braces check in addition to
+        // the H13 hardening already applied in LocalStorageService.
+        val rawName = file.originalFilename ?: "import.csv"
+        val safeBasename =
+            Paths
+                .get(rawName)
+                .fileName // drops any directory components
+                ?.toString()
+                ?.replace(Regex("[^a-zA-Z0-9._-]"), "_") // strip shell-unsafe chars
+                ?.take(128) // cap length
+                ?.ifBlank { "import.csv" }
+                ?: "import.csv"
+
+        val filename = "${UUID.randomUUID()}_$safeBasename"
+        val filePath = uploadDir.resolve(filename).normalize()
+
+        // Verify the resolved path is still under uploadDir (extra safety).
+        check(filePath.startsWith(uploadDir.toRealPath())) {
+            "Resolved upload path escapes upload directory: $filePath"
+        }
+
         file.transferTo(filePath.toFile())
 
         val dataImport =
             dataImportRepository.save(
                 DataImport().apply {
-                    this.name = file.originalFilename ?: "import.csv"
+                    this.name = rawName.take(255)
                     this.filePath = filePath.toString()
                     this.entityType = entityType
                 },
