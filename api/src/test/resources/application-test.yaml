@@ -1,6 +1,10 @@
 synoptic:
     inbound-mail:
         webhook-secret: test-inbound-mail-secret
+    encryption:
+        # Fixed 32-byte dev/test key — NEVER use in production.
+        # Decodes to "SYNOPTIC_TEST_ENCRYPTION_KEY32B!"
+        key: U1lOT1BUSUNfVEVTVF9FTkNSWVBUSU9OX0tFWTMyQiE=
 spring:
     datasource:
         hikari:

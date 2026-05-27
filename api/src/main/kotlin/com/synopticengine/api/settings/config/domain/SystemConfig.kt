@@ -1,7 +1,9 @@
 package com.synopticengine.api.settings.config.domain
 
 import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.shared.crypto.AesGcmEncryptionConverter
 import jakarta.persistence.Column
+import jakarta.persistence.Convert
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.IdClass
@@ -34,6 +36,14 @@ data class SystemConfigId(
  * superclass assumes a UUID `id` primary key. Tenant scoping is implemented via
  * Hibernate `@Filter` directly on this class, and `@PrePersist` defends against
  * inserts without an active [TenantContext].
+ *
+ * **Encrypted value.** The `value` column is encrypted at rest for ALL rows via
+ * [AesGcmEncryptionConverter] (T2.4). Non-secret values are also encrypted because
+ * the converter is applied at the column level and cannot inspect `is_secret` at
+ * write time. The `is_secret` flag continues to control **response masking** in the
+ * API layer (values are never sent in plaintext for secret rows). Existing plaintext
+ * rows are read transparently by the converter and encrypted on the next UPDATE;
+ * see [AesGcmEncryptionConverter] for the rollout procedure.
  */
 @Entity
 @Table(name = "system_configs")
@@ -50,7 +60,12 @@ class SystemConfig {
     @Column(nullable = false)
     var code: String = ""
 
+    /**
+     * Configuration value, encrypted at rest for all rows. Use [isSecret] to
+     * decide whether to mask the value in API responses.
+     */
     @Column(columnDefinition = "TEXT")
+    @Convert(converter = AesGcmEncryptionConverter::class)
     var value: String? = null
 
     @Column(nullable = false)

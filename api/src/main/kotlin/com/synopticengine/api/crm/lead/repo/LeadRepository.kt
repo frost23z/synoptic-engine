@@ -157,26 +157,34 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
     )
     fun findTopSalespeople(pageable: Pageable): List<Array<Any>>
 
-    // ── Dashboard stats (Phase 3 / P3.1) ──────────────────────────────────────
+    // ── Dashboard stats ─────────────────────────────────────────────────────────
     //
-    // Each accepts an optional `scopeIds` (null = unrestricted view); the SQL
-    // uses `:scopeIds IS NULL OR l.user_id IN (:scopeIds)` so we can keep a
-    // single query that works for both GLOBAL viewers and scoped users.
+    // All native queries carry an explicit `tenant_id = :tenantId` predicate for
+    // two reasons:
     //
-    // Native SQL is used here because we want DATE_TRUNC for bucketing and
-    // because the dashboard queries dominate the API's read traffic — staying
-    // close to PG means we get the composite indexes defined in V043 directly.
+    //  1. Defense-in-depth. RLS (V007/V011) is the primary isolation layer; the
+    //     Hibernate `@Filter` is a second layer that the MVC interceptor and
+    //     HibernateTenantFilterAspect maintain. Native SQL bypasses both the filter
+    //     and query-rewriting, so we add an explicit WHERE clause as a third layer.
+    //
+    //  2. Integration-test fidelity. Tests run as the `synoptic_app` role with
+    //     BYPASSRLS enabled in the test database, so RLS doesn't fire. Without
+    //     explicit predicates, dashboard counts would merge across tenants in CI.
+    //
+    // T2.2 — explicit tenant predicate on dashboard native queries.
 
     @Query(
         value = """
             SELECT COUNT(*) FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND created_at >= :start AND created_at < :end
               AND (:hasScope = false OR user_id IN (:scopeIds))
         """,
         nativeQuery = true,
     )
     fun countCreatedInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
@@ -187,6 +195,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         value = """
             SELECT COALESCE(SUM(amount), 0) FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND status = :status
               AND created_at >= :start AND created_at < :end
               AND (:hasScope = false OR user_id IN (:scopeIds))
@@ -194,6 +203,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun sumAmountByStatusInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("status") status: String,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
@@ -206,6 +216,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
             SELECT DATE_TRUNC(:bucket, created_at)::date AS bucket_date, COUNT(*) AS cnt
             FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND created_at >= :start AND created_at < :end
               AND (:hasScope = false OR user_id IN (:scopeIds))
             GROUP BY bucket_date
@@ -214,6 +225,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun countCreatedByBucketNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("bucket") bucket: String,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
@@ -226,6 +238,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
             SELECT DATE_TRUNC(:bucket, closed_at)::date AS bucket_date, COUNT(*) AS cnt
             FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND status = :status
               AND closed_at IS NOT NULL
               AND closed_at >= :start AND closed_at < :end
@@ -236,6 +249,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun countStatusByBucketNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("bucket") bucket: String,
         @Param("status") status: String,
         @Param("start") start: Instant,
@@ -248,6 +262,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         value = """
             SELECT COALESCE(AVG(amount), 0) FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND amount IS NOT NULL
               AND created_at >= :start AND created_at < :end
               AND (:hasScope = false OR user_id IN (:scopeIds))
@@ -255,6 +270,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun avgAmountInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
@@ -266,6 +282,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
             SELECT lead_source_id, COALESCE(SUM(amount), 0), COUNT(*)
             FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND status = 'won'
               AND lead_source_id IS NOT NULL
               AND created_at >= :start AND created_at < :end
@@ -276,6 +293,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun revenueByLeadSourceInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
@@ -287,6 +305,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
             SELECT lead_type_id, COALESCE(SUM(amount), 0), COUNT(*)
             FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND status = 'won'
               AND lead_type_id IS NOT NULL
               AND created_at >= :start AND created_at < :end
@@ -297,6 +316,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun revenueByLeadTypeInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
@@ -310,7 +330,8 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
             FROM lead_products lp
             JOIN leads l ON l.id = lp.lead_id AND l.deleted_at IS NULL
             LEFT JOIN products p ON p.id = lp.product_id AND p.deleted_at IS NULL
-            WHERE l.status = 'won'
+            WHERE l.tenant_id = :tenantId
+              AND l.status = 'won'
               AND l.created_at >= :start AND l.created_at < :end
               AND (:hasScope = false OR l.user_id IN (:scopeIds))
             GROUP BY lp.product_id, p.name, p.sku
@@ -320,6 +341,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun topSellingProductsInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
@@ -332,6 +354,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
             SELECT person_id, COUNT(*), COALESCE(SUM(amount), 0)
             FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND status = 'won'
               AND person_id IS NOT NULL
               AND created_at >= :start AND created_at < :end
@@ -343,6 +366,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun topPersonsByRevenueInRangeNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("start") start: Instant,
         @Param("end") end: Instant,
         @Param("hasScope") hasScope: Boolean,
@@ -355,6 +379,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
             SELECT stage_id, COUNT(*), COALESCE(SUM(amount), 0)
             FROM leads
             WHERE deleted_at IS NULL
+              AND tenant_id = :tenantId
               AND status = 'open'
               AND (:hasScope = false OR user_id IN (:scopeIds))
             GROUP BY stage_id
@@ -362,6 +387,7 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
         nativeQuery = true,
     )
     fun openLeadsByStageNative(
+        @Param("tenantId") tenantId: UUID,
         @Param("hasScope") hasScope: Boolean,
         @Param("scopeIds") scopeIds: Collection<UUID>,
     ): List<Array<Any>>
@@ -408,7 +434,8 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
 
     /**
      * Aggregate stage statistics: count + sum(amount) per stageId for non-deleted
-     * leads. Used by the dashboard to replace the OOM `PageRequest.of(0, Int.MAX_VALUE)` load.
+     * leads belonging to the given tenant. Used by the dashboard to replace the OOM
+     * `PageRequest.of(0, Int.MAX_VALUE)` load.
      * Returns rows of [stageId, count, sum(amount)].
      */
     @Query(
@@ -418,9 +445,12 @@ interface LeadRepository : JpaRepository<Lead, UUID> {
                    COALESCE(SUM(l.amount), 0)      AS total_amount
             FROM leads l
             WHERE l.deleted_at IS NULL
+              AND l.tenant_id = :tenantId
             GROUP BY l.stage_id
         """,
         nativeQuery = true,
     )
-    fun countAndSumByStageNative(): List<Array<Any>>
+    fun countAndSumByStageNative(
+        @Param("tenantId") tenantId: UUID,
+    ): List<Array<Any>>
 }

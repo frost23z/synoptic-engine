@@ -29,6 +29,7 @@ import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.crm.quote.repo.QuoteRepository
 import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.crm.tag.repo.TagRepository
+import com.synopticengine.api.shared.TenantContext
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -152,7 +153,11 @@ class CrmApiImpl(
         val totalRevenue = leadRepository.sumAmountByStatus(LeadStatus.WON)
 
         // Use aggregate query instead of loading all leads — prevents OOM on large datasets.
-        val stageRows = leadRepository.countAndSumByStageNative()
+        // T2.2: pass explicit tenantId so the native query carries the predicate even when
+        // the Hibernate @Filter is not enabled (e.g. BYPASSRLS test role).
+        val tenantId =
+            TenantContext.get() ?: error("TenantContext not set; dashboard requires authentication")
+        val stageRows = leadRepository.countAndSumByStageNative(tenantId)
         val stageIdToRow =
             stageRows.associate { row ->
                 (row[0] as java.util.UUID) to Pair((row[1] as Number).toInt(), row[2] as java.math.BigDecimal)

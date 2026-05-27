@@ -54,11 +54,18 @@ class DashboardStatsService(
         val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val leadsCurrent =
-            leadRepository.countCreatedInRangeNative(range.startInstant, range.endInstant, sb.hasScope, sb.ids).toInt()
+            leadRepository
+                .countCreatedInRangeNative(tenantId, range.startInstant, range.endInstant, sb.hasScope, sb.ids)
+                .toInt()
         val leadsPrevious =
             leadRepository
-                .countCreatedInRangeNative(range.previousStartInstant, range.previousEndInstant, sb.hasScope, sb.ids)
-                .toInt()
+                .countCreatedInRangeNative(
+                    tenantId,
+                    range.previousStartInstant,
+                    range.previousEndInstant,
+                    sb.hasScope,
+                    sb.ids,
+                ).toInt()
         val activitiesCurrent =
             activityRepository
                 .countCreatedInRangeNative(tenantId, range.startInstant, range.endInstant, sb.hasScope, sb.ids)
@@ -90,21 +97,25 @@ class DashboardStatsService(
                     sb.hasScope,
                     sb.ids,
                 ).toInt()
-        // Persons aren't user-scoped today (CRM-wide list); count as-is.
+        // Persons and organizations aren't user-scoped today (CRM-wide list); count as-is.
         val personsCurrent =
-            personRepository.countCreatedInRangeNative(range.startInstant, range.endInstant).toInt()
+            personRepository.countCreatedInRangeNative(tenantId, range.startInstant, range.endInstant).toInt()
         val personsPrevious =
-            personRepository.countCreatedInRangeNative(range.previousStartInstant, range.previousEndInstant).toInt()
+            personRepository
+                .countCreatedInRangeNative(tenantId, range.previousStartInstant, range.previousEndInstant)
+                .toInt()
         val organizationsCurrent =
-            organizationRepository.countCreatedInRangeNative(range.startInstant, range.endInstant).toInt()
+            organizationRepository.countCreatedInRangeNative(tenantId, range.startInstant, range.endInstant).toInt()
         val organizationsPrevious =
             organizationRepository
                 .countCreatedInRangeNative(
+                    tenantId,
                     range.previousStartInstant,
                     range.previousEndInstant,
                 ).toInt()
         val avgLeadValueCurrent =
             leadRepository.avgAmountInRangeNative(
+                tenantId,
                 range.startInstant,
                 range.endInstant,
                 sb.hasScope,
@@ -112,6 +123,7 @@ class DashboardStatsService(
             )
         val avgLeadValuePrevious =
             leadRepository.avgAmountInRangeNative(
+                tenantId,
                 range.previousStartInstant,
                 range.previousEndInstant,
                 sb.hasScope,
@@ -150,9 +162,11 @@ class DashboardStatsService(
         if (scope?.isEmpty() == true) {
             return RevenueStatsResponse(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
         }
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val won =
             leadRepository.sumAmountByStatusInRangeNative(
+                tenantId,
                 "won",
                 range.startInstant,
                 range.endInstant,
@@ -161,6 +175,7 @@ class DashboardStatsService(
             )
         val lost =
             leadRepository.sumAmountByStatusInRangeNative(
+                tenantId,
                 "lost",
                 range.startInstant,
                 range.endInstant,
@@ -169,6 +184,7 @@ class DashboardStatsService(
             )
         val wonPrev =
             leadRepository.sumAmountByStatusInRangeNative(
+                tenantId,
                 "won",
                 range.previousStartInstant,
                 range.previousEndInstant,
@@ -177,6 +193,7 @@ class DashboardStatsService(
             )
         val lostPrev =
             leadRepository.sumAmountByStatusInRangeNative(
+                tenantId,
                 "lost",
                 range.previousStartInstant,
                 range.previousEndInstant,
@@ -209,6 +226,7 @@ class DashboardStatsService(
                 lost = TotalLeadsSeries(emptyList()),
             )
         }
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val pgBucket =
             when (bucket.lowercase()) {
@@ -218,6 +236,7 @@ class DashboardStatsService(
             }
         val allRows =
             leadRepository.countCreatedByBucketNative(
+                tenantId,
                 pgBucket,
                 range.startInstant,
                 range.endInstant,
@@ -226,6 +245,7 @@ class DashboardStatsService(
             )
         val wonRows =
             leadRepository.countStatusByBucketNative(
+                tenantId,
                 pgBucket,
                 "won",
                 range.startInstant,
@@ -235,6 +255,7 @@ class DashboardStatsService(
             )
         val lostRows =
             leadRepository.countStatusByBucketNative(
+                tenantId,
                 pgBucket,
                 "lost",
                 range.startInstant,
@@ -293,9 +314,11 @@ class DashboardStatsService(
     fun revenueBySources(range: DateRange): List<RevenueByDimensionEntry> {
         val scope = scopeResolver.userIdsForCurrentUser()
         if (scope?.isEmpty() == true) return emptyList()
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val rows =
             leadRepository.revenueByLeadSourceInRangeNative(
+                tenantId,
                 range.startInstant,
                 range.endInstant,
                 sb.hasScope,
@@ -318,9 +341,11 @@ class DashboardStatsService(
     fun revenueByTypes(range: DateRange): List<RevenueByDimensionEntry> {
         val scope = scopeResolver.userIdsForCurrentUser()
         if (scope?.isEmpty() == true) return emptyList()
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val rows =
             leadRepository.revenueByLeadTypeInRangeNative(
+                tenantId,
                 range.startInstant,
                 range.endInstant,
                 sb.hasScope,
@@ -346,9 +371,11 @@ class DashboardStatsService(
     ): List<TopProductEntry> {
         val scope = scopeResolver.userIdsForCurrentUser()
         if (scope?.isEmpty() == true) return emptyList()
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val rows =
             leadRepository.topSellingProductsInRangeNative(
+                tenantId,
                 range.startInstant,
                 range.endInstant,
                 sb.hasScope,
@@ -377,9 +404,11 @@ class DashboardStatsService(
     ): List<TopPersonEntry> {
         val scope = scopeResolver.userIdsForCurrentUser()
         if (scope?.isEmpty() == true) return emptyList()
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
         val rows =
             leadRepository.topPersonsByRevenueInRangeNative(
+                tenantId,
                 range.startInstant,
                 range.endInstant,
                 sb.hasScope,
@@ -405,8 +434,9 @@ class DashboardStatsService(
     fun openLeadsByStates(): List<OpenLeadsByStateEntry> {
         val scope = scopeResolver.userIdsForCurrentUser()
         if (scope?.isEmpty() == true) return emptyList()
+        val tenantId = requireTenant()
         val sb = scopeBinding(scope)
-        val rows = leadRepository.openLeadsByStageNative(sb.hasScope, sb.ids)
+        val rows = leadRepository.openLeadsByStageNative(tenantId, sb.hasScope, sb.ids)
         if (rows.isEmpty()) return emptyList()
         val stageIds = rows.map { it[0] as UUID }
         val stages = stageRepository.findAllByIdIn(stageIds).associateBy { it.id!! }
@@ -464,9 +494,9 @@ class DashboardStatsService(
             ScopeBinding(hasScope = true, ids = scope)
         }
 
-    // Native dashboard queries against `activities` and `quotes` need an explicit
-    // tenant predicate because those tables are not RLS-protected (V007 only
-    // enables RLS on leads/orgs/persons/products).
+    // All native dashboard queries need an explicit tenant predicate (T2.2).
+    // RLS (V007/V011) is the primary layer; the explicit predicate is a second
+    // layer that also ensures integration tests (BYPASSRLS role) see correct counts.
     private fun requireTenant(): UUID =
         TenantContext.get() ?: error("TenantContext not set; dashboard endpoints require authentication")
 

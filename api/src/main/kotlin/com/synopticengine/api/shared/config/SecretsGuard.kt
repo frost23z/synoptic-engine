@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component
  * environment variables would boot silently with a publicly-known secret and a
  * trivial admin login.
  *
+ * Also checks that `SYNOPTIC_ENCRYPTION_KEY` is set in non-dev profiles (T2.4),
+ * to fail closed when the at-rest encryption key is absent.
+ *
  * Behaviour:
  *  - On the `local`, `test`, `dev` profiles defaults are permitted; we WARN once so
  *    the operator sees the call-out in logs.
@@ -32,6 +35,7 @@ class SecretsGuard(
     @Value("\${synoptic.security.dev-profiles:local,test,dev}") private val devProfilesCsv: String,
     @Value("\${synoptic.security.empty-profile-is-dev:false}") private val emptyProfileIsDev: Boolean,
     @Value("\${cors.allowed-origins}") private val allowedOriginsCsv: String,
+    @Value("\${synoptic.encryption.key:}") private val encryptionKey: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -57,6 +61,13 @@ class SecretsGuard(
         if (adminPassword == DEFAULT_ADMIN_PASSWORD) {
             violations += "SYNOPTIC_ADMIN_PASSWORD is the application.yaml default ('$DEFAULT_ADMIN_PASSWORD')."
         }
+        // T2.4 — fail closed when at-rest encryption key is absent in non-dev profiles.
+        // On dev profiles, the converter falls back to plaintext passthrough (with a WARNING).
+        if (encryptionKey.isBlank()) {
+            violations +=
+                "SYNOPTIC_ENCRYPTION_KEY is not set. Secret columns (webhooks.secret, " +
+                "system_configs.value) will be stored in PLAINTEXT."
+        }
 
         if (!isDevDeployment) {
             val origins = allowedOriginsCsv.split(",").map { it.trim() }
@@ -79,7 +90,8 @@ class SecretsGuard(
         }
         throw IllegalStateException(
             "Refusing to start on profile $activeProfiles with insecure defaults:\n$joined\n" +
-                "Set the corresponding env vars (JWT_SECRET, SYNOPTIC_ADMIN_PASSWORD) before booting.",
+                "Set the corresponding env vars (JWT_SECRET, SYNOPTIC_ADMIN_PASSWORD, " +
+                "SYNOPTIC_ENCRYPTION_KEY) before booting.",
         )
     }
 
