@@ -106,7 +106,7 @@ class PersonController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAnyAuthority('contacts.delete', 'contacts.persons.delete')")
     fun massDestroy(
-        @RequestBody request: MassDestroyPersonRequest,
+        @Valid @RequestBody request: MassDestroyPersonRequest,
     ): ResponseEntity<Map<String, Any>> {
         val deleted = personService.massDestroy(request.ids)
         val skipped = request.ids - deleted.toSet()
@@ -117,7 +117,7 @@ class PersonController(
     @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun attachTag(
         @PathVariable id: UUID,
-        @RequestBody request: TagAttachRequest,
+        @Valid @RequestBody request: TagAttachRequest,
     ): ResponseEntity<PersonResponse> = ResponseEntity.ok(personService.attachTag(id, request.tagId))
 
     @DeleteMapping("/{id}/tags/{tagId}")
@@ -153,6 +153,6 @@ class PersonController(
     @PostMapping("/merge")
     @PreAuthorize("hasAnyAuthority('contacts.edit', 'contacts.persons.edit')")
     fun merge(
-        @RequestBody request: MergePersonRequest,
+        @Valid @RequestBody request: MergePersonRequest,
     ): ResponseEntity<MergePersonResponse> = ResponseEntity.ok(personService.merge(request.sourceId, request.targetId))
 }

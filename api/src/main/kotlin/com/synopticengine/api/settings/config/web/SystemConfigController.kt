@@ -1,6 +1,7 @@
 package com.synopticengine.api.settings.config.web
 
 import com.synopticengine.api.settings.config.service.SystemConfigService
+import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
@@ -29,6 +30,6 @@ class SystemConfigController(
     @PreAuthorize("hasAuthority('settings.edit')")
     fun update(
         @PathVariable code: String,
-        @RequestBody request: UpdateSystemConfigRequest,
+        @Valid @RequestBody request: UpdateSystemConfigRequest,
     ): ResponseEntity<SystemConfigResponse> = ResponseEntity.ok(systemConfigService.update(code, request.value))
 }

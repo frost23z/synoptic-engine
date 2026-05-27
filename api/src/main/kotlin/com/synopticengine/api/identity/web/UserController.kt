@@ -114,7 +114,7 @@ class UserController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('users.delete')")
     fun massDeactivate(
-        @RequestBody request: MassDeactivateRequest,
+        @Valid @RequestBody request: MassDeactivateRequest,
     ): ResponseEntity<Void> {
         userService.massDeactivate(request.ids)
         return ResponseEntity.noContent().build()

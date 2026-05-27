@@ -2,12 +2,15 @@ package com.synopticengine.api.settings.imports.web
 
 import com.synopticengine.api.settings.imports.service.CsvExportService
 import com.synopticengine.api.settings.imports.service.DataImportService
+import com.synopticengine.api.shared.upload.FileUploadGuard
+import jakarta.validation.constraints.NotBlank
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -18,11 +21,13 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
+@Validated
 @RestController
 @RequestMapping($$"${api.base-path}/settings/imports")
 class ImportController(
     private val dataImportService: DataImportService,
     private val csvExportService: CsvExportService,
+    private val fileUploadGuard: FileUploadGuard,
 ) {
     @GetMapping
     @PreAuthorize("hasAuthority('imports.view')")
@@ -38,9 +43,12 @@ class ImportController(
     @PreAuthorize("hasAuthority('imports.create')")
     fun upload(
         @RequestParam file: MultipartFile,
-        @RequestParam entityType: String,
-    ): ResponseEntity<DataImportResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(dataImportService.upload(file, entityType))
+        @NotBlank(message = "entityType is required") @RequestParam entityType: String,
+    ): ResponseEntity<DataImportResponse> {
+        // T4.3 — CSV-only, max 10 MB.
+        fileUploadGuard.validateCsvImport(file)
+        return ResponseEntity.status(HttpStatus.CREATED).body(dataImportService.upload(file, entityType))
+    }
 
     @PostMapping("/{id}/start")
     @PreAuthorize("hasAuthority('imports.edit')")

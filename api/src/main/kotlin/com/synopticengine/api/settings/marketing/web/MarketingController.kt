@@ -59,7 +59,7 @@ class MarketingEventController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('marketing.edit')")
     fun massDestroy(
-        @RequestBody request: MassDestroyRequest,
+        @Valid @RequestBody request: MassDestroyRequest,
     ): ResponseEntity<Void> {
         marketingService.massDestroyEvents(request.ids)
         return ResponseEntity.noContent().build()
@@ -128,7 +128,7 @@ class MarketingCampaignController(
     @PostMapping("/mass-destroy")
     @PreAuthorize("hasAuthority('marketing.edit')")
     fun massDestroy(
-        @RequestBody request: MassDestroyRequest,
+        @Valid @RequestBody request: MassDestroyRequest,
     ): ResponseEntity<Void> {
         marketingService.massDestroyCampaigns(request.ids)
         return ResponseEntity.noContent().build()
