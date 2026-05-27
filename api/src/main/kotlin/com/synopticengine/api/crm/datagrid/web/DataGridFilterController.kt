@@ -1,10 +1,12 @@
 package com.synopticengine.api.crm.datagrid.web
 
 import com.synopticengine.api.auth.UserPrincipal
+import com.synopticengine.api.crm.CrmPermissions
 import com.synopticengine.api.crm.datagrid.service.DataGridFilterService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -23,12 +25,14 @@ class DataGridFilterController(
     private val service: DataGridFilterService,
 ) {
     @GetMapping
+    @PreAuthorize("hasAuthority('${CrmPermissions.DATAGRID_FILTERS_VIEW}')")
     fun list(
         @AuthenticationPrincipal principal: UserPrincipal,
         @RequestParam src: String?,
     ): ResponseEntity<List<DataGridFilterResponse>> = ResponseEntity.ok(service.findByUserAndSrc(principal.id, src))
 
     @PostMapping
+    @PreAuthorize("hasAuthority('${CrmPermissions.DATAGRID_FILTERS_EDIT}')")
     fun save(
         @AuthenticationPrincipal principal: UserPrincipal,
         @Valid @RequestBody request: SaveFilterRequest,
@@ -38,6 +42,7 @@ class DataGridFilterController(
         )
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('${CrmPermissions.DATAGRID_FILTERS_EDIT}')")
     fun update(
         @AuthenticationPrincipal principal: UserPrincipal,
         @PathVariable id: UUID,
@@ -46,6 +51,7 @@ class DataGridFilterController(
         ResponseEntity.ok(service.update(id, principal.id, request.name, request.applied))
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('${CrmPermissions.DATAGRID_FILTERS_EDIT}')")
     fun delete(
         @AuthenticationPrincipal principal: UserPrincipal,
         @PathVariable id: UUID,
