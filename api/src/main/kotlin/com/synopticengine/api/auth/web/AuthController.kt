@@ -26,18 +26,7 @@ class AuthController(
     ): ResponseEntity<TokenResponse> =
         ResponseEntity.ok(authService.login(request.email, request.password, clientIp(httpRequest)))
 
-    private fun clientIp(req: HttpServletRequest): String {
-        // Trust X-Forwarded-For only if your edge sets it (load balancer / nginx);
-        // fall back to the socket peer. Take the leftmost entry — that's the
-        // client per RFC 7239 — and strip any port.
-        val forwarded =
-            req
-                .getHeader("X-Forwarded-For")
-                ?.split(",")
-                ?.firstOrNull()
-                ?.trim()
-        return (forwarded?.takeIf { it.isNotBlank() } ?: req.remoteAddr ?: "unknown").substringBefore(':')
-    }
+    private fun clientIp(req: HttpServletRequest): String = req.remoteAddr ?: "unknown"
 
     @PostMapping("/refresh")
     fun refresh(
@@ -60,6 +49,23 @@ class AuthController(
                 authorities = principal.authorities.mapNotNull { it.authority },
             ),
         )
+    }
+
+    @PostMapping("/logout")
+    fun logout(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: RefreshRequest,
+    ): ResponseEntity<Void> {
+        authService.logout(principal.id, request.refreshToken)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/logout-all")
+    fun logoutAll(
+        @AuthenticationPrincipal principal: UserPrincipal,
+    ): ResponseEntity<Void> {
+        authService.logoutAll(principal.id)
+        return ResponseEntity.noContent().build()
     }
 
     @PostMapping("/forgot-password")

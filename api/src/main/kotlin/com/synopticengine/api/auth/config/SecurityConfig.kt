@@ -73,6 +73,10 @@ class SecurityConfig(
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/mail/inbound-parse")
                     .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/logout")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/auth/logout-all")
+                    .authenticated()
                     // everything else requires authentication
                     .anyRequest()
                     .authenticated()

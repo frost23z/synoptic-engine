@@ -13,6 +13,6 @@ class DashboardController(
     private val dashboardService: DashboardService,
 ) {
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('reports.view')")
     fun getDashboard(): ResponseEntity<DashboardResponse> = ResponseEntity.ok(dashboardService.buildSummary())
 }
