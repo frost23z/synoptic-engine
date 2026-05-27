@@ -94,4 +94,5 @@ data class ExecuteMarketingCampaignResponse(
     val campaignId: UUID,
     val requested: Int,
     val sent: Int,
+    val queued: Int = 0,
 )
