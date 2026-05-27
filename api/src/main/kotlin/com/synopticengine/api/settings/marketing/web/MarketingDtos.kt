@@ -1,6 +1,8 @@
 package com.synopticengine.api.settings.marketing.web
 
+import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -62,9 +64,25 @@ data class UpdateMarketingCampaignRequest(
 )
 
 data class ExecuteMarketingCampaignRequest(
-    val recipients: List<String>,
+    /**
+     * Recipient email addresses.
+     *
+     * T2.5(c) constraints:
+     *  - At most [MAX_RECIPIENTS] entries per request to prevent runaway fan-out.
+     *  - Each entry validated as a syntactically well-formed RFC 5321 email address.
+     */
+    @field:Size(max = MAX_RECIPIENTS, message = "Recipient list must not exceed $MAX_RECIPIENTS addresses")
+    val recipients: List<
+        @Email(message = "Each recipient must be a valid email address")
+        String,
+    >,
     val context: Map<String, String> = emptyMap(),
-)
+) {
+    companion object {
+        /** Maximum number of recipients per execute-campaign call. T2.5(c). */
+        const val MAX_RECIPIENTS = 1_000
+    }
+}
 
 data class ExecuteMarketingCampaignResponse(
     val campaignId: UUID,

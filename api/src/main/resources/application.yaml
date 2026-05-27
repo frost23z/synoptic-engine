@@ -45,3 +45,9 @@ synoptic:
         # HMAC secret shared with the upstream inbound-mail webhook provider
         # (Postmark / SendGrid / etc.). Leave blank to refuse all inbound deliveries.
         webhook-secret: ${SYNOPTIC_INBOUND_MAIL_SECRET:}
+    encryption:
+        # AES-256-GCM key for at-rest secret columns (webhooks.secret, system_configs.value).
+        # Must be a base64-encoded 32-byte (256-bit) random key.
+        # Generate: openssl rand -base64 32
+        # REQUIRED in non-dev profiles; SecretsGuard refuses to start if absent.
+        key: ${SYNOPTIC_ENCRYPTION_KEY:}
