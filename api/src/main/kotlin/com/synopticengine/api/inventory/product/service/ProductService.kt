@@ -8,6 +8,7 @@ import com.synopticengine.api.inventory.product.web.InventoryEntryResponse
 import com.synopticengine.api.inventory.product.web.ProductResponse
 import com.synopticengine.api.inventory.warehouse.repo.ProductInventoryRepository
 import com.synopticengine.api.inventory.warehouse.repo.WarehouseRepository
+import com.synopticengine.api.shared.security.requireOwnership
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -31,6 +32,7 @@ class ProductService(
     fun findById(id: UUID): ProductResponse {
         val product =
             productRepository.findByIdAndDeletedAtIsNull(id) ?: throw NoSuchElementException("Product not found: $id")
+        product.requireOwnership()
         return product.toResponse(loadTags(id))
     }
 
@@ -167,8 +169,13 @@ class ProductService(
         return findById(productId)
     }
 
-    private fun requireProduct(id: UUID): Product =
-        productRepository.findByIdAndDeletedAtIsNull(id) ?: throw NoSuchElementException("Product not found: $id")
+    private fun requireProduct(id: UUID): Product {
+        val p =
+            productRepository.findByIdAndDeletedAtIsNull(id)
+                ?: throw NoSuchElementException("Product not found: $id")
+        p.requireOwnership()
+        return p
+    }
 }
 
 fun Product.toResponse(tags: List<com.synopticengine.api.crm.TagDto> = emptyList()) =

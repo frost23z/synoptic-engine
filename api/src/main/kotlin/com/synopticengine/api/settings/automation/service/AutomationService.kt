@@ -12,6 +12,8 @@ import com.synopticengine.api.settings.automation.web.WebhookDeliveryRunResponse
 import com.synopticengine.api.settings.automation.web.WebhookResponse
 import com.synopticengine.api.settings.automation.web.WorkflowActionRunResponse
 import com.synopticengine.api.settings.automation.web.WorkflowResponse
+import com.synopticengine.api.shared.audit.AuditAction
+import com.synopticengine.api.shared.audit.AuditLogService
 import com.synopticengine.api.shared.security.OutboundUrlValidator
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
@@ -27,6 +29,7 @@ class AutomationService(
     private val actionRunRepository: WorkflowActionRunRepository,
     private val webhookDeliveryRunRepository: WebhookDeliveryRunRepository,
     private val outboundUrlValidator: OutboundUrlValidator,
+    private val auditLogService: AuditLogService,
 ) {
     // ── Workflows ─────────────────────────────────────────────────────────
 
@@ -115,16 +118,32 @@ class AutomationService(
         // T1.2 — validate at save-time so invalid URLs are rejected before they
         // can ever be dispatched (defense-in-depth; re-validated at send time).
         outboundUrlValidator.validate(payloadUrl)
-        return webhookRepository
-            .save(
-                Webhook().apply {
-                    this.name = name
-                    this.payloadUrl = payloadUrl
-                    this.secret = secret?.takeIf { it.isNotBlank() }
-                    this.events = events
-                    this.isActive = isActive
-                },
-            ).toResponse()
+        val saved =
+            webhookRepository
+                .save(
+                    Webhook().apply {
+                        this.name = name
+                        this.payloadUrl = payloadUrl
+                        this.secret = secret?.takeIf { it.isNotBlank() }
+                        this.events = events
+                        this.isActive = isActive
+                    },
+                )
+        // T3.4 — audit webhook creation. Secret presence is noted but value is never logged.
+        auditLogService.record(
+            entityType = "webhook",
+            entityId = saved.id?.toString(),
+            action = AuditAction.CREATE,
+            payload =
+                mapOf(
+                    "name" to name,
+                    "payloadUrl" to payloadUrl,
+                    "events" to events,
+                    "hasSecret" to !secret.isNullOrBlank(),
+                    "isActive" to isActive,
+                ),
+        )
+        return saved.toResponse()
     }
 
     @Transactional
@@ -144,12 +163,33 @@ class AutomationService(
         webhook.secret = secret?.takeIf { it.isNotBlank() }
         webhook.events = events
         webhook.isActive = isActive
-        return webhookRepository.save(webhook).toResponse()
+        val saved = webhookRepository.save(webhook)
+        // T3.4 — audit webhook update.
+        auditLogService.record(
+            entityType = "webhook",
+            entityId = id.toString(),
+            action = AuditAction.UPDATE,
+            payload =
+                mapOf(
+                    "name" to name,
+                    "payloadUrl" to payloadUrl,
+                    "events" to events,
+                    "hasSecret" to !secret.isNullOrBlank(),
+                    "isActive" to isActive,
+                ),
+        )
+        return saved.toResponse()
     }
 
     @Transactional
     fun deleteWebhook(id: UUID) {
         webhookRepository.delete(requireWebhook(id))
+        // T3.4 — audit webhook deletion.
+        auditLogService.record(
+            entityType = "webhook",
+            entityId = id.toString(),
+            action = AuditAction.DELETE,
+        )
     }
 
     fun findDeliveriesFor(
