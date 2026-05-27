@@ -3,6 +3,7 @@ package com.synopticengine.api.settings.emailtemplate.service
 import com.synopticengine.api.settings.emailtemplate.domain.EmailTemplate
 import com.synopticengine.api.settings.emailtemplate.repo.EmailTemplateRepository
 import com.synopticengine.api.settings.emailtemplate.web.EmailTemplateResponse
+import com.synopticengine.api.shared.email.HtmlSanitizer
 import com.synopticengine.api.shared.email.interpolateTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -34,7 +35,7 @@ class EmailTemplateService(
                 EmailTemplate().apply {
                     this.name = name
                     this.subject = subject
-                    this.content = content
+                    this.content = HtmlSanitizer.sanitize(content)
                 },
             ).toResponse()
     }
@@ -57,7 +58,7 @@ class EmailTemplateService(
         }
         template.name = name
         template.subject = subject
-        template.content = content
+        template.content = HtmlSanitizer.sanitize(content)
         return emailTemplateRepository.save(template).toResponse()
     }
 

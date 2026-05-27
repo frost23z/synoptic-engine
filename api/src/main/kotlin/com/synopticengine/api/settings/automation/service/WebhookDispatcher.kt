@@ -5,6 +5,7 @@ import com.synopticengine.api.settings.automation.domain.WebhookDeliveryRunStatu
 import com.synopticengine.api.settings.automation.repo.WebhookDeliveryRunRepository
 import com.synopticengine.api.shared.DomainEvent
 import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.shared.security.OutboundUrlValidator
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.http.MediaType
@@ -23,6 +24,7 @@ class WebhookDispatcher(
     private val deliveryRunRepository: WebhookDeliveryRunRepository,
     private val restClient: RestClient,
     private val objectMapper: ObjectMapper,
+    private val outboundUrlValidator: OutboundUrlValidator,
 ) {
     private val log = LoggerFactory.getLogger(WebhookDispatcher::class.java)
 
@@ -53,6 +55,19 @@ class WebhookDispatcher(
             )
 
         for (webhook in matching) {
+            // T1.2 — re-validate at send time. The URL was validated at save time
+            // (in AutomationService), but re-validate here as defense-in-depth:
+            // a stored URL that passed validation when DNS had a public address
+            // could later resolve to a private range (DNS rebinding), or an admin
+            // bypass could have stored an invalid URL.
+            try {
+                outboundUrlValidator.validate(webhook.payloadUrl)
+            } catch (e: IllegalArgumentException) {
+                log.warn("Webhook ${webhook.id} skipped: URL validation failed — ${e.message}")
+                recordFailure(webhook.id!!, event, null, null, "URL validation failed: ${e.message}")
+                continue
+            }
+
             try {
                 val payloadJson = objectMapper.writeValueAsString(payload)
                 val response =

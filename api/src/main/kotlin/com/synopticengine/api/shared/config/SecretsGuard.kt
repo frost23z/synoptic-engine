@@ -31,6 +31,7 @@ class SecretsGuard(
     @Value("\${synoptic.admin.password}") private val adminPassword: String,
     @Value("\${synoptic.security.dev-profiles:local,test,dev}") private val devProfilesCsv: String,
     @Value("\${synoptic.security.empty-profile-is-dev:false}") private val emptyProfileIsDev: Boolean,
+    @Value("\${cors.allowed-origins}") private val allowedOriginsCsv: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -55,6 +56,18 @@ class SecretsGuard(
         }
         if (adminPassword == DEFAULT_ADMIN_PASSWORD) {
             violations += "SYNOPTIC_ADMIN_PASSWORD is the application.yaml default ('$DEFAULT_ADMIN_PASSWORD')."
+        }
+
+        if (!isDevDeployment) {
+            val origins = allowedOriginsCsv.split(",").map { it.trim() }
+            if (origins.any { it == "*" || it.endsWith("/*") || it.contains("*") }) {
+                violations +=
+                    "CORS_ALLOWED_ORIGINS contains a wildcard pattern ('${origins.first {
+                        it.contains(
+                            "*",
+                        )
+                    }}') with allowCredentials=true — this allows any origin to send credentialed requests."
+            }
         }
 
         if (violations.isEmpty()) return

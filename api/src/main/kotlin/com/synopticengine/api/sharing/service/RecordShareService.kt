@@ -23,9 +23,15 @@ import java.util.UUID
  * sub-resource visibility rows (source = CASCADE).
  *
  * Authorisation:
- *  - Only users in the owner tenant may create shares for that tenant's records.
- *  - To reshare a record received via a share, the consumer needs MANAGE on it (per § 6.2).
- *  - Revoke can be performed by the owner tenant or the consumer (consumer can "opt out").
+ *  - Only users in the owner tenant may create shares for that tenant's records
+ *    (via [share]).
+ *  - A consumer with MANAGE access may reshare onward, gated on
+ *    [com.synopticengine.api.sharing.SharingPermissions.RECORDS_RESHARE] + [reshare].
+ *  - Revoke can be performed by the owner tenant or the consumer (consumer "opts out").
+ *
+ * Defense-in-depth:
+ *  - [assertCanWrite] / [assertCanDelete] enforce access-level checks at the
+ *    service layer in addition to Postgres RLS, for cross-tenant mutation paths.
  */
 @Service
 class RecordShareService(
@@ -36,6 +42,8 @@ class RecordShareService(
     private val inventoryApi: InventoryApi,
     private val eventPublisher: ApplicationEventPublisher,
 ) {
+    // ── Owner-side share ──────────────────────────────────────────────────────
+
     @Transactional
     fun share(
         ownerTenantId: UUID,
@@ -55,6 +63,202 @@ class RecordShareService(
 
         verifyOwnership(ownerTenantId, resourceType, resourceId)
 
+        return doShare(
+            ownerTenantId,
+            consumerTenantId,
+            resourceType,
+            resourceId,
+            accessLevel,
+            sharedBy,
+            expiresAt,
+            note,
+        )
+    }
+
+    // ── Consumer-initiated reshare (MANAGE access → share onward) ─────────────
+
+    /**
+     * Reshare a record received via a share. The acting tenant must have
+     * [AccessLevel.MANAGE] on the resource (checked via [ResourceVisibilityService.effectiveAccess]).
+     *
+     * The reshared access level is **capped** at the actor's own effective level;
+     * a consumer cannot grant more than they have.
+     *
+     * Gate the endpoint on [com.synopticengine.api.sharing.SharingPermissions.RECORDS_RESHARE]
+     * before calling this method.
+     */
+    @Transactional
+    fun reshare(
+        actingTenantId: UUID,
+        actingUserId: UUID,
+        consumerTenantId: UUID,
+        resourceType: String,
+        resourceId: UUID,
+        accessLevel: AccessLevel,
+        expiresAt: Instant? = null,
+        note: String? = null,
+    ): RecordShare {
+        require(actingTenantId != consumerTenantId) { "Cannot reshare with your own tenant" }
+        if (!tenantApi.exists(consumerTenantId)) {
+            throw NoSuchElementException("Consumer tenant not found")
+        }
+        require(ResourceType.isKnown(resourceType)) { "Unknown resource type: $resourceType" }
+
+        // Check that the acting tenant has MANAGE (canReshare) access.
+        val effectiveLevel = visibilityService.effectiveAccess(actingTenantId, resourceType, resourceId)
+        if (!effectiveLevel.canReshare()) {
+            throw AccessDeniedException(
+                "Tenant $actingTenantId does not have MANAGE access on $resourceType $resourceId " +
+                    "(effective: $effectiveLevel) — MANAGE is required to reshare",
+            )
+        }
+
+        val ownerTenantId =
+            findOwnerTenant(resourceType, resourceId)
+                ?: throw NoSuchElementException("$resourceType $resourceId not found")
+
+        require(ownerTenantId != consumerTenantId) { "Cannot reshare back to the owner tenant" }
+
+        // Cap: the resharer cannot grant more than their own access level.
+        val cappedLevel = if (accessLevel.ordinal <= effectiveLevel.ordinal) accessLevel else effectiveLevel
+
+        return doShare(
+            ownerTenantId,
+            consumerTenantId,
+            resourceType,
+            resourceId,
+            cappedLevel,
+            actingUserId,
+            expiresAt,
+            note,
+        )
+    }
+
+    // ── Defense-in-depth guards (call from cross-tenant mutation paths) ────────
+
+    /**
+     * Asserts that [consumerTenantId] has at least WRITE access on [resourceType/resourceId].
+     *
+     * Call this from service methods that modify a shared resource on behalf of a
+     * consumer tenant — in addition to Postgres RLS — as defense-in-depth.
+     *
+     * @throws AccessDeniedException when the effective access level is insufficient.
+     */
+    fun assertCanWrite(
+        consumerTenantId: UUID,
+        resourceType: String,
+        resourceId: UUID,
+    ) {
+        val access = visibilityService.effectiveAccess(consumerTenantId, resourceType, resourceId)
+        if (!access.canWrite()) {
+            throw AccessDeniedException(
+                "Tenant $consumerTenantId does not have WRITE access on $resourceType $resourceId (effective: $access)",
+            )
+        }
+    }
+
+    /**
+     * Asserts that [consumerTenantId] has MANAGE (canDelete) access on [resourceType/resourceId].
+     *
+     * Call from service methods that delete a shared resource on behalf of a consumer.
+     *
+     * @throws AccessDeniedException when the effective access level is insufficient.
+     */
+    fun assertCanDelete(
+        consumerTenantId: UUID,
+        resourceType: String,
+        resourceId: UUID,
+    ) {
+        val access = visibilityService.effectiveAccess(consumerTenantId, resourceType, resourceId)
+        if (!access.canDelete()) {
+            throw AccessDeniedException(
+                "Tenant $consumerTenantId does not have MANAGE access on $resourceType $resourceId (effective: $access)",
+            )
+        }
+    }
+
+    // ── Revoke ────────────────────────────────────────────────────────────────
+
+    @Transactional
+    fun revoke(
+        shareId: UUID,
+        actingTenantId: UUID,
+        actingUserId: UUID,
+    ): RecordShare {
+        val share =
+            recordShareRepository
+                .findById(shareId)
+                .orElseThrow { NoSuchElementException("Share not found") }
+        if (share.ownerTenantId != actingTenantId && share.consumerTenantId != actingTenantId) {
+            throw NoSuchElementException("Share not found")
+        }
+        if (share.revokedAt != null) return share
+        share.revokedAt = Instant.now()
+        // Remove direct + cascaded visibility rows attached to this share.
+        visibilityService.deleteBySource(VisibilitySource.RECORD, share.id!!)
+        visibilityService.deleteBySource(VisibilitySource.CASCADE, share.id!!)
+        eventPublisher.publishEvent(
+            RecordShareRevokedEvent(
+                shareId = share.id!!,
+                ownerTenantId = share.ownerTenantId,
+                consumerTenantId = share.consumerTenantId,
+                revokedByTenantId = actingTenantId,
+                revokedBy = actingUserId,
+                resourceType = share.resourceType,
+                resourceId = share.resourceId,
+            ),
+        )
+        return share
+    }
+
+    // ── Queries ───────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    fun listShares(
+        actingTenantId: UUID,
+        resourceType: String,
+        resourceId: UUID,
+    ): List<RecordShare> {
+        val rows =
+            recordShareRepository.findAllByOwnerTenantIdAndResourceTypeAndResourceId(
+                actingTenantId,
+                resourceType,
+                resourceId,
+            )
+        return rows.filter { it.revokedAt == null }
+    }
+
+    @Transactional(readOnly = true)
+    fun listSharedWithMe(
+        actingTenantId: UUID,
+        resourceType: String?,
+    ): List<RecordShare> {
+        val now = Instant.now()
+        return recordShareRepository
+            .findAllByConsumerTenantId(actingTenantId)
+            .asSequence()
+            .filter { resourceType == null || it.resourceType == resourceType }
+            .filter { it.revokedAt == null && (it.expiresAt == null || it.expiresAt!!.isAfter(now)) }
+            .sortedByDescending { it.createdAt }
+            .toList()
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Core upsert logic shared by [share] and [reshare].
+     * Callers are responsible for any ownership/access checks.
+     */
+    private fun doShare(
+        ownerTenantId: UUID,
+        consumerTenantId: UUID,
+        resourceType: String,
+        resourceId: UUID,
+        accessLevel: AccessLevel,
+        sharedBy: UUID,
+        expiresAt: Instant?,
+        note: String?,
+    ): RecordShare {
         // Upsert: if a non-revoked share already exists, update access level instead of duplicating.
         val existing =
             recordShareRepository.findByOwnerTenantIdAndConsumerTenantIdAndResourceTypeAndResourceId(
@@ -135,69 +339,6 @@ class RecordShareService(
         return share
     }
 
-    @Transactional
-    fun revoke(
-        shareId: UUID,
-        actingTenantId: UUID,
-        actingUserId: UUID,
-    ): RecordShare {
-        val share =
-            recordShareRepository
-                .findById(shareId)
-                .orElseThrow { NoSuchElementException("Share not found") }
-        if (share.ownerTenantId != actingTenantId && share.consumerTenantId != actingTenantId) {
-            throw NoSuchElementException("Share not found")
-        }
-        if (share.revokedAt != null) return share
-        share.revokedAt = Instant.now()
-        // Remove direct + cascaded visibility rows attached to this share.
-        visibilityService.deleteBySource(VisibilitySource.RECORD, share.id!!)
-        visibilityService.deleteBySource(VisibilitySource.CASCADE, share.id!!)
-        eventPublisher.publishEvent(
-            RecordShareRevokedEvent(
-                shareId = share.id!!,
-                ownerTenantId = share.ownerTenantId,
-                consumerTenantId = share.consumerTenantId,
-                revokedByTenantId = actingTenantId,
-                revokedBy = actingUserId,
-                resourceType = share.resourceType,
-                resourceId = share.resourceId,
-            ),
-        )
-        return share
-    }
-
-    @Transactional(readOnly = true)
-    fun listShares(
-        actingTenantId: UUID,
-        resourceType: String,
-        resourceId: UUID,
-    ): List<RecordShare> {
-        val rows =
-            recordShareRepository.findAllByOwnerTenantIdAndResourceTypeAndResourceId(
-                actingTenantId,
-                resourceType,
-                resourceId,
-            )
-        // The query returns owner-side rows (acting tenant is owner).
-        return rows.filter { it.revokedAt == null }
-    }
-
-    @Transactional(readOnly = true)
-    fun listSharedWithMe(
-        actingTenantId: UUID,
-        resourceType: String?,
-    ): List<RecordShare> {
-        val now = Instant.now()
-        return recordShareRepository
-            .findAllByConsumerTenantId(actingTenantId)
-            .asSequence()
-            .filter { resourceType == null || it.resourceType == resourceType }
-            .filter { it.revokedAt == null && (it.expiresAt == null || it.expiresAt!!.isAfter(now)) }
-            .sortedByDescending { it.createdAt }
-            .toList()
-    }
-
     /**
      * Sanity check that the acting tenant is the owner of the record. Each resource type
      * lives in its own module so the lookup goes through the module port — never trust the
@@ -209,47 +350,32 @@ class RecordShareService(
         resourceType: String,
         resourceId: UUID,
     ) {
+        val actualOwner =
+            findOwnerTenant(resourceType, resourceId)
+                ?: throw NoSuchElementException("$resourceType $resourceId not found")
+        if (actualOwner != ownerTenantId) {
+            throw AccessDeniedException("Only the owner tenant may share this record")
+        }
+    }
+
+    private fun findOwnerTenant(
+        resourceType: String,
+        resourceId: UUID,
+    ): UUID? {
         val rt =
             try {
                 ResourceType.fromLiteral(resourceType)
             } catch (ex: IllegalArgumentException) {
                 throw IllegalArgumentException("Unknown resource type: $resourceType")
             }
-        val actualOwner =
-            when (rt) {
-                ResourceType.LEADS -> {
-                    crmApi.findLeadOwnerTenant(resourceId)
-                }
-
-                ResourceType.PERSONS -> {
-                    crmApi.findPersonOwnerTenant(resourceId)
-                }
-
-                ResourceType.ORGANIZATIONS -> {
-                    crmApi.findOrganizationOwnerTenant(resourceId)
-                }
-
-                ResourceType.QUOTES -> {
-                    crmApi.findQuoteOwnerTenant(resourceId)
-                }
-
-                ResourceType.ACTIVITIES -> {
-                    crmApi.findActivityOwnerTenant(resourceId)
-                }
-
-                ResourceType.PRODUCTS -> {
-                    inventoryApi.findProductOwnerTenant(resourceId)
-                }
-
-                ResourceType.WAREHOUSES -> {
-                    inventoryApi.findWarehouseOwnerTenant(resourceId)
-                }
-            }
-        if (actualOwner == null) {
-            throw NoSuchElementException("$resourceType $resourceId not found")
-        }
-        if (actualOwner != ownerTenantId) {
-            throw AccessDeniedException("Only the owner tenant may share this record")
+        return when (rt) {
+            ResourceType.LEADS -> crmApi.findLeadOwnerTenant(resourceId)
+            ResourceType.PERSONS -> crmApi.findPersonOwnerTenant(resourceId)
+            ResourceType.ORGANIZATIONS -> crmApi.findOrganizationOwnerTenant(resourceId)
+            ResourceType.QUOTES -> crmApi.findQuoteOwnerTenant(resourceId)
+            ResourceType.ACTIVITIES -> crmApi.findActivityOwnerTenant(resourceId)
+            ResourceType.PRODUCTS -> inventoryApi.findProductOwnerTenant(resourceId)
+            ResourceType.WAREHOUSES -> inventoryApi.findWarehouseOwnerTenant(resourceId)
         }
     }
 }

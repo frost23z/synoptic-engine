@@ -12,6 +12,7 @@ import com.synopticengine.api.settings.automation.web.WebhookDeliveryRunResponse
 import com.synopticengine.api.settings.automation.web.WebhookResponse
 import com.synopticengine.api.settings.automation.web.WorkflowActionRunResponse
 import com.synopticengine.api.settings.automation.web.WorkflowResponse
+import com.synopticengine.api.shared.security.OutboundUrlValidator
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -25,6 +26,7 @@ class AutomationService(
     private val webhookRepository: WebhookRepository,
     private val actionRunRepository: WorkflowActionRunRepository,
     private val webhookDeliveryRunRepository: WebhookDeliveryRunRepository,
+    private val outboundUrlValidator: OutboundUrlValidator,
 ) {
     // ── Workflows ─────────────────────────────────────────────────────────
 
@@ -109,8 +111,11 @@ class AutomationService(
         secret: String?,
         events: List<String>,
         isActive: Boolean,
-    ): WebhookResponse =
-        webhookRepository
+    ): WebhookResponse {
+        // T1.2 — validate at save-time so invalid URLs are rejected before they
+        // can ever be dispatched (defense-in-depth; re-validated at send time).
+        outboundUrlValidator.validate(payloadUrl)
+        return webhookRepository
             .save(
                 Webhook().apply {
                     this.name = name
@@ -120,6 +125,7 @@ class AutomationService(
                     this.isActive = isActive
                 },
             ).toResponse()
+    }
 
     @Transactional
     fun updateWebhook(
@@ -130,6 +136,8 @@ class AutomationService(
         events: List<String>,
         isActive: Boolean,
     ): WebhookResponse {
+        // T1.2 — re-validate on update (URL may change).
+        outboundUrlValidator.validate(payloadUrl)
         val webhook = requireWebhook(id)
         webhook.name = name
         webhook.payloadUrl = payloadUrl
