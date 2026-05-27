@@ -4,6 +4,7 @@ import com.synopticengine.api.crm.contact.domain.Organization
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.Instant
@@ -80,4 +81,12 @@ interface OrganizationRepository : JpaRepository<Organization, UUID> {
         @Param("start") start: Instant,
         @Param("end") end: Instant,
     ): Long
+
+    // T5.2 — replace per-entity find+save loop with a single UPDATE statement.
+    @Modifying
+    @Query("UPDATE Organization o SET o.deletedAt = :now WHERE o.id IN :ids AND o.deletedAt IS NULL")
+    fun bulkSoftDelete(
+        @Param("ids") ids: Collection<UUID>,
+        @Param("now") now: Instant,
+    ): Int
 }

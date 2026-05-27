@@ -19,6 +19,12 @@ spring:
             hibernate:
                 format_sql: true
                 dialect: org.hibernate.dialect.PostgreSQLDialect
+                # T5.1 — batch-fetch lazy collections in a single IN-clause query per
+                # page rather than N individual selects.  Paginated list/filter/search
+                # paths (Lead, Quote, Person) all touch LAZY collections in toResponse();
+                # this eliminates the per-entity secondary select without the in-memory
+                # pagination risk that LEFT JOIN FETCH + pageable triggers.
+                default_batch_fetch_size: 30
     flyway:
         enabled: true
     mail:
