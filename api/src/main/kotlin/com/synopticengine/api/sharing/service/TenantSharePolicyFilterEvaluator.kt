@@ -42,14 +42,14 @@ class TenantSharePolicyFilterEvaluator(
                 val field =
                     node
                         .get("field")
-                        ?.asText()
+                        ?.asString()
                         ?.trim()
                         .orEmpty()
                 if (field.isBlank()) throw IllegalArgumentException("filterJson rule field is required")
                 val op =
                     node
                         .get("op")
-                        ?.asText()
+                        ?.asString()
                         ?.lowercase()
                         ?.ifBlank { "eq" } ?: "eq"
                 if (op !in SUPPORTED_OPS) throw IllegalArgumentException("Unsupported filterJson operator: $op")
@@ -91,11 +91,11 @@ class TenantSharePolicyFilterEvaluator(
         rule: JsonNode,
         resource: JsonNode,
     ): Boolean {
-        val field = rule.get("field").asText()
+        val field = rule.get("field").asString()
         val op =
             rule
                 .get("op")
-                ?.asText()
+                ?.asString()
                 ?.lowercase()
                 ?.ifBlank { "eq" } ?: "eq"
         val actual = getPath(resource, field)
@@ -147,15 +147,15 @@ class TenantSharePolicyFilterEvaluator(
     private fun nodeText(node: JsonNode?): String =
         when {
             node == null || node.isNull -> ""
-            node.isTextual -> node.asText()
-            node.isNumber || node.isBoolean -> node.asText()
+            node.isString() -> node.asString()
+            node.isNumber || node.isBoolean -> node.asString()
             else -> node.toString()
         }
 
     private fun nodeDecimal(node: JsonNode?): BigDecimal =
         node
-            ?.takeIf { it.isNumber || it.isTextual }
-            ?.asText()
+            ?.takeIf { it.isNumber || it.isString() }
+            ?.asString()
             ?.toBigDecimalOrNull()
             ?: BigDecimal.ZERO
 
