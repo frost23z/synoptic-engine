@@ -4,6 +4,8 @@ import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.identity.UserSummary
 import com.synopticengine.api.identity.ViewContext
+import com.synopticengine.api.identity.domain.Role
+import com.synopticengine.api.identity.domain.RoleType
 import com.synopticengine.api.identity.domain.User
 import com.synopticengine.api.identity.domain.ViewPermission
 import com.synopticengine.api.identity.repo.GroupRepository
@@ -13,6 +15,8 @@ import com.synopticengine.api.identity.repo.UserRepository
 import com.synopticengine.api.identity.web.UserDetailResponse
 import com.synopticengine.api.shared.TenantContext
 import com.synopticengine.api.shared.config.TenantSession
+import org.springframework.security.access.AccessDeniedException
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -72,6 +76,8 @@ class UserService(
         if (userRepository.existsByEmail(email)) throw IllegalStateException("Email already in use: $email")
         val roles = roleRepository.findAllByNameIn(roleNames)
         if (roles.isEmpty()) throw IllegalArgumentException("No valid roles found: $roleNames")
+        // T3.5 — Role elevation guard: a non-ADMIN caller cannot assign ADMIN (RoleType.ALL) roles.
+        enforceRoleElevationGuard(roles)
         val groups = if (groupIds.isNotEmpty()) groupRepository.findAllByIdIn(groupIds) else emptyList()
 
         val user =
@@ -88,6 +94,43 @@ class UserService(
                 },
             )
         return user.toDetailResponse()
+    }
+
+    /**
+     * T3.5 — Role elevation guard.
+     *
+     * Non-ADMIN callers (i.e. callers whose authorities do not include `*`) may
+     * not assign [RoleType.ALL] roles to other users. Doing so would allow a
+     * non-admin to escalate a target user to full-admin — a privilege escalation
+     * vector.
+     *
+     * ADMIN callers have `*` in their granted authorities (see [toCredentials]);
+     * they may assign any role.
+     *
+     * This check is intentionally skipped when there is no Security context (e.g.
+     * bootstrap, provisioning code paths) — those paths are already trusted system
+     * operations.
+     */
+    private fun enforceRoleElevationGuard(rolesToAssign: Collection<Role>) {
+        val hasAdminRoles = rolesToAssign.any { it.permissionType == RoleType.ALL }
+        if (!hasAdminRoles) return // assigning CUSTOM roles only — always allowed
+
+        // Check whether the current caller is themselves an ADMIN.
+        val callerAuthorities =
+            SecurityContextHolder
+                .getContext()
+                ?.authentication
+                ?.authorities
+                ?.map { it.authority }
+                ?.toSet()
+                ?: return // no security context → system/bootstrap path, allow
+        val callerIsAdmin = "*" in callerAuthorities
+        if (!callerIsAdmin) {
+            throw AccessDeniedException(
+                "Non-ADMIN users cannot assign ADMIN roles. " +
+                    "Escalate through an existing ADMIN user.",
+            )
+        }
     }
 
     @Transactional
@@ -108,6 +151,8 @@ class UserService(
         if (roleNames != null) {
             val roles = roleRepository.findAllByNameIn(roleNames)
             if (roles.isEmpty()) throw IllegalArgumentException("No valid roles found: $roleNames")
+            // T3.5 — Role elevation guard: prevent non-ADMIN from promoting a user to ADMIN.
+            enforceRoleElevationGuard(roles)
             user.roles.clear()
             user.roles.addAll(roles)
         }

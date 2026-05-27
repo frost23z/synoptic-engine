@@ -23,6 +23,16 @@ class CrmPermissionRegistry : PermissionRegistry {
             def(CrmPermissions.CONTACTS_CREATE, "Create contacts"),
             def(CrmPermissions.CONTACTS_EDIT, "Edit contacts"),
             def(CrmPermissions.CONTACTS_DELETE, "Delete contacts"),
+            def(CrmPermissions.CONTACTS_PERSONS, "Manage persons"),
+            def(CrmPermissions.CONTACTS_PERSONS_VIEW, "View persons"),
+            def(CrmPermissions.CONTACTS_PERSONS_CREATE, "Create persons"),
+            def(CrmPermissions.CONTACTS_PERSONS_EDIT, "Edit persons"),
+            def(CrmPermissions.CONTACTS_PERSONS_DELETE, "Delete persons"),
+            def(CrmPermissions.CONTACTS_ORGANIZATIONS, "Manage organizations"),
+            def(CrmPermissions.CONTACTS_ORGANIZATIONS_VIEW, "View organizations"),
+            def(CrmPermissions.CONTACTS_ORGANIZATIONS_CREATE, "Create organizations"),
+            def(CrmPermissions.CONTACTS_ORGANIZATIONS_EDIT, "Edit organizations"),
+            def(CrmPermissions.CONTACTS_ORGANIZATIONS_DELETE, "Delete organizations"),
             def(CrmPermissions.ACTIVITIES, "Manage activities"),
             def(CrmPermissions.ACTIVITIES_VIEW, "View activities"),
             def(CrmPermissions.ACTIVITIES_CREATE, "Create activities"),
@@ -48,6 +58,9 @@ class CrmPermissionRegistry : PermissionRegistry {
             def(CrmPermissions.PIPELINES_EDIT, "Edit pipelines"),
             def(CrmPermissions.REPORTS, "View reports"),
             def(CrmPermissions.REPORTS_VIEW, "View dashboard and reports"),
+            def(CrmPermissions.DATAGRID_FILTERS, "Manage saved datagrid filters"),
+            def(CrmPermissions.DATAGRID_FILTERS_VIEW, "View saved datagrid filters"),
+            def(CrmPermissions.DATAGRID_FILTERS_EDIT, "Create, update, and delete saved datagrid filters"),
         )
 
     private fun def(

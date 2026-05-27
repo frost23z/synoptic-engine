@@ -11,6 +11,7 @@ import com.synopticengine.api.inventory.warehouse.repo.WarehouseTagRepository
 import com.synopticengine.api.inventory.warehouse.web.WarehouseLocationResponse
 import com.synopticengine.api.inventory.warehouse.web.WarehouseProductEntry
 import com.synopticengine.api.inventory.warehouse.web.WarehouseResponse
+import com.synopticengine.api.shared.security.requireOwnership
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -34,6 +35,7 @@ class WarehouseService(
         val warehouse =
             warehouseRepository.findByIdAndDeletedAtIsNull(id)
                 ?: throw NoSuchElementException("Warehouse not found: $id")
+        warehouse.requireOwnership()
         return warehouse.toResponse(loadTags(id))
     }
 
@@ -181,8 +183,13 @@ class WarehouseService(
         return findById(warehouseId)
     }
 
-    private fun requireWarehouse(id: UUID): Warehouse =
-        warehouseRepository.findByIdAndDeletedAtIsNull(id) ?: throw NoSuchElementException("Warehouse not found: $id")
+    private fun requireWarehouse(id: UUID): Warehouse {
+        val w =
+            warehouseRepository.findByIdAndDeletedAtIsNull(id)
+                ?: throw NoSuchElementException("Warehouse not found: $id")
+        w.requireOwnership()
+        return w
+    }
 }
 
 fun Warehouse.toResponse(tags: List<TagDto> = emptyList()) =
