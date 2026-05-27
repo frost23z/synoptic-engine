@@ -42,8 +42,8 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                 ).andReturn()
         assertEquals(201, result.response.status, result.response.contentAsString)
         val json = objectMapper.readTree(result.response.contentAsString)
-        assertEquals("<m1@example.com>", json["messageId"].asText())
-        assertEquals("<parent@example.com>", json["referenceIds"][0].asText())
+        assertEquals("<m1@example.com>", json["messageId"].asString())
+        assertEquals("<parent@example.com>", json["referenceIds"][0].asString())
     }
 
     @Test

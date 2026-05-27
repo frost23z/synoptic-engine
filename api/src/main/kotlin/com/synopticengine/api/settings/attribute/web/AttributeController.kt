@@ -161,12 +161,6 @@ class AttributeController(
         @PathVariable lookup: String,
     ): ResponseEntity<List<AttributeLookupItem>> = ResponseEntity.ok(attributeService.lookup(lookup))
 
-    @GetMapping("/lookup-entity/{lookup}")
-    @PreAuthorize("hasAuthority('attributes.view')")
-    fun lookupEntity(
-        @PathVariable lookup: String,
-    ): ResponseEntity<List<AttributeLookupItem>> = ResponseEntity.ok(attributeService.lookup(lookup))
-
     @GetMapping("/check-unique-validation")
     @PreAuthorize("hasAuthority('attributes.view')")
     fun checkUniqueValidation(
