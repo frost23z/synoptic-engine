@@ -1,5 +1,6 @@
 package com.synopticengine.api.crm.tag.web
 
+import com.synopticengine.api.crm.CrmPermissions
 import com.synopticengine.api.crm.tag.service.TagService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -22,37 +23,37 @@ class TagController(
     private val tagService: TagService,
 ) {
     @GetMapping
-    @PreAuthorize("hasAuthority('leads.view')")
+    @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_VIEW}')")
     fun listAll(): ResponseEntity<List<TagResponse>> = ResponseEntity.ok(tagService.findAll())
 
     @GetMapping("/search")
-    @PreAuthorize("hasAuthority('leads.view')")
+    @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_VIEW}')")
     fun search(
         @RequestParam q: String,
     ): ResponseEntity<List<TagResponse>> = ResponseEntity.ok(tagService.search(q))
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('leads.view')")
+    @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_VIEW}')")
     fun getById(
         @PathVariable id: UUID,
     ): ResponseEntity<TagResponse> = ResponseEntity.ok(tagService.findById(id))
 
     @PostMapping
-    @PreAuthorize("hasAuthority('tags.create')")
+    @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_CREATE}')")
     fun create(
         @Valid @RequestBody request: CreateTagRequest,
     ): ResponseEntity<TagResponse> =
         ResponseEntity.status(HttpStatus.CREATED).body(tagService.create(request.name, request.color))
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('leads.edit')")
+    @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_EDIT}')")
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateTagRequest,
     ): ResponseEntity<TagResponse> = ResponseEntity.ok(tagService.update(id, request.name, request.color))
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('leads.edit')")
+    @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_DELETE}')")
     fun delete(
         @PathVariable id: UUID,
     ): ResponseEntity<Void> {
@@ -61,7 +62,7 @@ class TagController(
     }
 
     @PostMapping("/mass-destroy")
-    @PreAuthorize("hasAuthority('leads.edit')")
+    @PreAuthorize("hasAuthority('${CrmPermissions.TAGS_DELETE}')")
     fun massDestroy(
         @RequestBody request: MassDestroyTagRequest,
     ): ResponseEntity<Void> {

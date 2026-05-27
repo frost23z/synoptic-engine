@@ -58,4 +58,9 @@ object CrmPermissions {
 
     const val REPORTS = "reports"
     const val REPORTS_VIEW = "reports.view"
+
+    /** Saved datagrid column filters — personal-scope settings for each user. */
+    const val DATAGRID_FILTERS = "datagrid-filters"
+    const val DATAGRID_FILTERS_VIEW = "datagrid-filters.view"
+    const val DATAGRID_FILTERS_EDIT = "datagrid-filters.edit"
 }
