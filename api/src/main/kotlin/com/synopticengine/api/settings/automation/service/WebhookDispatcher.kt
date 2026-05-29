@@ -1,5 +1,6 @@
 package com.synopticengine.api.settings.automation.service
 
+import com.synopticengine.api.settings.automation.domain.Webhook
 import com.synopticengine.api.settings.automation.domain.WebhookDeliveryRun
 import com.synopticengine.api.settings.automation.domain.WebhookDeliveryRunStatus
 import com.synopticengine.api.settings.automation.repo.WebhookDeliveryRunRepository
@@ -104,6 +105,82 @@ class WebhookDispatcher(
                 recordFailure(webhook.id!!, event, null, null, e.message)
                 log.warn("Webhook ${webhook.id} failed for event ${event.eventName}: ${e.message}")
             }
+        }
+    }
+
+    fun dispatchTest(webhook: Webhook): WebhookDeliveryRun {
+        try {
+            outboundUrlValidator.validate(webhook.payloadUrl)
+        } catch (e: IllegalArgumentException) {
+            return deliveryRunRepository.save(
+                WebhookDeliveryRun().apply {
+                    this.webhookId = webhook.id!!
+                    this.eventName = "webhook.test"
+                    this.entityType = "Webhook"
+                    this.entityId = webhook.id!!
+                    this.status = WebhookDeliveryRunStatus.FAILED
+                    this.errorMessage = "URL validation failed: ${e.message}"
+                },
+            )
+        }
+        val testPayload =
+            mapOf(
+                "event" to "webhook.test",
+                "entityType" to "Webhook",
+                "entityId" to webhook.id.toString(),
+                "payload" to mapOf("message" to "Test delivery from Synoptic Engine"),
+            )
+        return try {
+            val payloadJson = objectMapper.writeValueAsString(testPayload)
+            val nowEpochSeconds = Instant.now().epochSecond
+            val response =
+                restClient
+                    .post()
+                    .uri(webhook.payloadUrl)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("X-Synoptic-Timestamp", nowEpochSeconds.toString())
+                    .let { req ->
+                        webhook.secret?.takeIf { it.isNotBlank() }?.let { secret ->
+                            req.header("X-Synoptic-Signature", signPayload(secret, nowEpochSeconds, payloadJson))
+                        } ?: req
+                    }.body(payloadJson)
+                    .retrieve()
+                    .toEntity(String::class.java)
+            deliveryRunRepository.save(
+                WebhookDeliveryRun().apply {
+                    this.webhookId = webhook.id!!
+                    this.eventName = "webhook.test"
+                    this.entityType = "Webhook"
+                    this.entityId = webhook.id!!
+                    this.status = WebhookDeliveryRunStatus.SUCCESS
+                    this.responseCode = response.statusCode.value()
+                    this.responseBody = response.body?.take(2_000)
+                },
+            )
+        } catch (e: RestClientResponseException) {
+            deliveryRunRepository.save(
+                WebhookDeliveryRun().apply {
+                    this.webhookId = webhook.id!!
+                    this.eventName = "webhook.test"
+                    this.entityType = "Webhook"
+                    this.entityId = webhook.id!!
+                    this.status = WebhookDeliveryRunStatus.FAILED
+                    this.responseCode = e.statusCode.value()
+                    this.responseBody = e.responseBodyAsString.take(2_000)
+                    this.errorMessage = e.message?.take(2_000)
+                },
+            )
+        } catch (e: Exception) {
+            deliveryRunRepository.save(
+                WebhookDeliveryRun().apply {
+                    this.webhookId = webhook.id!!
+                    this.eventName = "webhook.test"
+                    this.entityType = "Webhook"
+                    this.entityId = webhook.id!!
+                    this.status = WebhookDeliveryRunStatus.FAILED
+                    this.errorMessage = e.message?.take(2_000)
+                },
+            )
         }
     }
 
