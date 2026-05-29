@@ -357,6 +357,33 @@ class CrmApiImpl(
         )
     }
 
+    override fun filterActivitiesByProductId(
+        productId: UUID,
+        page: Int,
+        size: Int,
+    ): ActivityPage {
+        val pageable = PageRequest.of(page, size, Sort.by("scheduleFrom").descending())
+        val result =
+            activityRepository.filter(
+                leadId = null,
+                personId = null,
+                organizationId = null,
+                userId = null,
+                type = null,
+                isDone = null,
+                productId = productId,
+                warehouseId = null,
+                pageable = pageable,
+            )
+        return ActivityPage(
+            content = result.content.map { it.toPageEntry() },
+            totalElements = result.totalElements,
+            totalPages = result.totalPages,
+            page = result.number,
+            size = result.size,
+        )
+    }
+
     private fun com.synopticengine.api.crm.activity.domain.Activity.toSummary() =
         ActivitySummary(
             id = id!!,
