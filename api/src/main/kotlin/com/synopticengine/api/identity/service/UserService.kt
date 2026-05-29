@@ -319,7 +319,8 @@ class UserService(
         val allKnownKeys = permissionRepository.findAllKeys()
         val authorities =
             if (roles.any { it.permissionType == com.synopticengine.api.identity.domain.RoleType.ALL }) {
-                allKnownKeys.toList()
+                // Add "*" so enforceRoleElevationGuard can recognize this as an ADMIN caller.
+                allKnownKeys.toList() + "*"
             } else {
                 expandAuthorities(
                     roles.flatMap { it.permissions }.map { it.key },

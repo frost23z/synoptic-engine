@@ -128,7 +128,11 @@ internal class TenantProvisioningService(
                                 key == InventoryPermissions.PRODUCTS_VIEW
                         ) &&
                             key.contains(".") &&
-                            !key.endsWith(".delete")
+                            !key.endsWith(".delete") &&
+                            // Exclude parent/grouping keys (e.g. "contacts.organizations") whose
+                            // children include delete actions. expandAuthorities() would expand them
+                            // to include the .delete variant, bypassing this filter.
+                            allPermissionNames.none { other -> other.startsWith("$key.") }
                     }.toSet(),
         )
         bootstrapPort.upsertRole(
