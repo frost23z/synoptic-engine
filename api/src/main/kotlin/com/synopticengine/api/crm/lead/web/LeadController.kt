@@ -7,6 +7,7 @@ import com.synopticengine.api.crm.lead.domain.LeadStatus
 import com.synopticengine.api.crm.lead.service.LeadService
 import com.synopticengine.api.crm.quote.service.QuoteService
 import com.synopticengine.api.crm.quote.web.QuoteResponse
+import com.synopticengine.api.shared.attribute.EntityAttributeValueSummary
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
@@ -73,6 +74,12 @@ class LeadController(
     fun kanban(
         @RequestParam pipelineId: UUID,
     ): ResponseEntity<List<KanbanStageGroup>> = ResponseEntity.ok(leadService.kanban(pipelineId))
+
+    @GetMapping("/kanban/lookup")
+    @PreAuthorize("hasAuthority('leads.view')")
+    fun kanbanLookup(
+        @RequestParam pipelineId: UUID,
+    ): ResponseEntity<KanbanLookupResponse> = ResponseEntity.ok(leadService.kanbanLookup(pipelineId))
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('leads.view')")
@@ -254,6 +261,19 @@ class LeadController(
         leadService.removeProduct(id, productId)
         return ResponseEntity.noContent().build()
     }
+
+    @PatchMapping("/{id}/attributes")
+    @PreAuthorize("hasAuthority('leads.edit')")
+    fun updateAttributes(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: UpdateLeadAttributesRequest,
+    ): ResponseEntity<List<EntityAttributeValueSummary>> =
+        ResponseEntity.ok(
+            leadService.updateAttributes(
+                id,
+                request.attributeValues.map { it.attributeId to it.value },
+            ),
+        )
 
     @PostMapping("/{id}/convert")
     @PreAuthorize("hasAuthority('leads.edit')")
