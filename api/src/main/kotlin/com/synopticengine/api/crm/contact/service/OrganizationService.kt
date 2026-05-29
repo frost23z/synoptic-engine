@@ -4,6 +4,8 @@ import com.synopticengine.api.crm.contact.domain.Organization
 import com.synopticengine.api.crm.contact.repo.OrganizationRepository
 import com.synopticengine.api.crm.contact.web.OrganizationResponse
 import com.synopticengine.api.crm.scoping.ScopeResolver
+import com.synopticengine.api.crm.tag.repo.TagRepository
+import com.synopticengine.api.crm.tag.service.toResponse
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -15,6 +17,7 @@ import java.util.UUID
 @Transactional(readOnly = true)
 class OrganizationService(
     private val organizationRepository: OrganizationRepository,
+    private val tagRepository: TagRepository,
     private val scopeResolver: ScopeResolver,
 ) {
     fun findAll(pageable: Pageable): PageResponse<OrganizationResponse> {
@@ -91,6 +94,27 @@ class OrganizationService(
         organizationRepository.bulkSoftDelete(ids, Instant.now())
     }
 
+    @Transactional
+    fun attachTag(
+        organizationId: UUID,
+        tagId: UUID,
+    ): OrganizationResponse {
+        val org = requireOrg(organizationId)
+        val tag = tagRepository.findActiveById(tagId) ?: throw NoSuchElementException("Tag not found: $tagId")
+        org.tags.add(tag)
+        return organizationRepository.save(org).toResponse()
+    }
+
+    @Transactional
+    fun detachTag(
+        organizationId: UUID,
+        tagId: UUID,
+    ): OrganizationResponse {
+        val org = requireOrg(organizationId)
+        org.tags.removeIf { it.id == tagId }
+        return organizationRepository.save(org).toResponse()
+    }
+
     // Tenant-aware load. See EmailService.requireEmail for the IDOR rationale.
     private fun requireOrg(id: UUID): Organization =
         organizationRepository.findActiveById(id)
@@ -105,6 +129,7 @@ fun Organization.toResponse() =
         phone = phone,
         website = website,
         address = address,
+        tags = tags.map { it.toResponse() },
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
