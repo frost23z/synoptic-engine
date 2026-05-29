@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
@@ -37,6 +38,33 @@ class AuthController(
     fun me(
         @AuthenticationPrincipal principal: UserPrincipal,
     ): ResponseEntity<MeResponse> {
+        val user =
+            identityApi.findById(principal.id)
+                ?: return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(
+            MeResponse(
+                id = user.id,
+                email = user.email,
+                fullName = user.fullName,
+                isActive = user.isActive,
+                authorities = principal.authorities.mapNotNull { it.authority },
+            ),
+        )
+    }
+
+    @PutMapping("/me")
+    fun updateMe(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: UpdateMeRequest,
+    ): ResponseEntity<MeResponse> {
+        identityApi.updateSelf(
+            principal.id,
+            request.firstName,
+            request.lastName,
+            request.phone,
+            request.currentPassword,
+            request.newPassword,
+        )
         val user =
             identityApi.findById(principal.id)
                 ?: return ResponseEntity.notFound().build()

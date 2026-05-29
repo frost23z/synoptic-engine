@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import java.math.BigDecimal
@@ -151,4 +152,33 @@ data class LeadProductResponse(
     val productId: UUID,
     val quantity: Int,
     val unitPrice: BigDecimal?,
+)
+
+data class LookupItem(
+    val id: UUID,
+    val name: String,
+)
+
+data class StageLookupItem(
+    val id: UUID,
+    val name: String,
+    val color: String?,
+)
+
+data class KanbanLookupResponse(
+    val users: List<LookupItem>,
+    val leadSources: List<LookupItem>,
+    val leadTypes: List<LookupItem>,
+    val stages: List<StageLookupItem>,
+)
+
+data class AttributeValueInput(
+    @field:NotNull(message = "Attribute ID is required")
+    val attributeId: UUID,
+    val value: String?,
+)
+
+data class UpdateLeadAttributesRequest(
+    @field:NotEmpty(message = "Attribute values list must not be empty")
+    val attributeValues: List<AttributeValueInput>,
 )

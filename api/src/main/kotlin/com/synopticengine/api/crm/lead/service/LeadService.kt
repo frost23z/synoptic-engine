@@ -13,16 +13,24 @@ import com.synopticengine.api.crm.lead.domain.LeadProduct
 import com.synopticengine.api.crm.lead.domain.LeadStatus
 import com.synopticengine.api.crm.lead.repo.LeadProductRepository
 import com.synopticengine.api.crm.lead.repo.LeadRepository
+import com.synopticengine.api.crm.lead.repo.LeadSourceRepository
+import com.synopticengine.api.crm.lead.repo.LeadTypeRepository
 import com.synopticengine.api.crm.lead.repo.PipelineRepository
 import com.synopticengine.api.crm.lead.repo.StageRepository
 import com.synopticengine.api.crm.lead.web.ConvertLeadResponse
+import com.synopticengine.api.crm.lead.web.KanbanLookupResponse
 import com.synopticengine.api.crm.lead.web.KanbanStageGroup
 import com.synopticengine.api.crm.lead.web.LeadProductResponse
 import com.synopticengine.api.crm.lead.web.LeadResponse
+import com.synopticengine.api.crm.lead.web.LookupItem
+import com.synopticengine.api.crm.lead.web.StageLookupItem
 import com.synopticengine.api.crm.scoping.ScopeResolver
 import com.synopticengine.api.crm.tag.repo.TagRepository
 import com.synopticengine.api.crm.tag.service.toResponse
+import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.shared.DomainEvent
+import com.synopticengine.api.shared.attribute.EntityAttributePort
+import com.synopticengine.api.shared.attribute.EntityAttributeValueSummary
 import com.synopticengine.api.shared.web.PageResponse
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
@@ -45,6 +53,10 @@ class LeadService(
     private val tagRepository: TagRepository,
     private val emailRepository: EmailRepository,
     private val leadProductRepository: LeadProductRepository,
+    private val leadSourceRepository: LeadSourceRepository,
+    private val leadTypeRepository: LeadTypeRepository,
+    private val identityApi: IdentityApi,
+    private val entityAttributePort: EntityAttributePort,
     private val eventPublisher: ApplicationEventPublisher,
     private val scopeResolver: ScopeResolver,
     private val objectMapper: ObjectMapper,
@@ -109,6 +121,30 @@ class LeadService(
                 leads = stageLeads.map { it.toResponse() },
                 totalAmount = stageLeads.sumOf { it.amount ?: BigDecimal.ZERO },
             )
+        }
+    }
+
+    fun kanbanLookup(pipelineId: UUID): KanbanLookupResponse {
+        val stages = stageRepository.findAllByPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(pipelineId)
+        val sources = leadSourceRepository.findAll()
+        val types = leadTypeRepository.findAll()
+        val users = identityApi.findAllActive()
+        return KanbanLookupResponse(
+            users = users.map { LookupItem(it.id, it.fullName) },
+            leadSources = sources.map { LookupItem(it.id!!, it.name) },
+            leadTypes = types.map { LookupItem(it.id!!, it.name) },
+            stages = stages.map { StageLookupItem(it.id!!, it.name, it.color) },
+        )
+    }
+
+    @Transactional
+    fun updateAttributes(
+        leadId: UUID,
+        attributeValues: List<Pair<UUID, String?>>,
+    ): List<EntityAttributeValueSummary> {
+        requireLead(leadId)
+        return attributeValues.map { (attributeId, value) ->
+            entityAttributePort.setEntityAttributeValue(attributeId, leadId, "Lead", value)
         }
     }
 
