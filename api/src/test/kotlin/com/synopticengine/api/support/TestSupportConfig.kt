@@ -99,5 +99,6 @@ class TestSupportConfig {
     fun tenantProvisioner(
         tenantApi: TenantApi,
         testAuth: TestAuth,
-    ): TenantProvisioner = TenantProvisioner(tenantApi, testAuth)
+        userService: UserService,
+    ): TenantProvisioner = TenantProvisioner(tenantApi, testAuth, userService)
 }

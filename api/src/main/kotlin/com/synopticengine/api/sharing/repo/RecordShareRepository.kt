@@ -25,6 +25,20 @@ interface RecordShareRepository : JpaRepository<RecordShare, UUID> {
 
     fun findAllByConsumerTenantId(consumerTenantId: UUID): List<RecordShare>
 
+    /**
+     * Returns the owner tenant for a shared resource by querying the cross-tenant
+     * `record_shares` table (no RLS / Hibernate filter). Used during reshare to
+     * find the owner without requiring the caller to be in the owner's tenant context.
+     */
+    @Query(
+        "SELECT DISTINCT r.ownerTenantId FROM RecordShare r " +
+            "WHERE r.resourceType = :resourceType AND r.resourceId = :resourceId AND r.revokedAt IS NULL",
+    )
+    fun findOwnerTenantByResource(
+        @Param("resourceType") resourceType: String,
+        @Param("resourceId") resourceId: UUID,
+    ): UUID?
+
     @Modifying
     @Query("DELETE FROM RecordShare r WHERE r.expiresAt IS NOT NULL AND r.expiresAt < :cutoff")
     fun deleteExpiredBefore(

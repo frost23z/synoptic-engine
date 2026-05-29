@@ -130,7 +130,7 @@ class SharingAccessLevelIntegrationTest : AbstractIntegrationTest() {
         val reshare =
             recordShareService.reshare(
                 actingTenantId = consumerA.tenantId,
-                actingUserId = UUID.randomUUID(), // arbitrary user in consumerA
+                actingUserId = consumerA.userId,
                 consumerTenantId = consumerB.tenantId,
                 resourceType = ResourceType.LEADS.literal,
                 resourceId = leadId,
@@ -161,7 +161,7 @@ class SharingAccessLevelIntegrationTest : AbstractIntegrationTest() {
         val reshare =
             recordShareService.reshare(
                 actingTenantId = consumerA.tenantId,
-                actingUserId = UUID.randomUUID(),
+                actingUserId = consumerA.userId,
                 consumerTenantId = consumerB.tenantId,
                 resourceType = ResourceType.LEADS.literal,
                 resourceId = leadId,
@@ -184,7 +184,7 @@ class SharingAccessLevelIntegrationTest : AbstractIntegrationTest() {
         org.junit.jupiter.api.assertThrows<org.springframework.security.access.AccessDeniedException> {
             recordShareService.reshare(
                 actingTenantId = consumerA.tenantId,
-                actingUserId = UUID.randomUUID(),
+                actingUserId = consumerA.userId,
                 consumerTenantId = consumerB.tenantId,
                 resourceType = ResourceType.LEADS.literal,
                 resourceId = leadId,
@@ -205,7 +205,7 @@ class SharingAccessLevelIntegrationTest : AbstractIntegrationTest() {
         org.junit.jupiter.api.assertThrows<org.springframework.security.access.AccessDeniedException> {
             recordShareService.reshare(
                 actingTenantId = consumerA.tenantId,
-                actingUserId = UUID.randomUUID(),
+                actingUserId = consumerA.userId,
                 consumerTenantId = consumerB.tenantId,
                 resourceType = ResourceType.LEADS.literal,
                 resourceId = leadId,
@@ -225,7 +225,7 @@ class SharingAccessLevelIntegrationTest : AbstractIntegrationTest() {
         org.junit.jupiter.api.assertThrows<org.springframework.security.access.AccessDeniedException> {
             recordShareService.reshare(
                 actingTenantId = consumerA.tenantId,
-                actingUserId = UUID.randomUUID(),
+                actingUserId = consumerA.userId,
                 consumerTenantId = consumerB.tenantId,
                 resourceType = ResourceType.LEADS.literal,
                 resourceId = leadId,

@@ -122,13 +122,11 @@ class CrossTenantFkInserter(
                 """
                 INSERT INTO quotes (
                     id, version, tenant_id, lead_id,
-                    title, status, sub_total, discount_amount, discount_percent,
-                    tax_amount, tax_percent, grand_total, adjustment,
+                    title, status, discount, tax, adjustment,
                     created_at, updated_at
                 ) VALUES (
                     :id, 0, :tenantId, :leadId,
                     'Trigger Test Quote', 'draft', 0, 0, 0,
-                    0, 0, 0, 0,
                     NOW(), NOW()
                 )
                 """,
