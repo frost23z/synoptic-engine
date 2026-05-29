@@ -166,4 +166,10 @@ class WebhookController(
                     .of(page, size),
             ),
         )
+
+    @PostMapping("/{id}/test")
+    @PreAuthorize("hasAuthority('automations.edit')")
+    fun test(
+        @PathVariable id: UUID,
+    ): ResponseEntity<WebhookDeliveryRunResponse> = ResponseEntity.ok(automationService.testWebhook(id))
 }
