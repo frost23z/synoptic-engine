@@ -1,7 +1,7 @@
 package com.synopticengine.api
 
+import com.synopticengine.api.crm.lead.domain.Lead
 import com.synopticengine.api.crm.lead.repo.LeadRepository
-import com.synopticengine.api.settings.automation.domain.Workflow
 import com.synopticengine.api.settings.automation.repo.WorkflowActionRunRepository
 import com.synopticengine.api.settings.automation.repo.WorkflowRepository
 import com.synopticengine.api.shared.DomainEvent
@@ -13,7 +13,11 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.context.annotation.Import
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.PageRequest
+import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -35,18 +39,18 @@ import java.util.concurrent.TimeUnit
  *     is scoped to the publishing tenant by inspecting [WorkflowActionRunRepository]
  *     and confirming no cross-tenant workflow rows appear.
  *
- * **Why this doesn't use `Thread.sleep`.** The test drives Hibernate queries from
- * within [TenantContext.runAs] blocks that enable the filter synchronously, which
- * is the same code path used by [HibernateTenantFilterAspect] inside `@Transactional`
- * async methods. The async event is published and the test polls for completion
- * via a [CountDownLatch] bound to the expected outcome, with a timeout of 5 s.
+ * Direct repository calls (JDK proxy) do not reliably trigger [HibernateTenantFilterAspect]
+ * because the `@within` pointcut may not match Spring Data proxy types. The tests that
+ * exercise JPQL isolation use [TenantScopedLeadReader] — a concrete `@Component` with
+ * explicit `@Transactional` methods — so the aspect is guaranteed to fire.
  */
+@Import(TenantScopedLeadReader::class)
 class AsyncTenantFilterIsolationIntegrationTest : AbstractIntegrationTest() {
     @Autowired private lateinit var tenantProvisioner: TenantProvisioner
 
     @Autowired private lateinit var leadFactory: LeadFactory
 
-    @Autowired private lateinit var leadRepository: LeadRepository
+    @Autowired private lateinit var tenantScopedLeadReader: TenantScopedLeadReader
 
     @Autowired private lateinit var workflowRepository: WorkflowRepository
 
@@ -73,7 +77,7 @@ class AsyncTenantFilterIsolationIntegrationTest : AbstractIntegrationTest() {
         // Query from Tenant A — must see leadA but NOT leadB.
         val leadsSeenByA =
             TenantContext.runAs(a.tenantId) {
-                leadRepository.findAllByDeletedAtIsNull(PageRequest.of(0, 100))
+                tenantScopedLeadReader.findAll(PageRequest.of(0, 100))
             }
         val titlesA = leadsSeenByA.map { it.title }.toSet()
         assertTrue(titlesA.contains(leadATitle), "Tenant A should see its own lead")
@@ -82,7 +86,7 @@ class AsyncTenantFilterIsolationIntegrationTest : AbstractIntegrationTest() {
         // Query from Tenant B — must see leadB but NOT leadA.
         val leadsSeenByB =
             TenantContext.runAs(b.tenantId) {
-                leadRepository.findAllByDeletedAtIsNull(PageRequest.of(0, 100))
+                tenantScopedLeadReader.findAll(PageRequest.of(0, 100))
             }
         val titlesB = leadsSeenByB.map { it.title }.toSet()
         assertTrue(titlesB.contains(leadBTitle), "Tenant B should see its own lead")
@@ -157,10 +161,10 @@ class AsyncTenantFilterIsolationIntegrationTest : AbstractIntegrationTest() {
         val leadAId = UUID.fromString(leadFactory.create(a.token, title = titleA)["id"] as String)
         val leadBId = UUID.fromString(leadFactory.create(b.token, title = titleB)["id"] as String)
 
-        // With filter enabled for tenant A: findActiveById of tenant B's lead must return null.
+        // With filter enabled for tenant A: findById of tenant B's lead must return null.
         val crossTenantLoad =
             TenantContext.runAs(a.tenantId) {
-                leadRepository.findActiveById(leadBId)
+                tenantScopedLeadReader.findById(leadBId)
             }
         assertTrue(
             crossTenantLoad == null,
@@ -170,8 +174,26 @@ class AsyncTenantFilterIsolationIntegrationTest : AbstractIntegrationTest() {
         // Tenant A's own lead must be visible.
         val ownLoad =
             TenantContext.runAs(a.tenantId) {
-                leadRepository.findActiveById(leadAId)
+                tenantScopedLeadReader.findById(leadAId)
             }
         assertTrue(ownLoad != null, "findActiveById should find own tenant's lead")
     }
+}
+
+/**
+ * Wraps [LeadRepository] in a concrete `@Transactional` `@Component` so that
+ * [HibernateTenantFilterAspect] (order 200) reliably fires on the `@Transactional`
+ * boundary. Direct calls to a Spring Data JDK proxy may not match the `@within`
+ * pointcut — this class avoids that ambiguity.
+ */
+@Component
+open class TenantScopedLeadReader(
+    private val leadRepository: LeadRepository,
+) {
+    @Transactional(readOnly = true)
+    open fun findAll(pageable: Pageable): List<Lead> =
+        leadRepository.findAllByDeletedAtIsNull(pageable).content
+
+    @Transactional(readOnly = true)
+    open fun findById(id: UUID): Lead? = leadRepository.findActiveById(id)
 }
