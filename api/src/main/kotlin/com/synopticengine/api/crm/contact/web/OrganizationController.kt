@@ -106,6 +106,20 @@ class OrganizationController(
         return ResponseEntity.noContent().build()
     }
 
+    @PostMapping("/{id}/tags")
+    @PreAuthorize("hasAuthority('contacts.edit')")
+    fun attachTag(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: TagAttachOrganizationRequest,
+    ): ResponseEntity<OrganizationResponse> = ResponseEntity.ok(organizationService.attachTag(id, request.tagId))
+
+    @DeleteMapping("/{id}/tags/{tagId}")
+    @PreAuthorize("hasAuthority('contacts.edit')")
+    fun detachTag(
+        @PathVariable id: UUID,
+        @PathVariable tagId: UUID,
+    ): ResponseEntity<OrganizationResponse> = ResponseEntity.ok(organizationService.detachTag(id, tagId))
+
     @GetMapping("/{id}/activities")
     @PreAuthorize("hasAnyAuthority('contacts.view', 'contacts.organizations.view')")
     fun getActivities(

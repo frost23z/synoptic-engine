@@ -5,6 +5,8 @@ import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
 import com.synopticengine.api.crm.lead.domain.LeadStatus
 import com.synopticengine.api.crm.lead.service.LeadService
+import com.synopticengine.api.crm.quote.service.QuoteService
+import com.synopticengine.api.crm.quote.web.QuoteResponse
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
@@ -29,6 +31,7 @@ import java.util.UUID
 class LeadController(
     private val leadService: LeadService,
     private val activityService: ActivityService,
+    private val quoteService: QuoteService,
 ) {
     @GetMapping
     @PreAuthorize("hasAuthority('leads.view')")
@@ -221,6 +224,17 @@ class LeadController(
                 pageable = pageable,
             ),
         )
+    }
+
+    @GetMapping("/{id}/quotes")
+    @PreAuthorize("hasAnyAuthority('contacts.view', 'quotes.view')")
+    fun listQuotes(
+        @PathVariable id: UUID,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<PageResponse<QuoteResponse>> {
+        val pageable = PageRequest.of(page, size, Sort.by("createdAt").descending())
+        return ResponseEntity.ok(quoteService.filter(leadId = id, status = null, pageable = pageable))
     }
 
     @PostMapping("/{id}/products")
