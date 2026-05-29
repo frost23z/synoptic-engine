@@ -91,6 +91,7 @@ allOpen {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("-Xmx1024m", "-Xms256m")
 }
 
 // Fast path: pure unit tests (no Spring context, no Testcontainers). Excludes

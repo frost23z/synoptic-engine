@@ -142,7 +142,7 @@ class ProductIntegrationTest : AbstractIntegrationTest() {
                 ),
             )
         assertEquals(200, initial.status())
-        assertEquals(50, (initial.bodyAsMap()!!["quantity"] as Number).toInt())
+        assertEquals(50, (initial.bodyAsMap()!!["onHand"] as Number).toInt())
 
         val updated =
             put(
@@ -154,12 +154,12 @@ class ProductIntegrationTest : AbstractIntegrationTest() {
                 ),
             )
         assertEquals(200, updated.status())
-        assertEquals(25, (updated.bodyAsMap()!!["quantity"] as Number).toInt())
+        assertEquals(25, (updated.bodyAsMap()!!["onHand"] as Number).toInt())
 
         val getResult = get("/api/products/$productId/inventory", adminToken)
         assertEquals(200, getResult.status())
         val entries = getResult.bodyAsList()!!
         assertEquals(1, entries.size)
-        assertEquals(25, (entries.first()["quantity"] as Number).toInt())
+        assertEquals(25, (entries.first()["onHand"] as Number).toInt())
     }
 }
