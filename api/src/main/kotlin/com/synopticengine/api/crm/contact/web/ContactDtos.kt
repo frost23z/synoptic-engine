@@ -45,8 +45,14 @@ data class OrganizationResponse(
     val phone: String?,
     val website: String?,
     val address: String?,
+    val tags: List<TagResponse>,
     val createdAt: Instant?,
     val updatedAt: Instant?,
+)
+
+data class TagAttachOrganizationRequest(
+    @field:NotNull(message = "Tag ID is required")
+    val tagId: UUID,
 )
 
 // ── Person ────────────────────────────────────────────────────────────────────

@@ -128,6 +128,12 @@ interface CrmApi {
         size: Int,
     ): ActivityPage
 
+    fun filterActivitiesByProductId(
+        productId: UUID,
+        page: Int,
+        size: Int,
+    ): ActivityPage
+
     fun findTagById(id: UUID): TagDto?
 
     fun findTagsByIds(ids: Collection<UUID>): List<TagDto>

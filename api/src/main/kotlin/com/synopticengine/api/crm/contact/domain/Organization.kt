@@ -1,9 +1,14 @@
 package com.synopticengine.api.crm.contact.domain
 
+import com.synopticengine.api.crm.tag.domain.Tag
 import com.synopticengine.api.shared.domain.AuditableEntity
 import com.synopticengine.api.shared.domain.SoftDeletable
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.FetchType
+import jakarta.persistence.JoinColumn
+import jakarta.persistence.JoinTable
+import jakarta.persistence.ManyToMany
 import jakarta.persistence.Table
 import org.hibernate.annotations.Filter
 import org.hibernate.annotations.SQLDelete
@@ -36,4 +41,12 @@ class Organization :
 
     @Column
     override var deletedAt: Instant? = null
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "organization_tags",
+        joinColumns = [JoinColumn(name = "organization_id")],
+        inverseJoinColumns = [JoinColumn(name = "tag_id")],
+    )
+    val tags: MutableSet<Tag> = mutableSetOf()
 }

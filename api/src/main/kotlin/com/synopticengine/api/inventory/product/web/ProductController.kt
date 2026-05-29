@@ -1,5 +1,7 @@
 package com.synopticengine.api.inventory.product.web
 
+import com.synopticengine.api.crm.ActivityPage
+import com.synopticengine.api.crm.CrmApi
 import com.synopticengine.api.inventory.product.service.ProductService
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.validation.Valid
@@ -23,6 +25,7 @@ import java.util.UUID
 @RequestMapping($$"${api.base-path}/products")
 class ProductController(
     private val productService: ProductService,
+    private val crmApi: CrmApi,
 ) {
     @GetMapping
     @PreAuthorize("hasAuthority('products.view')")
@@ -115,4 +118,12 @@ class ProductController(
         @PathVariable id: UUID,
         @PathVariable tagId: UUID,
     ): ResponseEntity<ProductResponse> = ResponseEntity.ok(productService.detachTag(id, tagId))
+
+    @GetMapping("/{id}/activities")
+    @PreAuthorize("hasAuthority('products.view')")
+    fun getActivities(
+        @PathVariable id: UUID,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<ActivityPage> = ResponseEntity.ok(crmApi.filterActivitiesByProductId(id, page, size))
 }
