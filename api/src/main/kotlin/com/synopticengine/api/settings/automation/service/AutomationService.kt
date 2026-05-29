@@ -30,6 +30,7 @@ class AutomationService(
     private val webhookDeliveryRunRepository: WebhookDeliveryRunRepository,
     private val outboundUrlValidator: OutboundUrlValidator,
     private val auditLogService: AuditLogService,
+    private val webhookDispatcher: WebhookDispatcher,
 ) {
     // ── Workflows ─────────────────────────────────────────────────────────
 
@@ -201,6 +202,9 @@ class AutomationService(
             webhookDeliveryRunRepository.findAllByWebhookIdOrderByCreatedAtDesc(webhookId, pageable),
         ) { it.toResponse() }
     }
+
+    @Transactional
+    fun testWebhook(id: UUID): WebhookDeliveryRunResponse = webhookDispatcher.dispatchTest(requireWebhook(id)).toResponse()
 
     // Tenant-aware loads. JpaRepository.findById bypasses Hibernate's tenant
     // filter (it hits EntityManager.find()); JPQL findActiveById does not.

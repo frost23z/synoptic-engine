@@ -249,6 +249,31 @@ class UserService(
     }
 
     @Transactional
+    override fun updateSelf(
+        id: UUID,
+        firstName: String,
+        lastName: String,
+        phone: String?,
+        currentPassword: String?,
+        newPassword: String?,
+    ) {
+        val user = requireUser(id)
+        user.firstName = firstName
+        user.lastName = lastName
+        user.phone = phone
+        if (!newPassword.isNullOrBlank()) {
+            if (currentPassword.isNullOrBlank()) {
+                throw IllegalArgumentException("Current password is required to set a new password")
+            }
+            if (!passwordEncoder.matches(currentPassword, user.passwordHash)) {
+                throw IllegalArgumentException("Current password is incorrect")
+            }
+            user.passwordHash = passwordEncoder.encode(newPassword) ?: error("Password encoding failed")
+        }
+        userRepository.save(user)
+    }
+
+    @Transactional
     override fun updatePassword(
         email: String,
         encodedPassword: String,

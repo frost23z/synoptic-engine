@@ -55,4 +55,13 @@ interface IdentityApi {
         email: String,
         encodedPassword: String,
     )
+
+    fun updateSelf(
+        id: UUID,
+        firstName: String,
+        lastName: String,
+        phone: String?,
+        currentPassword: String?,
+        newPassword: String?,
+    )
 }
