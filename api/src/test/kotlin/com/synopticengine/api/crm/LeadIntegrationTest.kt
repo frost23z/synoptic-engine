@@ -1,6 +1,7 @@
 package com.synopticengine.api.crm
 
 import com.synopticengine.api.AbstractIntegrationTest
+import com.synopticengine.api.support.factories.AttributeFactory
 import com.synopticengine.api.support.factories.LeadFactory
 import com.synopticengine.api.support.factories.TagFactory
 import org.junit.jupiter.api.BeforeEach
@@ -15,6 +16,8 @@ class LeadIntegrationTest : AbstractIntegrationTest() {
     @Autowired private lateinit var leadFactory: LeadFactory
 
     @Autowired private lateinit var tagFactory: TagFactory
+
+    @Autowired private lateinit var attributeFactory: AttributeFactory
 
     private lateinit var adminToken: String
     private lateinit var salespersonToken: String
@@ -158,6 +161,67 @@ class LeadIntegrationTest : AbstractIntegrationTest() {
             assertNotNull(group["leads"])
             assertNotNull(group["totalAmount"])
         }
+    }
+
+    @Test
+    fun `kanban lookup returns users, leadSources, leadTypes, and stages for pipeline`() {
+        val result = get("/api/leads/kanban/lookup?pipelineId=$defaultPipelineId", adminToken)
+        assertEquals(200, result.status())
+        val body = result.bodyAsMap()!!
+        assertNotNull(body["users"])
+        assertNotNull(body["leadSources"])
+        assertNotNull(body["leadTypes"])
+        val stages = body["stages"] as List<*>
+        assertTrue(stages.isNotEmpty(), "stages list should not be empty for the default pipeline")
+    }
+
+    @Test
+    fun `kanban lookup without token returns 401`() {
+        assertEquals(401, get("/api/leads/kanban/lookup?pipelineId=$defaultPipelineId", null).status())
+    }
+
+    // ── Custom attribute partial update ───────────────────────────────────
+
+    @Test
+    fun `PATCH attributes sets value and returns attribute value list`() {
+        val leadId = leadFactory.id(adminToken)
+        val attrId = attributeFactory.id(adminToken, type = "TEXT", entityType = "Lead")
+        val result =
+            patch(
+                "/api/leads/$leadId/attributes",
+                adminToken,
+                mapOf("attributeValues" to listOf(mapOf("attributeId" to attrId.toString(), "value" to "hello"))),
+            )
+        assertEquals(200, result.status())
+        val body = result.bodyAsList()!!
+        assertEquals(1, body.size)
+        assertEquals("hello", body[0]["value"])
+    }
+
+    @Test
+    fun `PATCH attributes on unknown lead returns 404`() {
+        val attrId = attributeFactory.id(adminToken, type = "TEXT", entityType = "Lead")
+        val result =
+            patch(
+                "/api/leads/${UUID.randomUUID()}/attributes",
+                adminToken,
+                mapOf("attributeValues" to listOf(mapOf("attributeId" to attrId.toString(), "value" to "x"))),
+            )
+        assertEquals(404, result.status())
+    }
+
+    @Test
+    fun `PATCH attributes as VIEWER returns 403`() {
+        val leadId = leadFactory.id(adminToken)
+        val attrId = attributeFactory.id(adminToken, type = "TEXT", entityType = "Lead")
+        assertEquals(
+            403,
+            patch(
+                "/api/leads/$leadId/attributes",
+                viewerToken,
+                mapOf("attributeValues" to listOf(mapOf("attributeId" to attrId.toString(), "value" to "x"))),
+            ).status(),
+        )
     }
 
     // ── Search & filter ───────────────────────────────────────────────────
