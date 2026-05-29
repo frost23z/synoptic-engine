@@ -52,3 +52,17 @@ data class ResetPasswordRequest(
     @field:Size(min = 8, max = 1000, message = "Password must be 8–1000 characters")
     val newPassword: String,
 )
+
+data class UpdateMeRequest(
+    @field:NotBlank(message = "First name is required")
+    @field:Size(max = 255, message = "First name must not exceed 255 characters")
+    val firstName: String,
+    @field:NotBlank(message = "Last name is required")
+    @field:Size(max = 255, message = "Last name must not exceed 255 characters")
+    val lastName: String,
+    @field:Size(max = 50, message = "Phone must not exceed 50 characters")
+    val phone: String? = null,
+    val currentPassword: String? = null,
+    @field:Size(min = 8, max = 1000, message = "New password must be 8–1000 characters")
+    val newPassword: String? = null,
+)
