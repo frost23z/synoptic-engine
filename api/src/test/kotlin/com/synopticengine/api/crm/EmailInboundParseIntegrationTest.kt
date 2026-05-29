@@ -9,11 +9,12 @@ import javax.crypto.spec.SecretKeySpec
 import kotlin.test.assertEquals
 
 /**
- * The inbound-parse endpoint is public (no JWT) but signed: every request must include
- * `X-Synoptic-Signature` = `hex(HMAC_SHA256(secret, body))`. The shared secret is
- * configured via `synoptic.inbound-mail.webhook-secret` — `src/test/resources/application-test.yaml`
- * sets it to `test-inbound-mail-secret` for this suite (the `test` profile activated by
- * `AbstractIntegrationTest` overlays the main config).
+ * The inbound-parse endpoint is public (no JWT) but signed. Every request must carry:
+ *   - `X-Synoptic-Timestamp`: current Unix epoch seconds (within the 5-minute replay window)
+ *   - `X-Synoptic-Signature`: `hex(HMAC_SHA256(secret, "$timestamp.$body"))`
+ *
+ * The shared secret is configured via `synoptic.inbound-mail.webhook-secret` —
+ * `src/test/resources/application-test.yaml` sets it to `test-inbound-mail-secret`.
  */
 class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
     private val testSecret = "test-inbound-mail-secret"
@@ -31,13 +32,15 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                     "references" to listOf("<parent@example.com>"),
                 ),
             )
+        val timestamp = java.time.Instant.now().epochSecond
         val result =
             mockMvc
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-Synoptic-Signature", sign(testSecret, body))
+                        .header("X-Synoptic-Timestamp", timestamp.toString())
+                        .header("X-Synoptic-Signature", sign(testSecret, timestamp, body))
                         .content(body),
                 ).andReturn()
         assertEquals(201, result.response.status, result.response.contentAsString)
@@ -57,13 +60,15 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                     "body" to "Hello",
                 ),
             )
+        val timestamp = java.time.Instant.now().epochSecond
         val result =
             mockMvc
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-Synoptic-Signature", sign(testSecret, body))
+                        .header("X-Synoptic-Timestamp", timestamp.toString())
+                        .header("X-Synoptic-Signature", sign(testSecret, timestamp, body))
                         .content(body),
                 ).andReturn()
         assertEquals(400, result.response.status, result.response.contentAsString)
@@ -92,24 +97,29 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
             objectMapper.writeValueAsBytes(
                 mapOf("from" to "x@y.z", "to" to "a@b.c", "subject" to "s", "body" to "b"),
             )
+        val timestamp = java.time.Instant.now().epochSecond
         val result =
             mockMvc
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Synoptic-Timestamp", timestamp.toString())
                         .header("X-Synoptic-Signature", "deadbeef")
                         .content(body),
                 ).andReturn()
         assertEquals(403, result.response.status)
     }
 
+    /** Mirrors [InboundMailSignatureVerifier.hmac]: HMAC_SHA256 over "$timestamp.$body". */
     private fun sign(
         secret: String,
+        timestamp: Long,
         body: ByteArray,
     ): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        mac.update("$timestamp.".toByteArray(Charsets.UTF_8))
         return mac.doFinal(body).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 }

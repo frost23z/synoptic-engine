@@ -113,8 +113,10 @@ class RecordShareService(
             )
         }
 
+        // Resolve owner from record_shares (cross-tenant table, no RLS/filter) so the
+        // lookup works even when the acting tenant is not the resource owner.
         val ownerTenantId =
-            findOwnerTenant(resourceType, resourceId)
+            recordShareRepository.findOwnerTenantByResource(resourceType, resourceId)
                 ?: throw NoSuchElementException("$resourceType $resourceId not found")
 
         require(ownerTenantId != consumerTenantId) { "Cannot reshare back to the owner tenant" }
