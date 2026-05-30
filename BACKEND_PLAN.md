@@ -1,15 +1,17 @@
 # Backend Implementation Plan
 
-> Last verified: 2026-05-29 — every controller read directly, cross-checked against Krayin feature docs
+> Last verified: 2026-05-30 — every controller read directly, cross-checked against Krayin feature docs
+> Phase 1 completed: 2026-05-29
+> Phase 2 completed: 2026-05-30
 > Next Flyway migration: **V024**
 
 ---
 
-## Verified Completeness: ~95%
+## Verified Completeness: ~99%
 
 All core CRM, inventory, automation, import/export, sharing, and identity features are
-implemented and wired. The remaining ~5% is three confirmed missing endpoints and a set
-of advanced/enterprise features not in the Krayin scope.
+implemented and wired. The remaining ~2% is one advanced feature (AI lead creation) and
+enterprise features not in the Krayin scope.
 
 ---
 
@@ -25,7 +27,7 @@ of advanced/enterprise features not in the Krayin scope.
 | `POST /auth/logout-all` | ✅ |
 | `POST /auth/forgot-password` | ✅ rate-limited |
 | `POST /auth/reset-password` | ✅ |
-| `PUT /auth/me` (self-edit name/phone/password) | ❌ **MISSING** |
+| `PUT /auth/me` (self-edit name/phone/password) | ✅ |
 
 ### Leads (all verified)
 `GET/POST /api/leads` · `GET/PUT/DELETE /api/leads/{id}` · `PATCH /{id}/stage` ·
@@ -48,9 +50,9 @@ of advanced/enterprise features not in the Krayin scope.
 | Lead activities sub-resource | ✅ |
 | Lead quotes sub-resource | ✅ |
 | CSV export | ✅ |
-| `GET /api/leads/kanban/lookup` (filter dropdown data) | ❌ **MISSING** |
-| `POST /api/leads/ai-create` (LLM file extraction) | ❌ **MISSING** |
-| `PATCH /api/leads/{id}/attributes` (custom-attrs-only update) | ⚠️ partial — full PUT exists |
+| `GET /api/leads/kanban/lookup` (filter dropdown data) | ✅ |
+| `POST /api/leads/ai-create` (LLM file extraction) | ✅ |
+| `PATCH /api/leads/{id}/attributes` (custom-attrs-only update) | ✅ |
 
 ### Contacts, Activities, Email, Quotes, Products, Warehouses (all verified)
 All CRUD, tags, activities sub-resources, search, mass ops, file uploads, calendar,
@@ -90,86 +92,42 @@ Reserve/release movements · Low-stock check · Transfer orders (create/dispatch
 
 ---
 
-## Phase 1 — Missing Krayin Parity Endpoints (implement these next)
+## Phase 1 — Krayin Parity Endpoints ✅ COMPLETE
 
-### 1. Account Self-Edit `PUT /auth/me`
-**Status:** `GET /auth/me` exists but there is no way for a logged-in user to update
-their own name, phone, or password without admin `users.edit` permission.
+All three endpoints are implemented, wired, and covered by integration tests.
 
-**What to build:**
-- `GET /auth/me` → already done (returns profile)
-- `PUT /auth/me` → allows the authenticated user to update their own `firstName`,
-  `lastName`, `phone`, and optionally change password (current + new)
+### 1. Account Self-Edit `PUT /auth/me` ✅
+- `AuthController.kt` — `PUT /auth/me`
+- `UserService.kt` — `updateSelf()` validates current password before allowing change
+- `IdentityApi.kt` — interface method wired to `UserService`
+- Tests: `AuthIntegrationTest` — name/phone update, password change, wrong-password rejection
 
-**Where:**
-- `AuthController.kt` — add `PUT /auth/me` endpoint
-- `UserService.kt` — add `updateSelf(userId, firstName, lastName, phone, currentPassword?, newPassword?)` method
-- No new migration needed (all fields already on `users` table)
+### 2. Kanban Filter Lookup `GET /api/leads/kanban/lookup` ✅
+- `LeadController.kt` — `GET /kanban/lookup`
+- `LeadService.kt` — `kanbanLookup(pipelineId)` returns users, sources, types, pipeline stages
+- Tests: `LeadIntegrationTest` — structure check, 401 guard
 
-**Permission:** authenticated only (no specific authority required)  
-**Effort:** ~2h
-
----
-
-### 2. Kanban Filter Lookup `GET /api/leads/kanban/lookup`
-**Status:** `GET /api/leads/kanban` returns the board. Krayin's frontend uses a separate
-lookup endpoint to populate filter dropdowns (users, lead sources, lead types, persons)
-without loading the full board.
-
-**What to build:**
-```
-GET /api/leads/kanban/lookup?pipelineId={id}
-```
-Response:
-```json
-{
-  "users": [ { "id": "...", "name": "..." } ],
-  "leadSources": [ { "id": "...", "name": "..." } ],
-  "leadTypes": [ { "id": "...", "name": "..." } ],
-  "stages": [ { "id": "...", "name": "...", "color": "..." } ]
-}
-```
-
-**Where:**
-- `LeadController.kt` — add `GET /kanban/lookup`
-- `LeadService.kt` — add `kanbanLookup(pipelineId)` that queries users, sources, types,
-  stages for the given pipeline
-
-**Permission:** `leads.view`  
-**Effort:** ~2h
+### 3. Lead Custom-Attribute Partial Update `PATCH /api/leads/{id}/attributes` ✅
+- `LeadController.kt` — `PATCH /{id}/attributes`
+- `LeadService.kt` — `updateAttributes()` validates lead exists, delegates to `EntityAttributePort`
+- Tests: `LeadIntegrationTest` — value set, unknown lead 404, VIEWER 403
 
 ---
 
-### 3. Lead Custom-Attribute Partial Update `PATCH /api/leads/{id}/attributes`
-**Status:** `PUT /api/leads/{id}` requires all core fields. Krayin has a separate endpoint
-for updating only EAV custom attributes on a lead without resending the full payload.
+## Phase 2 — Advanced / Non-Blocking ✅ COMPLETE
 
-**What to build:**
-```
-PATCH /api/leads/{id}/attributes
-Body: { "attributeValues": [ { "attributeId": "...", "value": "..." } ] }
-```
-
-**Where:**
-- `LeadController.kt` — add `PATCH /{id}/attributes`
-- `LeadService.kt` — add `updateAttributes(leadId, attributeValues)` calling `AttributeService`
-
-**Permission:** `leads.edit`  
-**Effort:** ~2h
-
----
-
-## Phase 2 — Advanced / Non-Blocking (future sessions)
-
-### AI Lead Creation (medium effort — requires LLM integration)
+### AI Lead Creation ✅
 ```
 POST /api/leads/ai-create    (multipart: file + optional hints)
 ```
-- Parse PDF/image → extract lead fields via Claude API
-- Create lead, return `LeadResponse`
-- Requires: `@anthropic-ai/sdk` equivalent for Kotlin (`anthropic-sdk-java`), prompt
-  engineering, file parsing (Apache Tika for PDF/image text extraction)
-- **Effort:** 8-12h
+- `LeadController.kt` — `POST /ai-create` (consumes multipart/form-data)
+- `AiLeadService.kt` — extracts text via Apache Tika, calls Claude `claude-opus-4-8`
+  with adaptive thinking + prompt caching, parses JSON response, delegates to `LeadService.create()`
+- `FileUploadGuard.validateAiLeadFile()` — accepts PDF + common image types (10 MB limit)
+- Dependencies added: `anthropic-java:2.34.0`, `tika-core:2.9.2`, `tika-parsers-standard-package:2.9.2`
+- Requires `ANTHROPIC_API_KEY` env var at runtime (client is lazy-initialized; absent key
+  surfaces only on first call, not at startup)
+- Tests: `LeadIntegrationTest` — 401 guard, 403 guard (VIEWER blocked)
 
 ---
 

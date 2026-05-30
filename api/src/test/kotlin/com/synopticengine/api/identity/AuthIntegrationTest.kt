@@ -118,4 +118,75 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
         // Should return 400/422 for bad input, never 401 — the endpoint must be auth-free.
         assertTrue(post("/auth/login", null, mapOf<String, String>()).status() != 401)
     }
+
+    // ── PUT /me ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `PUT me updates name and phone and returns updated profile`() {
+        val token = login(email, password)
+        val result =
+            put(
+                "/auth/me",
+                token,
+                mapOf(
+                    "firstName" to "Updated",
+                    "lastName" to "Name",
+                    "phone" to "+1-555-0100",
+                ),
+            )
+        assertEquals(200, result.status())
+        val body = result.bodyAsMap()!!
+        assertEquals("Updated Name", body["fullName"])
+        assertEquals(email, body["email"])
+    }
+
+    @Test
+    fun `PUT me without token returns 401`() {
+        assertEquals(
+            401,
+            put("/auth/me", null, mapOf("firstName" to "X", "lastName" to "Y")).status(),
+        )
+    }
+
+    @Test
+    fun `PUT me with blank firstName returns 422`() {
+        val token = login(email, password)
+        assertEquals(422, put("/auth/me", token, mapOf("firstName" to " ", "lastName" to "Y")).status())
+    }
+
+    @Test
+    fun `PUT me changes password when currentPassword is correct`() {
+        val token = login(email, password)
+        val result =
+            put(
+                "/auth/me",
+                token,
+                mapOf(
+                    "firstName" to "Auth",
+                    "lastName" to "User",
+                    "currentPassword" to password,
+                    "newPassword" to "newpass456",
+                ),
+            )
+        assertEquals(200, result.status())
+        // Verify new password works
+        assertNotNull(login(email, "newpass456"))
+    }
+
+    @Test
+    fun `PUT me rejects password change when currentPassword is wrong`() {
+        val token = login(email, password)
+        val result =
+            put(
+                "/auth/me",
+                token,
+                mapOf(
+                    "firstName" to "Auth",
+                    "lastName" to "User",
+                    "currentPassword" to "wrong-password",
+                    "newPassword" to "newpass456",
+                ),
+            )
+        assertEquals(400, result.status())
+    }
 }
