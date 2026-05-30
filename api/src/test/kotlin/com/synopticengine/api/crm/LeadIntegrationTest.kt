@@ -256,6 +256,18 @@ class LeadIntegrationTest : AbstractIntegrationTest() {
         assertEquals(404, get("/api/leads/$id2", adminToken).status())
     }
 
+    // ── AI lead create guards ─────────────────────────────────────────────
+
+    @Test
+    fun `ai-create without token returns 401`() {
+        assertEquals(401, multipart("/api/leads/ai-create", null, "test".toByteArray(), "test.pdf").status())
+    }
+
+    @Test
+    fun `ai-create as VIEWER returns 403`() {
+        assertEquals(403, multipart("/api/leads/ai-create", viewerToken, "test".toByteArray(), "test.pdf").status())
+    }
+
     // ── Lead sources and types ────────────────────────────────────────────
 
     @Test

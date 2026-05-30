@@ -45,6 +45,14 @@ class FileUploadGuard {
      */
     fun validateCsvImport(file: MultipartFile) = validate(file, CSV_MAX_BYTES, ALLOWED_CSV_TYPES)
 
+    /**
+     * Validate a file uploaded for AI lead extraction.
+     *
+     * Allowed types: PDF and common image formats that Claude can process.
+     * Max size: 10 MB.
+     */
+    fun validateAiLeadFile(file: MultipartFile) = validate(file, AI_LEAD_MAX_BYTES, ALLOWED_AI_LEAD_TYPES)
+
     // ── private ───────────────────────────────────────────────────────────────
 
     private fun validate(
@@ -88,6 +96,9 @@ class FileUploadGuard {
         /** 10 MB in bytes. */
         const val CSV_MAX_BYTES: Long = 10L * 1024 * 1024
 
+        /** 10 MB in bytes. */
+        const val AI_LEAD_MAX_BYTES: Long = 10L * 1024 * 1024
+
         /**
          * Allow-list of MIME types accepted for general document/image uploads.
          *
@@ -128,6 +139,16 @@ class FileUploadGuard {
                 "text/csv",
                 "text/plain", // some browsers send text/plain for .csv files
                 "application/vnd.ms-excel", // legacy Excel, sometimes used for .csv
+            )
+
+        /** Allow-list of MIME types accepted for AI lead extraction uploads. */
+        val ALLOWED_AI_LEAD_TYPES: Set<String> =
+            setOf(
+                "application/pdf",
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "image/gif",
             )
     }
 }

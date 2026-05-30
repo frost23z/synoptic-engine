@@ -1,12 +1,13 @@
 # Backend Implementation Plan
 
-> Last verified: 2026-05-29 — every controller read directly, cross-checked against Krayin feature docs
+> Last verified: 2026-05-30 — every controller read directly, cross-checked against Krayin feature docs
 > Phase 1 completed: 2026-05-29
+> Phase 2 completed: 2026-05-30
 > Next Flyway migration: **V024**
 
 ---
 
-## Verified Completeness: ~98%
+## Verified Completeness: ~99%
 
 All core CRM, inventory, automation, import/export, sharing, and identity features are
 implemented and wired. The remaining ~2% is one advanced feature (AI lead creation) and
@@ -50,7 +51,7 @@ enterprise features not in the Krayin scope.
 | Lead quotes sub-resource | ✅ |
 | CSV export | ✅ |
 | `GET /api/leads/kanban/lookup` (filter dropdown data) | ✅ |
-| `POST /api/leads/ai-create` (LLM file extraction) | ❌ **MISSING** (Phase 2) |
+| `POST /api/leads/ai-create` (LLM file extraction) | ✅ |
 | `PATCH /api/leads/{id}/attributes` (custom-attrs-only update) | ✅ |
 
 ### Contacts, Activities, Email, Quotes, Products, Warehouses (all verified)
@@ -113,17 +114,20 @@ All three endpoints are implemented, wired, and covered by integration tests.
 
 ---
 
-## Phase 2 — Advanced / Non-Blocking (future sessions)
+## Phase 2 — Advanced / Non-Blocking ✅ COMPLETE
 
-### AI Lead Creation (medium effort — requires LLM integration)
+### AI Lead Creation ✅
 ```
 POST /api/leads/ai-create    (multipart: file + optional hints)
 ```
-- Parse PDF/image → extract lead fields via Claude API
-- Create lead, return `LeadResponse`
-- Requires: `@anthropic-ai/sdk` equivalent for Kotlin (`anthropic-sdk-java`), prompt
-  engineering, file parsing (Apache Tika for PDF/image text extraction)
-- **Effort:** 8-12h
+- `LeadController.kt` — `POST /ai-create` (consumes multipart/form-data)
+- `AiLeadService.kt` — extracts text via Apache Tika, calls Claude `claude-opus-4-8`
+  with adaptive thinking + prompt caching, parses JSON response, delegates to `LeadService.create()`
+- `FileUploadGuard.validateAiLeadFile()` — accepts PDF + common image types (10 MB limit)
+- Dependencies added: `anthropic-java:2.34.0`, `tika-core:2.9.2`, `tika-parsers-standard-package:2.9.2`
+- Requires `ANTHROPIC_API_KEY` env var at runtime (client is lazy-initialized; absent key
+  surfaces only on first call, not at startup)
+- Tests: `LeadIntegrationTest` — 401 guard, 403 guard (VIEWER blocked)
 
 ---
 
