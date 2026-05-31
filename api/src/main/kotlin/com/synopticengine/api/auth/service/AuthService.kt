@@ -13,6 +13,7 @@ import com.synopticengine.api.auth.web.SessionResponse
 import com.synopticengine.api.auth.web.TokenResponse
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
+import com.synopticengine.api.shared.config.PasswordPolicyService
 import com.synopticengine.api.shared.email.MailSenderService
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
@@ -36,6 +37,7 @@ class AuthService(
     private val mailSenderService: MailSenderService,
     private val loginAttemptTracker: LoginAttemptTracker,
     private val forgotPasswordAttemptTracker: ForgotPasswordAttemptTracker,
+    private val passwordPolicyService: PasswordPolicyService,
     @Value("\${synoptic.auth.password-reset.ttl-minutes:15}") private val resetTtlMinutes: Long,
 ) {
     fun login(
@@ -208,6 +210,7 @@ class AuthService(
         if (reset.isExpired(resetTtlMinutes)) {
             throw IllegalArgumentException("Token has expired. Please request a new password reset.")
         }
+        passwordPolicyService.validate(newPassword)
         val encodedPassword =
             passwordEncoder.encode(newPassword)
                 ?: throw IllegalStateException("Password encoding failed")

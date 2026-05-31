@@ -79,3 +79,28 @@ data class LoginHistoryResponse(
     val clientIp: String?,
     val loggedInAt: Instant,
 )
+
+data class CreateApiKeyRequest(
+    @field:NotBlank(message = "Name is required")
+    @field:Size(max = 200, message = "Name must not exceed 200 characters")
+    val name: String,
+    val expiresAt: Instant? = null,
+)
+
+data class ApiKeyResponse(
+    val id: UUID,
+    val name: String,
+    val prefix: String,
+    val createdAt: Instant,
+    val expiresAt: Instant?,
+    val lastUsedAt: Instant?,
+)
+
+data class ApiKeyCreateResponse(
+    val id: UUID,
+    val name: String,
+    val key: String,
+    val prefix: String,
+    val createdAt: Instant,
+    val expiresAt: Instant?,
+)

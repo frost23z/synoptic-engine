@@ -1,6 +1,7 @@
 package com.synopticengine.api.auth.web
 
 import com.synopticengine.api.auth.UserPrincipal
+import com.synopticengine.api.auth.service.ApiKeyService
 import com.synopticengine.api.auth.service.AuthService
 import com.synopticengine.api.identity.IdentityApi
 import jakarta.servlet.http.HttpServletRequest
@@ -23,6 +24,7 @@ import java.util.UUID
 class AuthController(
     private val authService: AuthService,
     private val identityApi: IdentityApi,
+    private val apiKeyService: ApiKeyService,
 ) {
     @PostMapping("/login")
     fun login(
@@ -128,6 +130,30 @@ class AuthController(
         @PathVariable sessionId: UUID,
     ): ResponseEntity<Void> {
         authService.revokeSession(principal.id, sessionId)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/api-keys")
+    fun createApiKey(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: CreateApiKeyRequest,
+    ): ResponseEntity<ApiKeyCreateResponse> =
+        ResponseEntity
+            .status(201)
+            .body(apiKeyService.create(principal.tenantId, principal.id, request.name, request.expiresAt))
+
+    @GetMapping("/api-keys")
+    fun listApiKeys(
+        @AuthenticationPrincipal principal: UserPrincipal,
+    ): ResponseEntity<List<ApiKeyResponse>> =
+        ResponseEntity.ok(apiKeyService.list(principal.tenantId, principal.id))
+
+    @DeleteMapping("/api-keys/{keyId}")
+    fun revokeApiKey(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @PathVariable keyId: UUID,
+    ): ResponseEntity<Void> {
+        apiKeyService.revoke(principal.tenantId, principal.id, keyId)
         return ResponseEntity.noContent().build()
     }
 

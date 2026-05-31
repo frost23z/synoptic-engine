@@ -34,6 +34,25 @@ class EmailIntegrationTest : AbstractIntegrationTest() {
         assertEquals(200, get("/api/mail", viewerToken).status())
     }
 
+    // ── Folder catalog ────────────────────────────────────────────────────
+
+    @Test
+    fun `GET mail folders without token returns 401`() {
+        assertEquals(401, get("/api/mail/folders", null).status())
+    }
+
+    @Test
+    fun `GET mail folders returns all six standard folders`() {
+        val result = get("/api/mail/folders", adminToken)
+        assertEquals(200, result.status())
+        val body = result.bodyAsList()!!
+        assertEquals(6, body.size)
+        val folders = body.map { it["folder"] as String }.toSet()
+        assertTrue(folders.containsAll(setOf("inbox", "sent", "drafts", "trash", "spam", "outbox")))
+        assertNotNull(body[0]["permissionKey"])
+        assertNotNull(body[0]["label"])
+    }
+
     @Test
     fun `compose email as VIEWER returns 403`() {
         assertEquals(403, post("/api/mail", viewerToken, composeRequest()).status())

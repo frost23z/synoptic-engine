@@ -3,8 +3,8 @@
 > Last verified: 2026-05-30 — every controller read directly, cross-checked against Krayin feature docs
 > Phase 1 completed: 2026-05-29
 > Phase 2 completed: 2026-05-30
-> Phase 3 (partial) completed: 2026-05-31
-> Next Flyway migration: **V025**
+> Phase 3 completed: 2026-05-31
+> Next Flyway migration: **V026**
 
 ---
 
@@ -136,15 +136,15 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 
 | Feature | What it needs | Effort | Status |
 |---|---|---|---|
-| Password policy enforcement | Validator bean in `AuthService` + `UserService` | 2-3h | ❌ |
+| Password policy enforcement | Validator bean in `AuthService` + `UserService` | 2-3h | ✅ |
 | MFA / TOTP | TOTP library + `POST /auth/mfa/setup`, `POST /auth/mfa/verify` | 6-8h | ❌ |
 | Session management UI | `GET /auth/sessions`, `DELETE /auth/sessions/{id}` | 3-4h | ✅ |
 | Login history endpoint | V024 migration + `login_history` table + `GET /auth/login-history` | 2-3h | ✅ |
 | Multi-node rate limiter | Swap Caffeine → Redis in `LoginAttemptTracker` (interface already abstracted) | 3-4h | ❌ |
-| API keys for integrations | `api_keys` table + static-bearer `JwtAuthFilter` path | 4-6h | ❌ |
+| API keys for integrations | `api_keys` table + static-bearer `JwtAuthFilter` path | 4-6h | ✅ |
 | Tenant self-serve signup | Registration flow + email verification + default plan | 4-6h | ❌ |
 | Permission change audit | `auditLogService.record()` in `RoleService` create/update/delete | 1-2h | ✅ |
-| Folder permissions catalog | `GET /api/mail/folders` returning folders + permission keys | 1h | ❌ |
+| Folder permissions catalog | `GET /api/mail/folders` returning folders + permission keys | 1h | ✅ |
 
 ### Session management ✅
 - `AuthService.listSessions()` / `revokeSession()` — query `user_refresh_sessions` for non-expired, non-revoked rows
@@ -163,6 +163,26 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 - `update()` → `AuditAction.UPDATE` with `permissionsAdded` / `permissionsRemoved` diff (only when changed)
 - `delete()` → `AuditAction.DELETE` with role name
 
+### Folder permissions catalog ✅
+- `MailFolderResponse(folder, permissionKey, label)` added to `EmailDtos.kt`
+- `GET /api/mail/folders` — static endpoint returning all 6 standard folders (inbox/sent/drafts/trash/spam/outbox) with their permission keys
+- Gated on `mail.view`; pure in-memory response, no DB query
+
+### Password policy enforcement ✅
+- `PasswordPolicyService` in `shared/config/` — configurable via `synoptic.auth.password-policy.*`
+- Properties: `min-length` (default 8), `require-uppercase` (default false), `require-digit` (default false), `require-special` (default false)
+- Wired into `AuthService.resetPassword()` and `UserService.updateSelf()` (new-password path)
+
+### API keys for integrations ✅
+- V025 migration: `api_keys(id, tenant_id, user_id, name, key_hash, key_prefix, created_at, expires_at, revoked_at, last_used_at)`
+- `ApiKey` entity (NOT extending BaseEntity), `ApiKeyRepository` with hand-written JPQL
+- `ApiKeyService` — `create()` returns raw key once, `list()` returns prefix only, `revoke()`, `authenticateByKey()`
+- `JwtAuthFilter` detects `sk_` prefix → calls `apiKeyService.authenticateByKey()` → sets SecurityContext/TenantContext/ActorContext
+- `POST /auth/api-keys` → `ApiKeyCreateResponse` (includes raw key once only)
+- `GET /auth/api-keys` → `List<ApiKeyResponse>` (prefix + metadata, no raw key)
+- `DELETE /auth/api-keys/{keyId}` → revoke
+- Tests: 401 guards, create/list/revoke flow, API key bearer token auth
+
 ---
 
 ## Architecture Rules (must follow — from `api/CLAUDE.md`)
@@ -177,4 +197,4 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 - Every endpoint → `@PreAuthorize`
 - Class-level `@Transactional(readOnly = true)`, explicit `@Transactional` on writes
 
-## Next migration: V024
+## Next migration: V026

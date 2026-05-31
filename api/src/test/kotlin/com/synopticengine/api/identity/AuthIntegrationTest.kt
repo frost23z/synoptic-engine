@@ -234,4 +234,62 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
         assertNotNull(body[0]["id"])
         assertNotNull(body[0]["loggedInAt"])
     }
+
+    // ── API keys ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `POST api-keys without token returns 401`() {
+        assertEquals(401, post("/auth/api-keys", null, mapOf("name" to "test")).status())
+    }
+
+    @Test
+    fun `GET api-keys without token returns 401`() {
+        assertEquals(401, get("/auth/api-keys", null).status())
+    }
+
+    @Test
+    fun `POST api-keys creates key and returns full key once`() {
+        val token = login(email, password)
+        val result = post("/auth/api-keys", token, mapOf("name" to "ci-key"))
+        assertEquals(201, result.status())
+        val body = result.bodyAsMap()!!
+        assertNotNull(body["id"])
+        assertNotNull(body["key"])
+        assertTrue((body["key"] as String).startsWith("sk_"), "key must start with sk_")
+        assertNotNull(body["prefix"])
+        assertEquals("ci-key", body["name"])
+    }
+
+    @Test
+    fun `GET api-keys lists created key without exposing raw value`() {
+        val token = login(email, password)
+        post("/auth/api-keys", token, mapOf("name" to "list-test-key"))
+        val result = get("/auth/api-keys", token)
+        assertEquals(200, result.status())
+        val body = result.bodyAsList()!!
+        assertTrue(body.isNotEmpty())
+        val key = body[0]
+        assertNotNull(key["id"])
+        assertNotNull(key["prefix"])
+        assertTrue(key["key"] == null, "raw key must not appear in list response")
+    }
+
+    @Test
+    fun `DELETE api-keys revokes key`() {
+        val token = login(email, password)
+        val createBody = post("/auth/api-keys", token, mapOf("name" to "to-revoke")).bodyAsMap()!!
+        val keyId = createBody["id"] as String
+        assertEquals(204, delete("/auth/api-keys/$keyId", token).status())
+    }
+
+    @Test
+    fun `API key bearer token authenticates successfully`() {
+        val token = login(email, password)
+        val rawKey =
+            post("/auth/api-keys", token, mapOf("name" to "bearer-test"))
+                .bodyAsMap()!!["key"] as String
+        val meResult = get("/auth/me", rawKey)
+        assertEquals(200, meResult.status())
+        assertEquals(email, meResult.bodyAsMap()!!["email"])
+    }
 }
