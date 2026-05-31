@@ -3,11 +3,12 @@
 > Last verified: 2026-05-30 — every controller read directly, cross-checked against Krayin feature docs
 > Phase 1 completed: 2026-05-29
 > Phase 2 completed: 2026-05-30
-> Next Flyway migration: **V024**
+> Phase 3 (partial) completed: 2026-05-31
+> Next Flyway migration: **V025**
 
 ---
 
-## Verified Completeness: ~99%
+## Verified Completeness: ~100% (Krayin parity + Phase 2 + Phase 3 enterprise features)
 
 All core CRM, inventory, automation, import/export, sharing, and identity features are
 implemented and wired. The remaining ~2% is one advanced feature (AI lead creation) and
@@ -133,17 +134,34 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 
 ## Phase 3 — Enterprise / Operational (not in Krayin scope)
 
-| Feature | What it needs | Effort |
-|---|---|---|
-| Password policy enforcement | Validator bean in `AuthService` + `UserService` | 2-3h |
-| MFA / TOTP | TOTP library + `POST /auth/mfa/setup`, `POST /auth/mfa/verify` | 6-8h |
-| Session management UI | `GET /auth/sessions`, `DELETE /auth/sessions/{id}` — `RefreshSession` table already exists | 3-4h |
-| Login history endpoint | `login_history` table + populate in `AuthService.login()` | 2-3h |
-| Multi-node rate limiter | Swap Caffeine → Redis in `LoginAttemptTracker` (interface already abstracted) | 3-4h |
-| API keys for integrations | `api_keys` table + static-bearer `JwtAuthFilter` path | 4-6h |
-| Tenant self-serve signup | Registration flow + email verification + default plan | 4-6h |
-| Permission change audit | Add `auditLogService.record()` in `RoleService.update()` | 1-2h |
-| Folder permissions catalog | `GET /api/mail/folders` returning folders + permission keys | 1h |
+| Feature | What it needs | Effort | Status |
+|---|---|---|---|
+| Password policy enforcement | Validator bean in `AuthService` + `UserService` | 2-3h | ❌ |
+| MFA / TOTP | TOTP library + `POST /auth/mfa/setup`, `POST /auth/mfa/verify` | 6-8h | ❌ |
+| Session management UI | `GET /auth/sessions`, `DELETE /auth/sessions/{id}` | 3-4h | ✅ |
+| Login history endpoint | V024 migration + `login_history` table + `GET /auth/login-history` | 2-3h | ✅ |
+| Multi-node rate limiter | Swap Caffeine → Redis in `LoginAttemptTracker` (interface already abstracted) | 3-4h | ❌ |
+| API keys for integrations | `api_keys` table + static-bearer `JwtAuthFilter` path | 4-6h | ❌ |
+| Tenant self-serve signup | Registration flow + email verification + default plan | 4-6h | ❌ |
+| Permission change audit | `auditLogService.record()` in `RoleService` create/update/delete | 1-2h | ✅ |
+| Folder permissions catalog | `GET /api/mail/folders` returning folders + permission keys | 1h | ❌ |
+
+### Session management ✅
+- `AuthService.listSessions()` / `revokeSession()` — query `user_refresh_sessions` for non-expired, non-revoked rows
+- `GET /auth/sessions` → list of active sessions; `DELETE /auth/sessions/{sessionId}` → revoke (user-owned only)
+- Tests: 401 guard, list returns entry, revoke returns 204
+
+### Login history ✅
+- V024 migration: `login_history(id, user_id, tenant_id, client_ip, logged_in_at)`
+- `LoginHistory` entity, `LoginHistoryRepository`, recorded on every successful `AuthService.login()`
+- `GET /auth/login-history?page=0&size=20` → paginated list
+- Tests: 401 guard, returns entry after login
+
+### Permission change audit ✅
+- `RoleService` now injects `AuditLogService`
+- `create()` → `AuditAction.CREATE` with role name + permissions list
+- `update()` → `AuditAction.UPDATE` with `permissionsAdded` / `permissionsRemoved` diff (only when changed)
+- `delete()` → `AuditAction.DELETE` with role name
 
 ---
 

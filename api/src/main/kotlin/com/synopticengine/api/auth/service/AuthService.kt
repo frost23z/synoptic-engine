@@ -2,15 +2,20 @@ package com.synopticengine.api.auth.service
 
 import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.auth.config.JwtTokenProvider
+import com.synopticengine.api.auth.domain.LoginHistory
 import com.synopticengine.api.auth.domain.PasswordReset
 import com.synopticengine.api.auth.domain.RefreshSession
+import com.synopticengine.api.auth.repo.LoginHistoryRepository
 import com.synopticengine.api.auth.repo.PasswordResetRepository
 import com.synopticengine.api.auth.repo.RefreshSessionRepository
+import com.synopticengine.api.auth.web.LoginHistoryResponse
+import com.synopticengine.api.auth.web.SessionResponse
 import com.synopticengine.api.auth.web.TokenResponse
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.shared.email.MailSenderService
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.data.domain.PageRequest
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -27,6 +32,7 @@ class AuthService(
     private val passwordEncoder: PasswordEncoder,
     private val passwordResetRepository: PasswordResetRepository,
     private val refreshSessionRepository: RefreshSessionRepository,
+    private val loginHistoryRepository: LoginHistoryRepository,
     private val mailSenderService: MailSenderService,
     private val loginAttemptTracker: LoginAttemptTracker,
     private val forgotPasswordAttemptTracker: ForgotPasswordAttemptTracker,
@@ -59,7 +65,13 @@ class AuthService(
 
         credentials.requireActive()
         loginAttemptTracker.recordSuccess(email, clientIp)
-
+        loginHistoryRepository.save(
+            LoginHistory().apply {
+                this.userId = credentials.id
+                this.tenantId = credentials.tenantId
+                this.clientIp = clientIp
+            },
+        )
         return buildTokenResponse(credentials)
     }
 
@@ -228,6 +240,35 @@ class AuthService(
     fun logoutAll(userId: UUID) {
         refreshSessionRepository.revokeAllByUserId(userId, Instant.now(), "LOGOUT_ALL")
     }
+
+    fun listSessions(userId: UUID): List<SessionResponse> =
+        refreshSessionRepository.findActiveByUserId(userId, Instant.now()).map { s ->
+            SessionResponse(id = s.id, issuedAt = s.issuedAt, expiresAt = s.expiresAt)
+        }
+
+    @Transactional
+    fun revokeSession(
+        userId: UUID,
+        sessionId: UUID,
+    ) {
+        val session =
+            refreshSessionRepository.findById(sessionId).orElse(null)
+                ?: throw NoSuchElementException("Session not found")
+        if (session.userId != userId) throw NoSuchElementException("Session not found")
+        if (session.revokedAt != null) return
+        session.revokedAt = Instant.now()
+        session.revokedReason = "USER_REVOKED"
+        refreshSessionRepository.save(session)
+    }
+
+    fun listLoginHistory(
+        userId: UUID,
+        page: Int,
+        size: Int,
+    ): List<LoginHistoryResponse> =
+        loginHistoryRepository
+            .findRecentByUserId(userId, PageRequest.of(page, size))
+            .map { h -> LoginHistoryResponse(id = h.id, clientIp = h.clientIp, loggedInAt = h.loggedInAt) }
 
     private fun generateResetToken(): String {
         // 32 bytes = 256 bits of entropy; URL-safe Base64 so it survives copy-paste.

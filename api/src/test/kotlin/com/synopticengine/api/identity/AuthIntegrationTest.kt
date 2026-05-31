@@ -189,4 +189,49 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
             )
         assertEquals(400, result.status())
     }
+
+    // ── Sessions ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `GET sessions without token returns 401`() {
+        assertEquals(401, get("/auth/sessions", null).status())
+    }
+
+    @Test
+    fun `GET sessions returns active sessions list`() {
+        val token = login(email, password)
+        val result = get("/auth/sessions", token)
+        assertEquals(200, result.status())
+        val body = result.bodyAsList()!!
+        assertTrue(body.isNotEmpty(), "at least the current session should be listed")
+        assertNotNull(body[0]["id"])
+        assertNotNull(body[0]["issuedAt"])
+        assertNotNull(body[0]["expiresAt"])
+    }
+
+    @Test
+    fun `DELETE sessions revokes a session`() {
+        val token = login(email, password)
+        val sessions = get("/auth/sessions", token).bodyAsList()!!
+        val sessionId = sessions[0]["id"] as String
+        assertEquals(204, delete("/auth/sessions/$sessionId", token).status())
+    }
+
+    // ── Login history ─────────────────────────────────────────────────────
+
+    @Test
+    fun `GET login-history without token returns 401`() {
+        assertEquals(401, get("/auth/login-history", null).status())
+    }
+
+    @Test
+    fun `GET login-history returns at least one entry after login`() {
+        val token = login(email, password)
+        val result = get("/auth/login-history", token)
+        assertEquals(200, result.status())
+        val body = result.bodyAsList()!!
+        assertTrue(body.isNotEmpty(), "login should have been recorded")
+        assertNotNull(body[0]["id"])
+        assertNotNull(body[0]["loggedInAt"])
+    }
 }

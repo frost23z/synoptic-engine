@@ -3,6 +3,7 @@ package com.synopticengine.api.auth.web
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import java.time.Instant
 import java.util.UUID
 
 data class LoginRequest(
@@ -65,4 +66,16 @@ data class UpdateMeRequest(
     val currentPassword: String? = null,
     @field:Size(min = 8, max = 1000, message = "New password must be 8–1000 characters")
     val newPassword: String? = null,
+)
+
+data class SessionResponse(
+    val id: UUID,
+    val issuedAt: Instant,
+    val expiresAt: Instant,
+)
+
+data class LoginHistoryResponse(
+    val id: UUID,
+    val clientIp: String?,
+    val loggedInAt: Instant,
 )

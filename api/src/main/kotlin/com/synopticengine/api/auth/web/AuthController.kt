@@ -7,12 +7,16 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
 
 @RestController
 @RequestMapping("/auth")
@@ -112,4 +116,26 @@ class AuthController(
         authService.resetPassword(request.token, request.email, request.newPassword)
         return ResponseEntity.noContent().build()
     }
+
+    @GetMapping("/sessions")
+    fun listSessions(
+        @AuthenticationPrincipal principal: UserPrincipal,
+    ): ResponseEntity<List<SessionResponse>> = ResponseEntity.ok(authService.listSessions(principal.id))
+
+    @DeleteMapping("/sessions/{sessionId}")
+    fun revokeSession(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @PathVariable sessionId: UUID,
+    ): ResponseEntity<Void> {
+        authService.revokeSession(principal.id, sessionId)
+        return ResponseEntity.noContent().build()
+    }
+
+    @GetMapping("/login-history")
+    fun loginHistory(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<List<LoginHistoryResponse>> =
+        ResponseEntity.ok(authService.listLoginHistory(principal.id, page, size))
 }
