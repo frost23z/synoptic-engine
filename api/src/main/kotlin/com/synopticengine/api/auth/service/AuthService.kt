@@ -11,6 +11,7 @@ import com.synopticengine.api.auth.repo.RefreshSessionRepository
 import com.synopticengine.api.auth.web.LoginHistoryResponse
 import com.synopticengine.api.auth.web.SessionResponse
 import com.synopticengine.api.auth.web.TokenResponse
+import com.synopticengine.api.auth.web.MfaVerifyRequest
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.shared.config.PasswordPolicyService
@@ -38,6 +39,7 @@ class AuthService(
     private val loginAttemptTracker: LoginAttemptTracker,
     private val forgotPasswordAttemptTracker: ForgotPasswordAttemptTracker,
     private val passwordPolicyService: PasswordPolicyService,
+    private val mfaService: MfaService,
     @Value("\${synoptic.auth.password-reset.ttl-minutes:15}") private val resetTtlMinutes: Long,
 ) {
     fun login(
@@ -67,6 +69,45 @@ class AuthService(
 
         credentials.requireActive()
         loginAttemptTracker.recordSuccess(email, clientIp)
+
+        if (mfaService.isEnabled(credentials.id)) {
+            val challengeToken = jwtTokenProvider.generateMfaChallengeToken(credentials.id, credentials.tenantId)
+            return TokenResponse(
+                accessToken = "",
+                refreshToken = "",
+                userId = credentials.id,
+                email = credentials.email,
+                fullName = credentials.fullName,
+                authorities = emptyList(),
+                mfaRequired = true,
+                mfaToken = challengeToken,
+            )
+        }
+
+        loginHistoryRepository.save(
+            LoginHistory().apply {
+                this.userId = credentials.id
+                this.tenantId = credentials.tenantId
+                this.clientIp = clientIp
+            },
+        )
+        return buildTokenResponse(credentials)
+    }
+
+    fun completeMfaLogin(
+        mfaToken: String,
+        code: String,
+        clientIp: String? = null,
+    ): TokenResponse {
+        val claims =
+            jwtTokenProvider.parseClaimsOrNull(mfaToken)
+                ?: throw IllegalArgumentException("Invalid MFA token")
+        if (!jwtTokenProvider.isMfaChallengeToken(claims)) throw IllegalArgumentException("Invalid MFA token")
+        val userId = jwtTokenProvider.getUserId(claims)
+        if (!mfaService.verify(userId, code)) throw IllegalArgumentException("Invalid or expired TOTP code")
+        val credentials =
+            identityApi.findCredentialsById(userId) ?: throw IllegalArgumentException("User not found")
+        credentials.requireActive()
         loginHistoryRepository.save(
             LoginHistory().apply {
                 this.userId = credentials.id

@@ -3,6 +3,7 @@ package com.synopticengine.api.auth.web
 import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.auth.service.ApiKeyService
 import com.synopticengine.api.auth.service.AuthService
+import com.synopticengine.api.auth.service.MfaService
 import com.synopticengine.api.identity.IdentityApi
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
@@ -25,6 +26,7 @@ class AuthController(
     private val authService: AuthService,
     private val identityApi: IdentityApi,
     private val apiKeyService: ApiKeyService,
+    private val mfaService: MfaService,
 ) {
     @PostMapping("/login")
     fun login(
@@ -132,6 +134,46 @@ class AuthController(
         authService.revokeSession(principal.id, sessionId)
         return ResponseEntity.noContent().build()
     }
+
+    // ── MFA / TOTP ────────────────────────────────────────────────────────
+
+    @PostMapping("/mfa/setup")
+    fun mfaSetup(
+        @AuthenticationPrincipal principal: UserPrincipal,
+    ): ResponseEntity<MfaSetupResponse> = ResponseEntity.ok(mfaService.setup(principal.id))
+
+    @PostMapping("/mfa/confirm")
+    fun mfaConfirm(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: MfaConfirmRequest,
+    ): ResponseEntity<MfaConfirmResponse> =
+        ResponseEntity.ok(MfaConfirmResponse(mfaService.confirm(principal.id, request.code)))
+
+    /** Public — second step of the MFA login flow; caller holds only a challenge token. */
+    @PostMapping("/mfa/verify")
+    fun mfaVerify(
+        @Valid @RequestBody request: MfaVerifyRequest,
+        httpRequest: HttpServletRequest,
+    ): ResponseEntity<TokenResponse> =
+        ResponseEntity.ok(authService.completeMfaLogin(request.mfaToken, request.code, clientIp(httpRequest)))
+
+    @DeleteMapping("/mfa")
+    fun mfaDisable(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: MfaDisableRequest,
+    ): ResponseEntity<Void> {
+        mfaService.disable(principal.id, request.code)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/mfa/backup-codes/regenerate")
+    fun mfaRegenerateBackupCodes(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: MfaConfirmRequest,
+    ): ResponseEntity<MfaRegenerateBackupCodesResponse> =
+        ResponseEntity.ok(MfaRegenerateBackupCodesResponse(mfaService.regenerateBackupCodes(principal.id, request.code)))
+
+    // ── API keys ──────────────────────────────────────────────────────────
 
     @PostMapping("/api-keys")
     fun createApiKey(

@@ -4,7 +4,8 @@
 > Phase 1 completed: 2026-05-29
 > Phase 2 completed: 2026-05-30
 > Phase 3 completed: 2026-05-31
-> Next Flyway migration: **V026**
+> Phase 4 (MFA) completed: 2026-05-31
+> Next Flyway migration: **V027**
 
 ---
 
@@ -137,7 +138,7 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 | Feature | What it needs | Effort | Status |
 |---|---|---|---|
 | Password policy enforcement | Validator bean in `AuthService` + `UserService` | 2-3h | ✅ |
-| MFA / TOTP | TOTP library + `POST /auth/mfa/setup`, `POST /auth/mfa/verify` | 6-8h | ❌ |
+| MFA / TOTP | TOTP library + `POST /auth/mfa/setup`, `POST /auth/mfa/verify` | 6-8h | ✅ |
 | Session management UI | `GET /auth/sessions`, `DELETE /auth/sessions/{id}` | 3-4h | ✅ |
 | Login history endpoint | V024 migration + `login_history` table + `GET /auth/login-history` | 2-3h | ✅ |
 | Multi-node rate limiter | Swap Caffeine → Redis in `LoginAttemptTracker` (interface already abstracted) | 3-4h | ❌ |
@@ -173,6 +174,16 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 - Properties: `min-length` (default 8), `require-uppercase` (default false), `require-digit` (default false), `require-special` (default false)
 - Wired into `AuthService.resetPassword()` and `UserService.updateSelf()` (new-password path)
 
+### MFA / TOTP ✅
+- V026 migration: `user_mfa_configs(user_id, totp_secret[AES-GCM], enabled, deleted_at)` + `mfa_backup_codes(user_id, code_hash, used_at)`
+- `TotpService` — pure RFC 6238/4226 TOTP + RFC 4648 Base32; no external library
+- `MfaService` — `setup(userId)` → generate secret + QR URI, `confirm(userId, code)` → enable + issue 8 backup codes, `verify(userId, code)` → TOTP or backup code, `disable(userId, code)` → soft-delete config
+- `JwtTokenProvider.generateMfaChallengeToken()` — short-lived (5 min) JWT with `type: "mfa-challenge"` for 2-step login
+- `AuthService.login()` — after credential verify, if MFA enabled: issue challenge token in `TokenResponse(mfaRequired=true, mfaToken=…)` instead of full tokens; login history recorded on `completeMfaLogin()`
+- `AuthService.completeMfaLogin(mfaToken, code, clientIp)` — validates challenge token + TOTP/backup code, issues full tokens
+- Endpoints: `POST /auth/mfa/setup`, `POST /auth/mfa/confirm`, `POST /auth/mfa/verify` (public), `DELETE /auth/mfa`, `POST /auth/mfa/backup-codes/regenerate`
+- Tests: 401 guards, setup returns secret+qrUri, confirm with wrong code returns 400, mfa/verify with invalid token returns 400, login without MFA still returns normal tokens
+
 ### API keys for integrations ✅
 - V025 migration: `api_keys(id, tenant_id, user_id, name, key_hash, key_prefix, created_at, expires_at, revoked_at, last_used_at)`
 - `ApiKey` entity (NOT extending BaseEntity), `ApiKeyRepository` with hand-written JPQL
@@ -197,4 +208,4 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 - Every endpoint → `@PreAuthorize`
 - Class-level `@Transactional(readOnly = true)`, explicit `@Transactional` on writes
 
-## Next migration: V026
+## Next migration: V027

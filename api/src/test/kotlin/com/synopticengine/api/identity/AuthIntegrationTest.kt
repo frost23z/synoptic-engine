@@ -235,6 +235,53 @@ class AuthIntegrationTest : AbstractIntegrationTest() {
         assertNotNull(body[0]["loggedInAt"])
     }
 
+    // ── MFA / TOTP ────────────────────────────────────────────────────────
+
+    @Test
+    fun `POST mfa-setup without token returns 401`() {
+        assertEquals(401, post("/auth/mfa/setup", null, emptyMap<String, String>()).status())
+    }
+
+    @Test
+    fun `POST mfa-setup returns secret and qrUri`() {
+        val token = login(email, password)
+        val result = post("/auth/mfa/setup", token, emptyMap<String, String>())
+        assertEquals(200, result.status())
+        val body = result.bodyAsMap()!!
+        assertNotNull(body["secret"])
+        assertNotNull(body["qrUri"])
+        assertTrue((body["qrUri"] as String).startsWith("otpauth://totp/"))
+    }
+
+    @Test
+    fun `POST mfa-confirm with wrong code returns 400`() {
+        val token = login(email, password)
+        post("/auth/mfa/setup", token, emptyMap<String, String>())
+        assertEquals(400, post("/auth/mfa/confirm", token, mapOf("code" to "000000")).status())
+    }
+
+    @Test
+    fun `DELETE mfa without token returns 401`() {
+        assertEquals(401, delete("/auth/mfa", null).status())
+    }
+
+    @Test
+    fun `POST mfa-verify with invalid token returns 400`() {
+        assertEquals(
+            400,
+            post("/auth/mfa/verify", null, mapOf("mfaToken" to "not-a-token", "code" to "000000")).status(),
+        )
+    }
+
+    @Test
+    fun `login does not require MFA when MFA is not enabled`() {
+        val result = post("/auth/login", null, mapOf("email" to email, "password" to password))
+        assertEquals(200, result.status())
+        val body = result.bodyAsMap()!!
+        assertEquals(false, body["mfaRequired"])
+        assertNotNull(body["accessToken"])
+    }
+
     // ── API keys ──────────────────────────────────────────────────────────
 
     @Test

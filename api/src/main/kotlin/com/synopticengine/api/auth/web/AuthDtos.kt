@@ -28,6 +28,8 @@ data class TokenResponse(
     val email: String,
     val fullName: String,
     val authorities: List<String>,
+    val mfaRequired: Boolean = false,
+    val mfaToken: String? = null,
 )
 
 data class MeResponse(
