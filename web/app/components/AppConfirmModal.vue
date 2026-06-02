@@ -13,6 +13,7 @@ withDefaults(
         confirmLabel?: string
         confirmColor?: ButtonProps['color']
         confirmDisabled?: boolean
+        widthClass?: string
     }>(),
     { confirmLabel: 'Confirm', confirmColor: 'primary' }
 )
@@ -20,7 +21,11 @@ defineEmits<{ 'update:open': [value: boolean]; confirm: [] }>()
 </script>
 
 <template>
-    <UModal :open="open" @update:open="$emit('update:open', $event)">
+    <UModal
+        :open="open"
+        :ui="widthClass ? { content: widthClass } : undefined"
+        @update:open="$emit('update:open', $event)"
+    >
         <template #content>
             <UCard>
                 <template #header>
