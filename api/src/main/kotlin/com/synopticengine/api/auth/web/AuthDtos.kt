@@ -3,6 +3,7 @@ package com.synopticengine.api.auth.web
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import java.time.Instant
 import java.util.UUID
 
 data class LoginRequest(
@@ -27,6 +28,8 @@ data class TokenResponse(
     val email: String,
     val fullName: String,
     val authorities: List<String>,
+    val mfaRequired: Boolean = false,
+    val mfaToken: String? = null,
 )
 
 data class MeResponse(
@@ -65,4 +68,41 @@ data class UpdateMeRequest(
     val currentPassword: String? = null,
     @field:Size(min = 8, max = 1000, message = "New password must be 8–1000 characters")
     val newPassword: String? = null,
+)
+
+data class SessionResponse(
+    val id: UUID,
+    val issuedAt: Instant,
+    val expiresAt: Instant,
+)
+
+data class LoginHistoryResponse(
+    val id: UUID,
+    val clientIp: String?,
+    val loggedInAt: Instant,
+)
+
+data class CreateApiKeyRequest(
+    @field:NotBlank(message = "Name is required")
+    @field:Size(max = 200, message = "Name must not exceed 200 characters")
+    val name: String,
+    val expiresAt: Instant? = null,
+)
+
+data class ApiKeyResponse(
+    val id: UUID,
+    val name: String,
+    val prefix: String,
+    val createdAt: Instant,
+    val expiresAt: Instant?,
+    val lastUsedAt: Instant?,
+)
+
+data class ApiKeyCreateResponse(
+    val id: UUID,
+    val name: String,
+    val key: String,
+    val prefix: String,
+    val createdAt: Instant,
+    val expiresAt: Instant?,
 )
