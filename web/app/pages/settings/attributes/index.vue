@@ -7,6 +7,7 @@ useHead({ title: 'Attributes — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 interface AttributeOptionResponse {
     id: string
@@ -111,7 +112,7 @@ async function submitCreate() {
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editOpen = ref(false)
 const saving = ref(false)
-const editTarget = ref<AttributeResponse | null>(null)
+const editTarget = shallowRef<AttributeResponse | null>(null)
 const editForm = reactive({ adminName: '', type: 'TEXT', sortOrder: 0 })
 
 function openEdit(a: AttributeResponse) {
@@ -144,28 +145,21 @@ async function submitEdit() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<AttributeResponse | null>(null)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/settings/attributes/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Attribute deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+const {
+    open: deleteOpen,
+    target: attributeToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<AttributeResponse>({
+    endpoint: (a) => `/api/settings/attributes/${a.id}`,
+    successMessage: 'Attribute deleted',
+    onDeleted: refresh,
+})
 
 // ── Options panel (for SELECT / MULTISELECT) ──────────────────────────────
 const optionsOpen = ref(false)
-const optionsTarget = ref<AttributeResponse | null>(null)
+const optionsTarget = shallowRef<AttributeResponse | null>(null)
 const options = ref<AttributeOptionResponse[]>([])
 const optionsPending = ref(false)
 const newOptionName = ref('')
@@ -231,23 +225,25 @@ const columns: TableColumn<AttributeResponse>[] = [
 ]
 
 function rowActions(a: AttributeResponse): DropdownMenuItem[][] {
-    const primary: DropdownMenuItem[] = [
-        { label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(a) },
-    ]
-    if (a.type === 'SELECT' || a.type === 'MULTISELECT') {
-        primary.push({ label: 'Options', icon: 'i-tabler-list', onSelect: () => openOptions(a) })
+    const primary: DropdownMenuItem[] = []
+    if (can('attributes.edit')) {
+        primary.push({ label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(a) })
+        if (a.type === 'SELECT' || a.type === 'MULTISELECT') {
+            primary.push({
+                label: 'Options',
+                icon: 'i-tabler-list',
+                onSelect: () => openOptions(a),
+            })
+        }
     }
-    const items: DropdownMenuItem[][] = [primary]
-    if (a.userDefined) {
+    const items: DropdownMenuItem[][] = primary.length ? [primary] : []
+    if (a.userDefined && can('attributes.delete')) {
         items.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
                 color: 'error',
-                onSelect: () => {
-                    toDelete.value = a
-                    deleteOpen.value = true
-                },
+                onSelect: () => promptDelete(a),
             },
         ])
     }
@@ -257,13 +253,16 @@ function rowActions(a: AttributeResponse): DropdownMenuItem[][] {
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Attributes</h2>
-                <p class="text-muted text-sm">Custom fields for CRM entities</p>
-            </div>
-            <UButton icon="i-tabler-plus" label="New Attribute" @click="openCreate" />
-        </div>
+        <AppPageHeader title="Attributes" subtitle="Custom fields for CRM entities">
+            <template #actions>
+                <UButton
+                    v-if="can('attributes.create')"
+                    icon="i-tabler-plus"
+                    label="New Attribute"
+                    @click="openCreate"
+                />
+            </template>
+        </AppPageHeader>
 
         <!-- Entity type filter -->
         <div class="flex gap-2">
@@ -278,178 +277,141 @@ function rowActions(a: AttributeResponse): DropdownMenuItem[][] {
             />
         </div>
 
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="attributes ?? []" :columns="columns" :loading="pending" sticky>
-                <template #code-cell="{ row }">
-                    <code class="bg-muted rounded px-1.5 py-0.5 text-xs">{{
-                        row.original.code
-                    }}</code>
-                </template>
-                <template #adminName-cell="{ row }">
-                    <span class="font-medium">{{ row.original.adminName }}</span>
-                </template>
-                <template #type-cell="{ row }">
-                    <UBadge :label="row.original.type" color="neutral" variant="soft" size="sm" />
-                </template>
-                <template #meta-cell="{ row }">
-                    <div class="flex gap-1">
-                        <UBadge
-                            v-if="row.original.userDefined"
-                            label="Custom"
-                            color="primary"
-                            variant="soft"
-                            size="xs"
-                        />
-                        <UBadge v-else label="System" color="neutral" variant="soft" size="xs" />
-                        <UBadge
-                            v-if="row.original.sortOrder != null"
-                            :label="`#${row.original.sortOrder}`"
-                            color="neutral"
-                            variant="soft"
-                            size="xs"
-                        />
-                    </div>
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-database-off" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No attributes for {{ entityFilter }}</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
+        <AppListTable :rows="attributes ?? []" :columns="columns" :loading="pending">
+            <template #code-cell="{ row }">
+                <code class="bg-muted rounded px-1.5 py-0.5 text-xs">{{ row.original.code }}</code>
+            </template>
+            <template #adminName-cell="{ row }">
+                <span class="font-medium">{{ row.original.adminName }}</span>
+            </template>
+            <template #type-cell="{ row }">
+                <UBadge :label="row.original.type" color="neutral" variant="soft" size="sm" />
+            </template>
+            <template #meta-cell="{ row }">
+                <div class="flex gap-1">
+                    <UBadge
+                        v-if="row.original.userDefined"
+                        label="Custom"
+                        color="primary"
+                        variant="soft"
+                        size="xs"
+                    />
+                    <UBadge v-else label="System" color="neutral" variant="soft" size="xs" />
+                    <UBadge
+                        v-if="row.original.sortOrder != null"
+                        :label="`#${row.original.sortOrder}`"
+                        color="neutral"
+                        variant="soft"
+                        size="xs"
+                    />
+                </div>
+            </template>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions
+                    v-if="
+                        can('attributes.edit') ||
+                        (row.original.userDefined && can('attributes.delete'))
+                    "
+                    :items="rowActions(row.original)"
+                />
+            </template>
+            <template #empty>
+                <AppEmptyState
+                    icon="i-tabler-database-off"
+                    :message="`No attributes for ${entityFilter}`"
+                />
+            </template>
+        </AppListTable>
 
         <!-- Create modal -->
-        <UModal v-model:open="createOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Create Attribute</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitCreate">
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Code" required>
-                                <UInput
-                                    v-model="createForm.code"
-                                    placeholder="e.g. custom_field"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="Name" required>
-                                <UInput
-                                    v-model="createForm.adminName"
-                                    placeholder="Display name"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Type" required>
-                                <USelect
-                                    v-model="createForm.type"
-                                    :items="ATTRIBUTE_TYPES.map((t) => ({ label: t, value: t }))"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="Entity" required>
-                                <USelect
-                                    v-model="createForm.entityType"
-                                    :items="ENTITY_TYPES.map((t) => ({ label: t, value: t }))"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                        </div>
-                        <UFormField label="Sort Order">
-                            <UInput
-                                v-model.number="createForm.sortOrder"
-                                type="number"
-                                min="0"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <USwitch v-model="createForm.userDefined" label="User-defined (custom)" />
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creating"
-                                :disabled="!createForm.code || !createForm.adminName"
-                                @click="submitCreate"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="createOpen"
+            title="Create Attribute"
+            confirm-label="Create"
+            :loading="creating"
+            :confirm-disabled="!createForm.code || !createForm.adminName"
+            @confirm="submitCreate"
+        >
+            <form class="space-y-3" @submit.prevent="submitCreate">
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Code" required>
+                        <UInput
+                            v-model="createForm.code"
+                            placeholder="e.g. custom_field"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Name" required>
+                        <UInput
+                            v-model="createForm.adminName"
+                            placeholder="Display name"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Type" required>
+                        <USelect
+                            v-model="createForm.type"
+                            :items="ATTRIBUTE_TYPES.map((t) => ({ label: t, value: t }))"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Entity" required>
+                        <USelect
+                            v-model="createForm.entityType"
+                            :items="ENTITY_TYPES.map((t) => ({ label: t, value: t }))"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+                <UFormField label="Sort Order">
+                    <UInput
+                        v-model.number="createForm.sortOrder"
+                        type="number"
+                        min="0"
+                        class="w-full"
+                    />
+                </UFormField>
+                <USwitch v-model="createForm.userDefined" label="User-defined (custom)" />
+            </form>
+        </AppConfirmModal>
 
         <!-- Edit modal -->
-        <UModal v-model:open="editOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Edit Attribute</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitEdit">
-                        <UFormField label="Name" required>
-                            <UInput v-model="editForm.adminName" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Type" required>
-                            <USelect
-                                v-model="editForm.type"
-                                :items="ATTRIBUTE_TYPES.map((t) => ({ label: t, value: t }))"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Sort Order">
-                            <UInput
-                                v-model.number="editForm.sortOrder"
-                                type="number"
-                                min="0"
-                                class="w-full"
-                            />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="editOpen = false"
-                            />
-                            <UButton
-                                label="Save"
-                                :loading="saving"
-                                :disabled="!editForm.adminName"
-                                @click="submitEdit"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="editOpen"
+            title="Edit Attribute"
+            confirm-label="Save"
+            :loading="saving"
+            :confirm-disabled="!editForm.adminName"
+            @confirm="submitEdit"
+        >
+            <form class="space-y-3" @submit.prevent="submitEdit">
+                <UFormField label="Name" required>
+                    <UInput v-model="editForm.adminName" class="w-full" />
+                </UFormField>
+                <UFormField label="Type" required>
+                    <USelect
+                        v-model="editForm.type"
+                        :items="ATTRIBUTE_TYPES.map((t) => ({ label: t, value: t }))"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Sort Order">
+                    <UInput
+                        v-model.number="editForm.sortOrder"
+                        type="number"
+                        min="0"
+                        class="w-full"
+                    />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
-        <!-- Options modal -->
+        <!-- Options panel (bespoke) -->
         <UModal v-model:open="optionsOpen">
             <template #content>
                 <UCard>
@@ -515,34 +477,18 @@ function rowActions(a: AttributeResponse): DropdownMenuItem[][] {
         </UModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Attribute</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.adminName }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Attribute"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ attributeToDelete?.adminName }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>
