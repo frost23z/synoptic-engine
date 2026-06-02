@@ -73,7 +73,9 @@ page duplication). Components are auto-imported.
 - `AppMassActionBar` — bulk bar; renders when `:count > 0`; emits `clear`; default slot for actions.
 - `AppPagination` — `v-model:page` + `:total` (+ optional `:page-size`); hides when one page.
 - `AppEmptyState` — `:icon` + `:message` + default slot (CTA).
-- `AppConfirmModal` — `v-model:open` + `:title` + `@confirm`; body in the default slot.
+- `AppConfirmModal` — `v-model:open` + `:title` + `@confirm`; body in the default slot. Also
+  backs create/edit/upload form modals via `:confirm-disabled` and `width-class`
+  (e.g. `sm:max-w-2xl`).
 
 **Composables** (`app/composables/`):
 
@@ -88,6 +90,18 @@ Reference implementations: `app/pages/leads/index.vue`, `contacts/persons/index.
 
 **Typed API:** `pnpm openapi:types` generates `app/types/api.gen.ts` from `../api-docs.json`
 (gitignored; auto-generated on install). Prefer generated types over hand-written DTOs.
+
+### Rollout status
+
+**All list/index pages are on the library** (leads, contacts persons/organizations, quotes,
+products, activities, warehouses, and every settings list). Bespoke sub-panels (kanban,
+pipeline stages, warehouse locations, attribute options, activity files/participants, import
+stats) intentionally stay custom inside library-wrapped pages.
+
+**Not yet migrated (bespoke, low list-duplication — optional follow-up):** detail pages
+(`*/[id].vue`), create pages (`*/create.vue`), `mail/*`, and the dashboard (`pages/index.vue`).
+A future `AppDetailLayout` (back button + title + actions + content) would standardise the
+detail/create headers; until then they remain hand-rolled.
 
 ## Roadmap & feature spec
 
