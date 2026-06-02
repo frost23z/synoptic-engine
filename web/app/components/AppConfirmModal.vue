@@ -12,6 +12,7 @@ withDefaults(
         loading?: boolean
         confirmLabel?: string
         confirmColor?: ButtonProps['color']
+        confirmDisabled?: boolean
     }>(),
     { confirmLabel: 'Confirm', confirmColor: 'primary' }
 )
@@ -38,6 +39,7 @@ defineEmits<{ 'update:open': [value: boolean]; confirm: [] }>()
                             :color="confirmColor"
                             :label="confirmLabel"
                             :loading="loading"
+                            :disabled="confirmDisabled"
                             @click="$emit('confirm')"
                         />
                     </div>
