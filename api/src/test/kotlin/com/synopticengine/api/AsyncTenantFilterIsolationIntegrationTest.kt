@@ -14,8 +14,8 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Import
-import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -191,8 +191,7 @@ open class TenantScopedLeadReader(
     private val leadRepository: LeadRepository,
 ) {
     @Transactional(readOnly = true)
-    open fun findAll(pageable: Pageable): List<Lead> =
-        leadRepository.findAllByDeletedAtIsNull(pageable).content
+    open fun findAll(pageable: Pageable): List<Lead> = leadRepository.findAllByDeletedAtIsNull(pageable).content
 
     @Transactional(readOnly = true)
     open fun findById(id: UUID): Lead? = leadRepository.findActiveById(id)

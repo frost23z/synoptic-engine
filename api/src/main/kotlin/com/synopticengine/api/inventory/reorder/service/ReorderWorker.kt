@@ -44,7 +44,12 @@ class ReorderWorker(
                         eventName = "inventory.low-stock",
                         entityType = "Product",
                         entityId = productId,
-                        payload = mapOf("tenantId" to tenantId.toString(), "onHand" to onHand, "reorderThreshold" to threshold),
+                        payload =
+                            mapOf(
+                                "tenantId" to tenantId.toString(),
+                                "onHand" to onHand,
+                                "reorderThreshold" to threshold,
+                            ),
                     ),
                 )
             }

@@ -141,7 +141,8 @@ class MfaService(
         code: String,
     ): Boolean {
         val hash = hashCode(code)
-        val match = mfaBackupCodeRepository.findUnusedByUserId(userId).firstOrNull { it.codeHash == hash } ?: return false
+        val match =
+            mfaBackupCodeRepository.findUnusedByUserId(userId).firstOrNull { it.codeHash == hash } ?: return false
         match.usedAt = Instant.now()
         mfaBackupCodeRepository.save(match)
         return true

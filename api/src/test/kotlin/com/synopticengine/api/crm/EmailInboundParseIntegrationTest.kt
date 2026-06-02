@@ -32,7 +32,10 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                     "references" to listOf("<parent@example.com>"),
                 ),
             )
-        val timestamp = java.time.Instant.now().epochSecond
+        val timestamp =
+            java.time.Instant
+                .now()
+                .epochSecond
         val result =
             mockMvc
                 .perform(
@@ -60,7 +63,10 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                     "body" to "Hello",
                 ),
             )
-        val timestamp = java.time.Instant.now().epochSecond
+        val timestamp =
+            java.time.Instant
+                .now()
+                .epochSecond
         val result =
             mockMvc
                 .perform(
@@ -97,7 +103,10 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
             objectMapper.writeValueAsBytes(
                 mapOf("from" to "x@y.z", "to" to "a@b.c", "subject" to "s", "body" to "b"),
             )
-        val timestamp = java.time.Instant.now().epochSecond
+        val timestamp =
+            java.time.Instant
+                .now()
+                .epochSecond
         val result =
             mockMvc
                 .perform(

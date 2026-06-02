@@ -318,14 +318,18 @@ class LeadService(
         // Pre-compute which leads will actually change stage so we can publish
         // domain events after the bulk update without loading full entities.
         val stageChangingIds: List<UUID> =
-            if (stageId != null) leadRepository.findIdsWithDifferentStage(ids, stageId)
-            else emptyList()
+            if (stageId != null) {
+                leadRepository.findIdsWithDifferentStage(ids, stageId)
+            } else {
+                emptyList()
+            }
 
         // When status isn't being overridden we need each lead's current status to
         // include the correct value in the stage-changed event payload.
         val currentStatusById: Map<UUID, String> =
             if (stageChangingIds.isNotEmpty() && status == null) {
-                leadRepository.findIdAndStatusByIds(stageChangingIds)
+                leadRepository
+                    .findIdAndStatusByIds(stageChangingIds)
                     .associate { row -> (row[0] as UUID) to (row[1] as LeadStatus).value }
             } else {
                 emptyMap()
@@ -338,8 +342,9 @@ class LeadService(
         // Publish stage-changed events for leads whose stage actually moved.
         val overriddenStatus = status?.value
         stageChangingIds.forEach { id ->
-            val finalStatus = overriddenStatus
-                ?: currentStatusById.getOrDefault(id, LeadStatus.OPEN.value)
+            val finalStatus =
+                overriddenStatus
+                    ?: currentStatusById.getOrDefault(id, LeadStatus.OPEN.value)
             publishLeadStageChanged(id, stageId!!, finalStatus)
         }
     }

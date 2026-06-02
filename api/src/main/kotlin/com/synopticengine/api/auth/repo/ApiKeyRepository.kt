@@ -8,24 +8,28 @@ import java.time.Instant
 import java.util.UUID
 
 interface ApiKeyRepository : JpaRepository<ApiKey, UUID> {
-    @Query("""
+    @Query(
+        """
         SELECT k FROM ApiKey k
         WHERE k.keyHash = :hash
           AND k.revokedAt IS NULL
           AND (k.expiresAt IS NULL OR k.expiresAt > :now)
-    """)
+    """,
+    )
     fun findActiveByHash(
         @Param("hash") hash: String,
         @Param("now") now: Instant,
     ): ApiKey?
 
-    @Query("""
+    @Query(
+        """
         SELECT k FROM ApiKey k
         WHERE k.tenantId = :tenantId
           AND k.userId = :userId
           AND k.revokedAt IS NULL
         ORDER BY k.createdAt DESC
-    """)
+    """,
+    )
     fun findActiveByTenantAndUser(
         @Param("tenantId") tenantId: UUID,
         @Param("userId") userId: UUID,

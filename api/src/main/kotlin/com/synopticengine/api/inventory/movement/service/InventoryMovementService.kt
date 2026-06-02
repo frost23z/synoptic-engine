@@ -43,13 +43,17 @@ class InventoryMovementService(
         return entries.map { it.toStockStateResponse() }
     }
 
-    fun getLowStock(): List<LowStockEntry> {
-        return productRepository.findAllByDeletedAtIsNull(org.springframework.data.domain.Pageable.unpaged())
-            .content
+    fun getLowStock(): List<LowStockEntry> =
+        productRepository
+            .findAllByDeletedAtIsNull(
+                org.springframework.data.domain.Pageable
+                    .unpaged(),
+            ).content
             .filter { it.reorderThreshold != null }
             .mapNotNull { product ->
                 val totalOnHand =
-                    inventoryRepository.findAllByProductId(product.id!!)
+                    inventoryRepository
+                        .findAllByProductId(product.id!!)
                         .sumOf { it.onHand }
                 if (totalOnHand <= product.reorderThreshold!!) {
                     LowStockEntry(
@@ -63,7 +67,6 @@ class InventoryMovementService(
                     null
                 }
             }
-    }
 
     @Transactional
     fun reserve(

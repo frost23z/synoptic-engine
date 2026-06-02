@@ -32,19 +32,20 @@ class AiLeadService(
         val prompt = buildPrompt(rawText, hints)
 
         val params =
-            MessageCreateParams.builder()
+            MessageCreateParams
+                .builder()
                 .model("claude-opus-4-8")
                 .maxTokens(4096L)
                 .thinking(ThinkingConfigAdaptive.builder().build())
                 .systemOfTextBlockParams(
                     listOf(
-                        TextBlockParam.builder()
+                        TextBlockParam
+                            .builder()
                             .text(SYSTEM_PROMPT)
                             .cacheControl(CacheControlEphemeral.builder().build())
                             .build(),
                     ),
-                )
-                .addUserMessage(prompt)
+                ).addUserMessage(prompt)
                 .build()
 
         val message = client.messages().create(params)

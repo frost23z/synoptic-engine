@@ -89,7 +89,12 @@ class TransferService(
         val toLocation =
             locationRepository.findByIdAndDeletedAtIsNull(order.toLocationId)
                 ?: throw NoSuchElementException("To-location not found: ${order.toLocationId}")
-        val fromInv = inventoryMovementService.findOrCreate(order.productId, fromLocation.warehouseId, order.fromLocationId)
+        val fromInv =
+            inventoryMovementService.findOrCreate(
+                order.productId,
+                fromLocation.warehouseId,
+                order.fromLocationId,
+            )
         fromInv.inTransit = maxOf(0, fromInv.inTransit - order.quantity)
         val toInv = inventoryMovementService.findOrCreate(order.productId, toLocation.warehouseId, order.toLocationId)
         toInv.onHand += order.quantity

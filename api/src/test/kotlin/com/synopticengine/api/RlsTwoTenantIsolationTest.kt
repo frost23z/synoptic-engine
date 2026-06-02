@@ -39,7 +39,9 @@ import kotlin.test.assertTrue
 @Import(RlsNativeSqlReader::class)
 class RlsTwoTenantIsolationTest : AbstractIntegrationTest() {
     @Autowired private lateinit var tenantProvisioner: TenantProvisioner
+
     @Autowired private lateinit var leadFactory: LeadFactory
+
     @Autowired private lateinit var rlsNativeReader: RlsNativeSqlReader
 
     @Test
@@ -116,9 +118,10 @@ open class RlsNativeSqlReader(
     open fun allNonDeletedLeadIds(): List<UUID> {
         // No tenant_id predicate — RLS is the sole isolation mechanism here.
         @Suppress("UNCHECKED_CAST")
-        val raw = entityManager
-            .createNativeQuery("SELECT id FROM leads WHERE deleted_at IS NULL")
-            .resultList as List<Any>
+        val raw =
+            entityManager
+                .createNativeQuery("SELECT id FROM leads WHERE deleted_at IS NULL")
+                .resultList as List<Any>
         return raw.map { it as UUID }
     }
 }
