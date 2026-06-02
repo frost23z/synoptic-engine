@@ -4,15 +4,18 @@ import com.synopticengine.api.crm.activity.service.ActivityService
 import com.synopticengine.api.crm.activity.web.ActivityResponse
 import com.synopticengine.api.crm.email.web.EmailResponse
 import com.synopticengine.api.crm.lead.domain.LeadStatus
+import com.synopticengine.api.crm.lead.service.AiLeadService
 import com.synopticengine.api.crm.lead.service.LeadService
 import com.synopticengine.api.crm.quote.service.QuoteService
 import com.synopticengine.api.crm.quote.web.QuoteResponse
 import com.synopticengine.api.shared.attribute.EntityAttributeValueSummary
+import com.synopticengine.api.shared.upload.FileUploadGuard
 import com.synopticengine.api.shared.web.PageResponse
 import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 @RestController
@@ -33,6 +37,8 @@ class LeadController(
     private val leadService: LeadService,
     private val activityService: ActivityService,
     private val quoteService: QuoteService,
+    private val aiLeadService: AiLeadService,
+    private val uploadGuard: FileUploadGuard,
 ) {
     @GetMapping
     @PreAuthorize("hasAuthority('leads.view')")
@@ -274,6 +280,16 @@ class LeadController(
                 request.attributeValues.map { it.attributeId to it.value },
             ),
         )
+
+    @PostMapping("/ai-create", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    @PreAuthorize("hasAuthority('leads.create')")
+    fun aiCreate(
+        @RequestParam("file") file: MultipartFile,
+        @RequestParam("hints", required = false) hints: String?,
+    ): ResponseEntity<LeadResponse> {
+        uploadGuard.validateAiLeadFile(file)
+        return ResponseEntity.status(HttpStatus.CREATED).body(aiLeadService.createFromFile(file, hints))
+    }
 
     @PostMapping("/{id}/convert")
     @PreAuthorize("hasAuthority('leads.edit')")

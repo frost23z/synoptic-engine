@@ -14,6 +14,7 @@ import com.synopticengine.api.identity.repo.RoleRepository
 import com.synopticengine.api.identity.repo.UserRepository
 import com.synopticengine.api.identity.web.UserDetailResponse
 import com.synopticengine.api.shared.TenantContext
+import com.synopticengine.api.shared.config.PasswordPolicyService
 import com.synopticengine.api.shared.config.TenantSession
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.core.context.SecurityContextHolder
@@ -31,6 +32,7 @@ class UserService(
     private val permissionRepository: PermissionRepository,
     private val passwordEncoder: PasswordEncoder,
     private val tenantSession: TenantSession,
+    private val passwordPolicyService: PasswordPolicyService,
 ) : IdentityApi {
     override fun findById(id: UUID): UserSummary? =
         userRepository
@@ -268,6 +270,7 @@ class UserService(
             if (!passwordEncoder.matches(currentPassword, user.passwordHash)) {
                 throw IllegalArgumentException("Current password is incorrect")
             }
+            passwordPolicyService.validate(newPassword)
             user.passwordHash = passwordEncoder.encode(newPassword) ?: error("Password encoding failed")
         }
         userRepository.save(user)

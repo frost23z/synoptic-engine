@@ -2,15 +2,22 @@ package com.synopticengine.api.auth.service
 
 import com.synopticengine.api.auth.UserPrincipal
 import com.synopticengine.api.auth.config.JwtTokenProvider
+import com.synopticengine.api.auth.domain.LoginHistory
 import com.synopticengine.api.auth.domain.PasswordReset
 import com.synopticengine.api.auth.domain.RefreshSession
+import com.synopticengine.api.auth.repo.LoginHistoryRepository
 import com.synopticengine.api.auth.repo.PasswordResetRepository
 import com.synopticengine.api.auth.repo.RefreshSessionRepository
+import com.synopticengine.api.auth.web.LoginHistoryResponse
+import com.synopticengine.api.auth.web.SessionResponse
 import com.synopticengine.api.auth.web.TokenResponse
+import com.synopticengine.api.auth.web.MfaVerifyRequest
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
+import com.synopticengine.api.shared.config.PasswordPolicyService
 import com.synopticengine.api.shared.email.MailSenderService
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.data.domain.PageRequest
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -27,9 +34,12 @@ class AuthService(
     private val passwordEncoder: PasswordEncoder,
     private val passwordResetRepository: PasswordResetRepository,
     private val refreshSessionRepository: RefreshSessionRepository,
+    private val loginHistoryRepository: LoginHistoryRepository,
     private val mailSenderService: MailSenderService,
     private val loginAttemptTracker: LoginAttemptTracker,
     private val forgotPasswordAttemptTracker: ForgotPasswordAttemptTracker,
+    private val passwordPolicyService: PasswordPolicyService,
+    private val mfaService: MfaService,
     @Value("\${synoptic.auth.password-reset.ttl-minutes:15}") private val resetTtlMinutes: Long,
 ) {
     fun login(
@@ -60,6 +70,51 @@ class AuthService(
         credentials.requireActive()
         loginAttemptTracker.recordSuccess(email, clientIp)
 
+        if (mfaService.isEnabled(credentials.id)) {
+            val challengeToken = jwtTokenProvider.generateMfaChallengeToken(credentials.id, credentials.tenantId)
+            return TokenResponse(
+                accessToken = "",
+                refreshToken = "",
+                userId = credentials.id,
+                email = credentials.email,
+                fullName = credentials.fullName,
+                authorities = emptyList(),
+                mfaRequired = true,
+                mfaToken = challengeToken,
+            )
+        }
+
+        loginHistoryRepository.save(
+            LoginHistory().apply {
+                this.userId = credentials.id
+                this.tenantId = credentials.tenantId
+                this.clientIp = clientIp
+            },
+        )
+        return buildTokenResponse(credentials)
+    }
+
+    fun completeMfaLogin(
+        mfaToken: String,
+        code: String,
+        clientIp: String? = null,
+    ): TokenResponse {
+        val claims =
+            jwtTokenProvider.parseClaimsOrNull(mfaToken)
+                ?: throw IllegalArgumentException("Invalid MFA token")
+        if (!jwtTokenProvider.isMfaChallengeToken(claims)) throw IllegalArgumentException("Invalid MFA token")
+        val userId = jwtTokenProvider.getUserId(claims)
+        if (!mfaService.verify(userId, code)) throw IllegalArgumentException("Invalid or expired TOTP code")
+        val credentials =
+            identityApi.findCredentialsById(userId) ?: throw IllegalArgumentException("User not found")
+        credentials.requireActive()
+        loginHistoryRepository.save(
+            LoginHistory().apply {
+                this.userId = credentials.id
+                this.tenantId = credentials.tenantId
+                this.clientIp = clientIp
+            },
+        )
         return buildTokenResponse(credentials)
     }
 
@@ -196,6 +251,7 @@ class AuthService(
         if (reset.isExpired(resetTtlMinutes)) {
             throw IllegalArgumentException("Token has expired. Please request a new password reset.")
         }
+        passwordPolicyService.validate(newPassword)
         val encodedPassword =
             passwordEncoder.encode(newPassword)
                 ?: throw IllegalStateException("Password encoding failed")
@@ -228,6 +284,35 @@ class AuthService(
     fun logoutAll(userId: UUID) {
         refreshSessionRepository.revokeAllByUserId(userId, Instant.now(), "LOGOUT_ALL")
     }
+
+    fun listSessions(userId: UUID): List<SessionResponse> =
+        refreshSessionRepository.findActiveByUserId(userId, Instant.now()).map { s ->
+            SessionResponse(id = s.id, issuedAt = s.issuedAt, expiresAt = s.expiresAt)
+        }
+
+    @Transactional
+    fun revokeSession(
+        userId: UUID,
+        sessionId: UUID,
+    ) {
+        val session =
+            refreshSessionRepository.findById(sessionId).orElse(null)
+                ?: throw NoSuchElementException("Session not found")
+        if (session.userId != userId) throw NoSuchElementException("Session not found")
+        if (session.revokedAt != null) return
+        session.revokedAt = Instant.now()
+        session.revokedReason = "USER_REVOKED"
+        refreshSessionRepository.save(session)
+    }
+
+    fun listLoginHistory(
+        userId: UUID,
+        page: Int,
+        size: Int,
+    ): List<LoginHistoryResponse> =
+        loginHistoryRepository
+            .findRecentByUserId(userId, PageRequest.of(page, size))
+            .map { h -> LoginHistoryResponse(id = h.id, clientIp = h.clientIp, loggedInAt = h.loggedInAt) }
 
     private fun generateResetToken(): String {
         // 32 bytes = 256 bits of entropy; URL-safe Base64 so it survives copy-paste.
