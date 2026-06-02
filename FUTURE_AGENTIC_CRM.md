@@ -1,10 +1,17 @@
-# AI Readiness & Agent Platform Plan — Synoptic Engine
+# FUTURE WORK — Agentic CRM (post-MVP) — Synoptic Engine
 
-> Authored: 2026-06-02
-> Purpose: (1) final backend-readiness verdict before the frontend push, and
-> (2) a phased, agent-executable plan to make Synoptic Engine "AI-functional"
-> in the spirit of Octolane ("the best CRM is no CRM").
-> Companion docs: `BACKEND_PLAN.md` (parity status), `api/CLAUDE.md` (arch rules).
+> ⚠️ **NOT part of the MVP.** The MVP is Krayin parity + enterprise-grade
+> multi-tenant backend (✅ complete) + a workable frontend (in progress — see
+> `FRONTEND_PLAN.md`). This document is the **future product direction**: making
+> Synoptic Engine AI-functional / agentic in the spirit of Octolane
+> ("the best CRM is no CRM"). Do not start this work until the MVP frontend ships.
+>
+> Authored: 2026-06-02 · Kept as the plan-of-record for the agentic phase.
+> Companion docs: `FRONTEND_PLAN.md` (current work), `api/CLAUDE.md` (arch rules).
+>
+> Part 1 below (backend-readiness verdict) is retained because it documents *why*
+> the backend is a strong substrate for agents; its current/actionable items
+> (run the full test suite, doc hygiene) are tracked in the current-phase docs.
 
 ---
 
@@ -40,23 +47,11 @@ well-suited to hosting AI agents.
 | OpenAPI/Swagger (`/v3/api-docs`, `/swagger-ui`) | ⭐⭐⭐⭐ | Frontend can generate a typed client; agents get a machine-readable tool catalog. |
 | Existing AI (`AiLeadService` → Claude Opus 4.8, prompt caching, adaptive thinking, Tika) | ⭐⭐⭐ | Proves the integration works — but it's a one-off (see gaps). |
 
-### Gaps to close BEFORE / DURING frontend prep (small, high-leverage)
-1. **`GUIDELINES.md` is missing.** Both `web/CLAUDE.md` and `api/`-side docs cite it as the
-   canonical API spec + page list ("see ../GUIDELINES.md Section 4 / Section 8"). It does
-   not exist in the repo. → Generate it from the live OpenAPI spec (`/v3/api-docs`) so the
-   frontend has a single source of truth. **Recommended: also generate a typed TS client.**
-2. **`api/README.md` is stale.** It says "Frontend… (not started yet)" (it's ~11.6k LOC),
-   references `JpaSpecificationExecutor`/`*Specs` (now **forbidden** by `api/CLAUDE.md`
-   Rule 6), and lists migrations "V001–V007" (there are 26). → Rewrite or delete; defer to
-   `api/CLAUDE.md` as source of truth.
-3. **No generated API client for the frontend.** The Nuxt app hand-writes `$fetch` calls
-   via `useApi`. Generating types/client from OpenAPI removes drift risk during the
-   frontend push.
-4. **Frontend shared-component library is thin** (only a theme-picker). Before fleshing out
-   pages, establish shared primitives (DataTable, FormDrawer, KanbanBoard, EntityTimeline,
-   FilterBar) to avoid 30+ pages of copy-paste. (Frontend concern, noted here for sequencing.)
-
-> None of these block frontend work; they're hygiene that makes it faster and lower-drift.
+### Frontend-prep hygiene (now tracked in the current phase)
+The doc/tooling gaps originally noted here — missing `GUIDELINES.md`, stale `api/README.md`,
+no generated OpenAPI client, thin component library — are **current-phase** concerns, not
+agentic ones. They are now addressed/tracked in **`FRONTEND_PLAN.md`** (and the stale READMEs
+have been rewritten). Nothing here blocks the frontend work.
 
 ---
 

@@ -24,11 +24,13 @@ pnpm format:check
 
 ## Backend API
 
-- Base URL: `http://localhost:8090/api`
+- Base host: `http://localhost:8090` (set as `runtimeConfig.public.apiBase`).
+  Resource endpoints live under `/api/*`; auth endpoints under `/auth/*`.
 - Auth: `POST /auth/login` → `{ accessToken, refreshToken }`
 - Header: `Authorization: Bearer <accessToken>` (15-min TTL)
 - Refresh: `POST /auth/refresh`
-- Full API spec: see `../GUIDELINES.md` Section 4
+- **API contract = the backend OpenAPI spec** at `http://localhost:8090/v3/api-docs`
+  (Swagger UI: `/swagger-ui`). Generate types from it rather than hand-writing DTOs.
 
 ## Directory layout (Nuxt 4)
 
@@ -55,6 +57,13 @@ nuxt.config.ts
 - API calls: wrap in composables, never raw `$fetch` in components
 - All pages authenticated by default via `auth` middleware (except login)
 
-## Full spec
+## Roadmap & feature spec
 
-See `../GUIDELINES.md` Section 8 for the complete page list, component breakdown, and state management plan.
+- Completion roadmap (component/composable library, coverage gaps, phasing, agent working
+  agreement): [`../FRONTEND_PLAN.md`](../FRONTEND_PLAN.md).
+- Per-module feature behavior (user stories, fields, business rules): the
+  `../krayin-features-analysis/*.md` reference docs.
+- Agentic/AI surfaces are post-MVP — see [`../FUTURE_AGENTIC_CRM.md`](../FUTURE_AGENTIC_CRM.md).
+
+> Note: a `GUIDELINES.md` was referenced in earlier docs but never existed; the OpenAPI spec
+> plus the documents above are the sources of truth.
