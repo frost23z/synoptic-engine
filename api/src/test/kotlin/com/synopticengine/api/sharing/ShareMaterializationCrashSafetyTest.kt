@@ -36,10 +36,15 @@ import kotlin.test.assertTrue
  */
 class ShareMaterializationCrashSafetyTest : AbstractIntegrationTest() {
     @Autowired private lateinit var worker: ShareMaterializationWorker
+
     @Autowired private lateinit var taskRepository: ShareMaterializationTaskRepository
+
     @Autowired private lateinit var visibilityRepository: ResourceVisibilityRepository
+
     @Autowired private lateinit var tenantProvisioner: TenantProvisioner
+
     @Autowired private lateinit var leadFactory: LeadFactory
+
     @Autowired private lateinit var transactionManager: PlatformTransactionManager
 
     // ── finishedAt is always set ──────────────────────────────────────────────
@@ -50,15 +55,16 @@ class ShareMaterializationCrashSafetyTest : AbstractIntegrationTest() {
 
         // Persist a task whose policyId points at a non-existent policy.
         // runTask handles this gracefully (calls deleteBySource and returns).
-        val task = TransactionTemplate(transactionManager).execute {
-            taskRepository.save(
-                ShareMaterializationTask().apply {
-                    policyId = UUID.randomUUID() // deliberate missing policy
-                    tenantId = owner.tenantId
-                    op = ShareMaterializationOp.INSERT
-                },
-            )
-        }
+        val task =
+            TransactionTemplate(transactionManager).execute {
+                taskRepository.save(
+                    ShareMaterializationTask().apply {
+                        policyId = UUID.randomUUID() // deliberate missing policy
+                        tenantId = owner.tenantId
+                        op = ShareMaterializationOp.INSERT
+                    },
+                )
+            }
 
         assertNull(task.finishedAt, "Task should have null finishedAt before running")
 
@@ -99,27 +105,30 @@ class ShareMaterializationCrashSafetyTest : AbstractIntegrationTest() {
         val policyId = UUID.fromString(createPolicy(relId, owner.token, "leads", "READ"))
 
         val visibilityAfterFirst =
-            visibilityRepository.findAll()
+            visibilityRepository
+                .findAll()
                 .filter { it.sourceId == policyId }
                 .sortedBy { it.resourceId.toString() }
 
         assertTrue(visibilityAfterFirst.isNotEmpty(), "Expected visibility rows after first materialization")
 
         // Second run: create a new task for the same policy and run it.
-        val retryTask = TransactionTemplate(transactionManager).execute {
-            taskRepository.save(
-                ShareMaterializationTask().apply {
-                    this.policyId = policyId
-                    this.tenantId = owner.tenantId
-                    this.op = ShareMaterializationOp.UPDATE
-                },
-            )
-        }
+        val retryTask =
+            TransactionTemplate(transactionManager).execute {
+                taskRepository.save(
+                    ShareMaterializationTask().apply {
+                        this.policyId = policyId
+                        this.tenantId = owner.tenantId
+                        this.op = ShareMaterializationOp.UPDATE
+                    },
+                )
+            }
 
         TenantContext.runAs(owner.tenantId) { worker.runTask(retryTask) }
 
         val visibilityAfterSecond =
-            visibilityRepository.findAll()
+            visibilityRepository
+                .findAll()
                 .filter { it.sourceId == policyId }
                 .sortedBy { it.resourceId.toString() }
 
@@ -138,15 +147,16 @@ class ShareMaterializationCrashSafetyTest : AbstractIntegrationTest() {
     fun `markFailed sets finishedAt in a separate transaction (simulates drainQueue crash recovery)`() {
         val owner = tenantProvisioner.provision("crashsafe-mf")
 
-        val task = TransactionTemplate(transactionManager).execute {
-            taskRepository.save(
-                ShareMaterializationTask().apply {
-                    policyId = UUID.randomUUID()
-                    tenantId = owner.tenantId
-                    op = ShareMaterializationOp.INSERT
-                },
-            )
-        }
+        val task =
+            TransactionTemplate(transactionManager).execute {
+                taskRepository.save(
+                    ShareMaterializationTask().apply {
+                        policyId = UUID.randomUUID()
+                        tenantId = owner.tenantId
+                        op = ShareMaterializationOp.INSERT
+                    },
+                )
+            }
 
         assertNull(task.finishedAt)
 

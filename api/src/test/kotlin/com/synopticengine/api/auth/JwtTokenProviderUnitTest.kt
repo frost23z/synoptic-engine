@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 class JwtTokenProviderUnitTest {
     // 64-char ASCII string → 64-byte key; satisfies jjwt's minimum for HS256.
     private val secret = "abcdefghijklmnopqrstuvwxyz012345abcdefghijklmnopqrstuvwxyz012345"
-    private val accessExpiry = 15L * 60 * 1000       // 15 min in ms
+    private val accessExpiry = 15L * 60 * 1000 // 15 min in ms
     private val refreshExpiry = 7L * 24 * 60 * 60 * 1000 // 7 days in ms
 
     private fun provider() = JwtTokenProvider(secret, accessExpiry, refreshExpiry)

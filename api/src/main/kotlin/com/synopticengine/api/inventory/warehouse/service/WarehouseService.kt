@@ -150,7 +150,8 @@ class WarehouseService(
             locationRepository.findByIdAndWarehouseIdAndDeletedAtIsNull(locationId, warehouseId)
                 ?: throw NoSuchElementException("Location not found: $locationId")
         val stock =
-            inventoryRepository.findAllByWarehouseId(warehouseId)
+            inventoryRepository
+                .findAllByWarehouseId(warehouseId)
                 .filter { it.warehouseLocationId == locationId }
                 .sumOf { it.onHand + it.reserved + it.inTransit }
         check(stock == 0) { "Cannot delete location: stock present" }
