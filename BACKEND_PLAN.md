@@ -1,19 +1,25 @@
 # Backend Implementation Plan
 
+> ✅ **STATUS: MVP COMPLETE.** This is the feature inventory / completion record for the
+> backend. All planned phases shipped. The next phase is the frontend
+> (see [`FRONTEND_PLAN.md`](./FRONTEND_PLAN.md)); the agentic/AI direction is future work
+> (see [`FUTURE_AGENTIC_CRM.md`](./FUTURE_AGENTIC_CRM.md)).
+>
 > Last verified: 2026-05-30 — every controller read directly, cross-checked against Krayin feature docs
 > Phase 1 completed: 2026-05-29
 > Phase 2 completed: 2026-05-30
 > Phase 3 completed: 2026-05-31
 > Phase 4 (MFA) completed: 2026-05-31
 > Next Flyway migration: **V027**
+> Build: `./gradlew testClasses` compiles clean (full integration suite needs Docker).
 
 ---
 
 ## Verified Completeness: ~100% (Krayin parity + Phase 2 + Phase 3 enterprise features)
 
 All core CRM, inventory, automation, import/export, sharing, and identity features are
-implemented and wired. The remaining ~2% is one advanced feature (AI lead creation) and
-enterprise features not in the Krayin scope.
+implemented and wired — including AI lead creation (Phase 2). Anything beyond this
+(autonomous/agentic AI) is intentionally deferred to `FUTURE_AGENTIC_CRM.md`.
 
 ---
 
