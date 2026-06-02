@@ -3,6 +3,7 @@ export interface AuthUser {
     email: string
     fullName: string
     authorities: string[]
+    avatar?: string
 }
 
 export interface TokenResponse {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 
 definePageMeta({ title: 'Email Templates' })
 useHead({ title: 'Email Templates — Synoptic' })
@@ -117,15 +117,17 @@ const columns: TableColumn<EmailTemplateResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(t: EmailTemplateResponse) {
-    const items = [[{ label: 'Edit', icon: 'i-tabler-pencil', click: () => openEdit(t) }]]
+function rowActions(t: EmailTemplateResponse): DropdownMenuItem[][] {
+    const items: DropdownMenuItem[][] = [
+        [{ label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(t) }],
+    ]
     if (!t.predefined) {
         items.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
+                color: 'error',
+                onSelect: () => {
                     toDelete.value = t
                     deleteOpen.value = true
                 },

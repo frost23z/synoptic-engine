@@ -56,6 +56,38 @@ nuxt.config.ts
 - Stores: `use*Store` pattern with Pinia `defineStore`
 - API calls: wrap in composables, never raw `$fetch` in components
 - All pages authenticated by default via `auth` middleware (except login)
+- **Row-action menus use `onSelect` (not `click`)** — `@nuxt/ui` v4 ignores `click` on
+  `DropdownMenuItem`. Type action arrays as `DropdownMenuItem[][]`.
+
+## Shared UI library
+
+Reuse these before hand-rolling list/table/modal markup (extracted to remove the ~65–75%
+page duplication). Components are auto-imported.
+
+**Components** (`app/components/`):
+
+- `AppPageHeader` — title + subtitle + `#actions` slot.
+- `AppListTable` — `UCard`+`UTable` wrapper; `selectable` injects a checkbox column and emits
+  `update:selected` (pass `:selected`). Forwards all `*-cell` / `#empty` slots to `UTable`.
+- `AppRowActions` — `:items="DropdownMenuItem[][]"` ⋮ menu.
+- `AppMassActionBar` — bulk bar; renders when `:count > 0`; emits `clear`; default slot for actions.
+- `AppPagination` — `v-model:page` + `:total` (+ optional `:page-size`); hides when one page.
+- `AppEmptyState` — `:icon` + `:message` + default slot (CTA).
+- `AppConfirmModal` — `v-model:open` + `:title` + `@confirm`; body in the default slot.
+
+**Composables** (`app/composables/`):
+
+- `usePaginatedList<T>(endpoint, { key, params, searchParam, pageSize })` — `await`-ed; returns
+  `{ page, search, items, total, pending, refresh }`. Handles 0-based↔1-based paging.
+- `useDeleteResource<T>({ endpoint, successMessage, onDeleted })` — returns
+  `{ open, target, deleting, prompt, confirm }`; pair with `AppConfirmModal`.
+- `useMassSelect`, `useApi`, `usePermissions`, `useFormatters`, `useDownload`, `useTheme`.
+
+Reference implementations: `app/pages/leads/index.vue`, `contacts/persons/index.vue`,
+`quotes/index.vue`. Shared constants (`PAGE_SIZE`, …) in `app/utils/constants.ts`.
+
+**Typed API:** `pnpm openapi:types` generates `app/types/api.gen.ts` from `../api-docs.json`
+(gitignored; auto-generated on install). Prefer generated types over hand-written DTOs.
 
 ## Roadmap & feature spec
 

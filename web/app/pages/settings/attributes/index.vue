@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 
 definePageMeta({ title: 'Attributes' })
 useHead({ title: 'Attributes — Synoptic' })
@@ -230,19 +230,21 @@ const columns: TableColumn<AttributeResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(a: AttributeResponse) {
-    const primary = [{ label: 'Edit', icon: 'i-tabler-pencil', click: () => openEdit(a) }]
+function rowActions(a: AttributeResponse): DropdownMenuItem[][] {
+    const primary: DropdownMenuItem[] = [
+        { label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(a) },
+    ]
     if (a.type === 'SELECT' || a.type === 'MULTISELECT') {
-        primary.push({ label: 'Options', icon: 'i-tabler-list', click: () => openOptions(a) })
+        primary.push({ label: 'Options', icon: 'i-tabler-list', onSelect: () => openOptions(a) })
     }
-    const items = [primary]
+    const items: DropdownMenuItem[][] = [primary]
     if (a.userDefined) {
         items.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
+                color: 'error',
+                onSelect: () => {
                     toDelete.value = a
                     deleteOpen.value = true
                 },
