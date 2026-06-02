@@ -7,6 +7,12 @@ import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.util.UUID
 
+data class MailFolderResponse(
+    val folder: String,
+    val permissionKey: String,
+    val label: String,
+)
+
 data class EmailAttachmentResponse(
     val id: UUID,
     val attachmentFilename: String,

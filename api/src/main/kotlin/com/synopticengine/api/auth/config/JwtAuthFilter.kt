@@ -1,6 +1,7 @@
 package com.synopticengine.api.auth.config
 
 import com.synopticengine.api.auth.UserPrincipal
+import com.synopticengine.api.auth.service.ApiKeyService
 import com.synopticengine.api.shared.ActorContext
 import com.synopticengine.api.shared.TenantContext
 import jakarta.servlet.FilterChain
@@ -17,6 +18,9 @@ import org.springframework.web.filter.OncePerRequestFilter
  * cached [io.jsonwebtoken.Claims] object returned by [JwtTokenProvider.parseClaimsOrNull],
  * eliminating the prior ~6 redundant parses per request.
  *
+ * API keys (tokens starting with "sk_") are resolved via [ApiKeyService.authenticateByKey]
+ * and follow the same principal/context setup path as JWTs.
+ *
  * [SecurityContextHolder] is cleared in `finally` for virtual-thread safety:
  * virtual threads may be pooled and reused, so leaving a stale context would
  * bleed authentication across requests on the same carrier thread.
@@ -24,6 +28,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 @Component
 class JwtAuthFilter(
     private val jwtTokenProvider: JwtTokenProvider,
+    private val apiKeyService: ApiKeyService,
 ) : OncePerRequestFilter() {
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -33,22 +38,19 @@ class JwtAuthFilter(
         val token = extractToken(request)
 
         if (token != null) {
-            val claims = jwtTokenProvider.parseClaimsOrNull(token)
-            if (claims != null && jwtTokenProvider.isAccessToken(claims)) {
-                val userId = jwtTokenProvider.getUserId(claims)
-                val tenantId = jwtTokenProvider.getTenantId(claims)
-                val email = jwtTokenProvider.getEmail(claims)
-                val authorities =
-                    jwtTokenProvider
-                        .getAuthorities(claims)
-                        .map { SimpleGrantedAuthority(it) }
+            val principal =
+                if (token.startsWith("sk_")) {
+                    apiKeyService.authenticateByKey(token)
+                } else {
+                    resolveJwtPrincipal(token)
+                }
 
-                val principal = UserPrincipal(id = userId, tenantId = tenantId, email = email, authorities = authorities)
+            if (principal != null) {
+                val authorities = principal.authorities.toList()
                 val authentication = UsernamePasswordAuthenticationToken(principal, null, authorities)
-
                 SecurityContextHolder.getContext().authentication = authentication
-                TenantContext.set(tenantId)
-                ActorContext.set(userId)
+                TenantContext.set(principal.tenantId)
+                ActorContext.set(principal.id)
             }
         }
 
@@ -59,6 +61,16 @@ class JwtAuthFilter(
             TenantContext.clear()
             ActorContext.clear()
         }
+    }
+
+    private fun resolveJwtPrincipal(token: String): UserPrincipal? {
+        val claims = jwtTokenProvider.parseClaimsOrNull(token) ?: return null
+        if (!jwtTokenProvider.isAccessToken(claims)) return null
+        val userId = jwtTokenProvider.getUserId(claims)
+        val tenantId = jwtTokenProvider.getTenantId(claims)
+        val email = jwtTokenProvider.getEmail(claims)
+        val authorities = jwtTokenProvider.getAuthorities(claims).map { SimpleGrantedAuthority(it) }
+        return UserPrincipal(id = userId, tenantId = tenantId, email = email, authorities = authorities)
     }
 
     private fun extractToken(request: HttpServletRequest): String? {

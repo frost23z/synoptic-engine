@@ -59,6 +59,8 @@ class SecurityConfig(
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/reset-password")
                     .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/mfa/verify")
+                    .permitAll()
                     .requestMatchers("/actuator/health")
                     .permitAll()
                     .requestMatchers(

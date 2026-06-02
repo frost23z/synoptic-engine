@@ -46,4 +46,18 @@ interface RefreshSessionRepository : JpaRepository<RefreshSession, UUID> {
     fun deleteExpiredBefore(
         @Param("cutoff") cutoff: Instant,
     ): Int
+
+    @Query(
+        """
+        SELECT s FROM RefreshSession s
+        WHERE s.userId = :userId
+          AND s.revokedAt IS NULL
+          AND s.expiresAt > :now
+        ORDER BY s.issuedAt DESC
+        """,
+    )
+    fun findActiveByUserId(
+        @Param("userId") userId: UUID,
+        @Param("now") now: Instant,
+    ): List<RefreshSession>
 }

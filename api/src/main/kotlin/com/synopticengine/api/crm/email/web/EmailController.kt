@@ -37,6 +37,10 @@ class EmailController(
     private val objectMapper: ObjectMapper,
     private val fileUploadGuard: FileUploadGuard,
 ) {
+    @GetMapping("/folders")
+    @PreAuthorize("hasAuthority('mail.view')")
+    fun listFolders(): ResponseEntity<List<MailFolderResponse>> = ResponseEntity.ok(FOLDER_CATALOG)
+
     /**
      * Folder listings are gated on `mail.view` AND a per-folder permission
      * `mail.<folder>` (P3.3 / `02 § 2.7`). The catalog already lists keys for the
@@ -293,6 +297,16 @@ class EmailController(
     private companion object {
         val WELL_KNOWN_FOLDER_PERMISSIONS =
             setOf("mail.inbox", "mail.sent", "mail.drafts", "mail.trash", "mail.spam", "mail.outbox")
+
+        val FOLDER_CATALOG =
+            listOf(
+                MailFolderResponse("inbox", "mail.inbox", "Inbox"),
+                MailFolderResponse("sent", "mail.sent", "Sent"),
+                MailFolderResponse("drafts", "mail.drafts", "Drafts"),
+                MailFolderResponse("trash", "mail.trash", "Trash"),
+                MailFolderResponse("spam", "mail.spam", "Spam"),
+                MailFolderResponse("outbox", "mail.outbox", "Outbox"),
+            )
 
         /** T2.5(b) — maximum body length passed to regex scanning in parseInbound. */
         const val INBOUND_BODY_MAX_CHARS = 512 * 1024

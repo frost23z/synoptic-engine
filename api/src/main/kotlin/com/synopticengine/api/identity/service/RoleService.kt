@@ -6,6 +6,8 @@ import com.synopticengine.api.identity.repo.PermissionRepository
 import com.synopticengine.api.identity.repo.RoleRepository
 import com.synopticengine.api.identity.web.PermissionResponse
 import com.synopticengine.api.identity.web.RoleResponse
+import com.synopticengine.api.shared.audit.AuditAction
+import com.synopticengine.api.shared.audit.AuditLogService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -15,6 +17,7 @@ import java.util.UUID
 class RoleService(
     private val roleRepository: RoleRepository,
     private val permissionRepository: PermissionRepository,
+    private val auditLogService: AuditLogService,
 ) {
     fun findAll(): List<RoleResponse> = roleRepository.findAll().map { it.toResponse() }
 
@@ -36,7 +39,14 @@ class RoleService(
                 this.description = description
                 this.permissions.addAll(permissions)
             }
-        return roleRepository.save(role).toResponse()
+        val saved = roleRepository.save(role)
+        auditLogService.record(
+            entityType = "role",
+            entityId = saved.id.toString(),
+            action = AuditAction.CREATE,
+            payload = mapOf("roleName" to name, "permissions" to permissionNames.sorted()),
+        )
+        return saved.toResponse()
     }
 
     @Transactional
@@ -49,12 +59,29 @@ class RoleService(
         val role = requireRole(id)
         val existing = roleRepository.findByName(name)
         if (existing != null && existing.id != id) throw IllegalStateException("Role name already in use: $name")
+        val oldKeys = role.permissions.map { it.key }.toSet()
         val permissions = resolvePermissions(permissionNames)
         role.name = name
         role.description = description
         role.permissions.clear()
         role.permissions.addAll(permissions)
-        return roleRepository.save(role).toResponse()
+        val saved = roleRepository.save(role)
+        val added = permissionNames - oldKeys
+        val removed = oldKeys - permissionNames
+        if (added.isNotEmpty() || removed.isNotEmpty()) {
+            auditLogService.record(
+                entityType = "role",
+                entityId = id.toString(),
+                action = AuditAction.UPDATE,
+                payload =
+                    buildMap {
+                        put("roleName", name)
+                        if (added.isNotEmpty()) put("permissionsAdded", added.sorted())
+                        if (removed.isNotEmpty()) put("permissionsRemoved", removed.sorted())
+                    },
+            )
+        }
+        return saved.toResponse()
     }
 
     @Transactional
@@ -63,6 +90,12 @@ class RoleService(
         // so the filter has actually run and we cannot delete a role from
         // another tenant.
         val role = requireRole(id)
+        auditLogService.record(
+            entityType = "role",
+            entityId = id.toString(),
+            action = AuditAction.DELETE,
+            payload = mapOf("roleName" to role.name),
+        )
         roleRepository.delete(role)
     }
 
