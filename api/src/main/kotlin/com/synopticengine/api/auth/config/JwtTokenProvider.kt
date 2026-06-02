@@ -79,6 +79,22 @@ class JwtTokenProvider(
 
     fun getRefreshFamilyId(claims: Claims): UUID = UUID.fromString(claims["fid"] as String)
 
+    fun generateMfaChallengeToken(
+        userId: UUID,
+        tenantId: UUID,
+    ): String =
+        buildToken(
+            subject = userId.toString(),
+            expiry = MFA_CHALLENGE_EXPIRY_MS,
+            extra =
+                mapOf(
+                    "type" to "mfa-challenge",
+                    "tenantId" to tenantId.toString(),
+                ),
+        )
+
+    fun isMfaChallengeToken(claims: Claims): Boolean = claims["type"] == "mfa-challenge"
+
     fun isRefreshToken(claims: Claims): Boolean = claims["type"] == "refresh"
 
     fun isAccessToken(claims: Claims): Boolean = claims["type"] == "access"
@@ -105,6 +121,10 @@ class JwtTokenProvider(
     fun isAccessToken(token: String): Boolean = isAccessToken(parseClaims(token))
 
     // ── Internal ──────────────────────────────────────────────────────────────
+
+    companion object {
+        const val MFA_CHALLENGE_EXPIRY_MS = 5 * 60 * 1000L // 5 minutes
+    }
 
     private fun buildToken(
         subject: String,

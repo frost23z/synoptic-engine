@@ -1,24 +1,32 @@
 package com.synopticengine.api.auth.web
 
 import com.synopticengine.api.auth.UserPrincipal
+import com.synopticengine.api.auth.service.ApiKeyService
 import com.synopticengine.api.auth.service.AuthService
+import com.synopticengine.api.auth.service.MfaService
 import com.synopticengine.api.identity.IdentityApi
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
 
 @RestController
 @RequestMapping("/auth")
 class AuthController(
     private val authService: AuthService,
     private val identityApi: IdentityApi,
+    private val apiKeyService: ApiKeyService,
+    private val mfaService: MfaService,
 ) {
     @PostMapping("/login")
     fun login(
@@ -112,4 +120,90 @@ class AuthController(
         authService.resetPassword(request.token, request.email, request.newPassword)
         return ResponseEntity.noContent().build()
     }
+
+    @GetMapping("/sessions")
+    fun listSessions(
+        @AuthenticationPrincipal principal: UserPrincipal,
+    ): ResponseEntity<List<SessionResponse>> = ResponseEntity.ok(authService.listSessions(principal.id))
+
+    @DeleteMapping("/sessions/{sessionId}")
+    fun revokeSession(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @PathVariable sessionId: UUID,
+    ): ResponseEntity<Void> {
+        authService.revokeSession(principal.id, sessionId)
+        return ResponseEntity.noContent().build()
+    }
+
+    // ── MFA / TOTP ────────────────────────────────────────────────────────
+
+    @PostMapping("/mfa/setup")
+    fun mfaSetup(
+        @AuthenticationPrincipal principal: UserPrincipal,
+    ): ResponseEntity<MfaSetupResponse> = ResponseEntity.ok(mfaService.setup(principal.id))
+
+    @PostMapping("/mfa/confirm")
+    fun mfaConfirm(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: MfaConfirmRequest,
+    ): ResponseEntity<MfaConfirmResponse> =
+        ResponseEntity.ok(MfaConfirmResponse(mfaService.confirm(principal.id, request.code)))
+
+    /** Public — second step of the MFA login flow; caller holds only a challenge token. */
+    @PostMapping("/mfa/verify")
+    fun mfaVerify(
+        @Valid @RequestBody request: MfaVerifyRequest,
+        httpRequest: HttpServletRequest,
+    ): ResponseEntity<TokenResponse> =
+        ResponseEntity.ok(authService.completeMfaLogin(request.mfaToken, request.code, clientIp(httpRequest)))
+
+    @DeleteMapping("/mfa")
+    fun mfaDisable(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: MfaDisableRequest,
+    ): ResponseEntity<Void> {
+        mfaService.disable(principal.id, request.code)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/mfa/backup-codes/regenerate")
+    fun mfaRegenerateBackupCodes(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: MfaConfirmRequest,
+    ): ResponseEntity<MfaRegenerateBackupCodesResponse> =
+        ResponseEntity.ok(MfaRegenerateBackupCodesResponse(mfaService.regenerateBackupCodes(principal.id, request.code)))
+
+    // ── API keys ──────────────────────────────────────────────────────────
+
+    @PostMapping("/api-keys")
+    fun createApiKey(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @Valid @RequestBody request: CreateApiKeyRequest,
+    ): ResponseEntity<ApiKeyCreateResponse> =
+        ResponseEntity
+            .status(201)
+            .body(apiKeyService.create(principal.tenantId, principal.id, request.name, request.expiresAt))
+
+    @GetMapping("/api-keys")
+    fun listApiKeys(
+        @AuthenticationPrincipal principal: UserPrincipal,
+    ): ResponseEntity<List<ApiKeyResponse>> =
+        ResponseEntity.ok(apiKeyService.list(principal.tenantId, principal.id))
+
+    @DeleteMapping("/api-keys/{keyId}")
+    fun revokeApiKey(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @PathVariable keyId: UUID,
+    ): ResponseEntity<Void> {
+        apiKeyService.revoke(principal.tenantId, principal.id, keyId)
+        return ResponseEntity.noContent().build()
+    }
+
+    @GetMapping("/login-history")
+    fun loginHistory(
+        @AuthenticationPrincipal principal: UserPrincipal,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<List<LoginHistoryResponse>> =
+        ResponseEntity.ok(authService.listLoginHistory(principal.id, page, size))
 }
