@@ -44,7 +44,7 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.0")
     implementation("com.github.librepdf:openpdf:2.0.3")
     implementation("com.anthropic:anthropic-java:2.34.0")
-    implementation("org.apache.tika:tika-core:2.9.2")
+    implementation("org.apache.tika:tika-core:3.2.2")
     implementation("org.apache.tika:tika-parsers-standard-package:2.9.2")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
@@ -126,4 +126,9 @@ spotless {
 fun FormatExtension.commonFormatSteps() {
     trimTrailingWhitespace()
     endWithNewline()
+}
+
+
+configurations.all {
+    exclude(group = "io.swagger.core.v3", module = "swagger-annotations")
 }

@@ -204,7 +204,8 @@ class AutomationService(
     }
 
     @Transactional
-    fun testWebhook(id: UUID): WebhookDeliveryRunResponse = webhookDispatcher.dispatchTest(requireWebhook(id)).toResponse()
+    fun testWebhook(id: UUID): WebhookDeliveryRunResponse =
+        webhookDispatcher.dispatchTest(requireWebhook(id)).toResponse()
 
     // Tenant-aware loads. JpaRepository.findById bypasses Hibernate's tenant
     // filter (it hits EntityManager.find()); JPQL findActiveById does not.

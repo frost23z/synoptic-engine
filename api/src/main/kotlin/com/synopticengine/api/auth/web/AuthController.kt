@@ -171,7 +171,9 @@ class AuthController(
         @AuthenticationPrincipal principal: UserPrincipal,
         @Valid @RequestBody request: MfaConfirmRequest,
     ): ResponseEntity<MfaRegenerateBackupCodesResponse> =
-        ResponseEntity.ok(MfaRegenerateBackupCodesResponse(mfaService.regenerateBackupCodes(principal.id, request.code)))
+        ResponseEntity.ok(
+            MfaRegenerateBackupCodesResponse(mfaService.regenerateBackupCodes(principal.id, request.code)),
+        )
 
     // ── API keys ──────────────────────────────────────────────────────────
 
@@ -187,8 +189,7 @@ class AuthController(
     @GetMapping("/api-keys")
     fun listApiKeys(
         @AuthenticationPrincipal principal: UserPrincipal,
-    ): ResponseEntity<List<ApiKeyResponse>> =
-        ResponseEntity.ok(apiKeyService.list(principal.tenantId, principal.id))
+    ): ResponseEntity<List<ApiKeyResponse>> = ResponseEntity.ok(apiKeyService.list(principal.tenantId, principal.id))
 
     @DeleteMapping("/api-keys/{keyId}")
     fun revokeApiKey(

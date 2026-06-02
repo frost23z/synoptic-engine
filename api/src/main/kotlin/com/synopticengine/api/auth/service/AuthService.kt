@@ -9,9 +9,9 @@ import com.synopticengine.api.auth.repo.LoginHistoryRepository
 import com.synopticengine.api.auth.repo.PasswordResetRepository
 import com.synopticengine.api.auth.repo.RefreshSessionRepository
 import com.synopticengine.api.auth.web.LoginHistoryResponse
+import com.synopticengine.api.auth.web.MfaVerifyRequest
 import com.synopticengine.api.auth.web.SessionResponse
 import com.synopticengine.api.auth.web.TokenResponse
-import com.synopticengine.api.auth.web.MfaVerifyRequest
 import com.synopticengine.api.identity.IdentityApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.shared.config.PasswordPolicyService
