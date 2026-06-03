@@ -135,8 +135,8 @@ async function confirmDelete() {
             <div class="flex flex-wrap gap-2">
                 <UDropdownMenu
                     :items="[
-                        STATUS_OPTIONS.filter((s) => s.value.toLowerCase() !== quote.status).map(
-                            (s) => ({ label: s.label, click: () => changeStatus(s.value) })
+                        STATUS_OPTIONS.filter((s) => s.value.toLowerCase() !== quote?.status).map(
+                            (s) => ({ label: s.label, onSelect: () => changeStatus(s.value) })
                         ),
                     ]"
                 >

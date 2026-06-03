@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { MarketingCampaignResponse, MarketingEventResponse } from '~/types/settings'
 
 definePageMeta({ title: 'Marketing' })
@@ -8,6 +8,7 @@ useHead({ title: 'Marketing — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 // ── Events ────────────────────────────────────────────────────────────────
 const {
@@ -52,24 +53,17 @@ async function submitCreateEvent() {
     }
 }
 
-const deleteEventOpen = ref(false)
-const toDeleteEvent = ref<MarketingEventResponse | null>(null)
-const deletingEvent = ref(false)
-
-async function confirmDeleteEvent() {
-    if (!toDeleteEvent.value) return
-    deletingEvent.value = true
-    try {
-        await api(`/api/settings/marketing/events/${toDeleteEvent.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Event deleted', color: 'success' })
-        deleteEventOpen.value = false
-        refreshEvents()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deletingEvent.value = false
-    }
-}
+const {
+    open: deleteEventOpen,
+    target: eventToDelete,
+    deleting: deletingEvent,
+    prompt: promptDeleteEvent,
+    confirm: confirmDeleteEvent,
+} = useDeleteResource<MarketingEventResponse>({
+    endpoint: (e) => `/api/settings/marketing/events/${e.id}`,
+    successMessage: 'Event deleted',
+    onDeleted: refreshEvents,
+})
 
 const eventColumns: TableColumn<MarketingEventResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
@@ -78,17 +72,14 @@ const eventColumns: TableColumn<MarketingEventResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function eventRowActions(e: MarketingEventResponse) {
+function eventRowActions(e: MarketingEventResponse): DropdownMenuItem[][] {
     return [
         [
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDeleteEvent.value = e
-                    deleteEventOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDeleteEvent(e),
             },
         ],
     ]
@@ -148,26 +139,17 @@ async function submitCreateCampaign() {
     }
 }
 
-const deleteCampaignOpen = ref(false)
-const toDeleteCampaign = ref<MarketingCampaignResponse | null>(null)
-const deletingCampaign = ref(false)
-
-async function confirmDeleteCampaign() {
-    if (!toDeleteCampaign.value) return
-    deletingCampaign.value = true
-    try {
-        await api(`/api/settings/marketing/campaigns/${toDeleteCampaign.value.id}`, {
-            method: 'DELETE',
-        })
-        toast.add({ title: 'Campaign deleted', color: 'success' })
-        deleteCampaignOpen.value = false
-        refreshCampaigns()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deletingCampaign.value = false
-    }
-}
+const {
+    open: deleteCampaignOpen,
+    target: campaignToDelete,
+    deleting: deletingCampaign,
+    prompt: promptDeleteCampaign,
+    confirm: confirmDeleteCampaign,
+} = useDeleteResource<MarketingCampaignResponse>({
+    endpoint: (c) => `/api/settings/marketing/campaigns/${c.id}`,
+    successMessage: 'Campaign deleted',
+    onDeleted: refreshCampaigns,
+})
 
 const campaignColumns: TableColumn<MarketingCampaignResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
@@ -177,17 +159,14 @@ const campaignColumns: TableColumn<MarketingCampaignResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function campaignRowActions(c: MarketingCampaignResponse) {
+function campaignRowActions(c: MarketingCampaignResponse): DropdownMenuItem[][] {
     return [
         [
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDeleteCampaign.value = c
-                    deleteCampaignOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDeleteCampaign(c),
             },
         ],
     ]
@@ -203,281 +182,196 @@ function eventNameById(id?: string) {
     <div class="space-y-8">
         <!-- Events section -->
         <div class="space-y-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h2 class="text-highlighted text-xl font-semibold">Marketing Events</h2>
-                    <p class="text-muted text-sm">Lifecycle hooks that trigger campaigns</p>
-                </div>
-                <UButton icon="i-tabler-plus" label="New Event" @click="openCreateEvent" />
-            </div>
+            <AppPageHeader
+                title="Marketing Events"
+                subtitle="Lifecycle hooks that trigger campaigns"
+            >
+                <template #actions>
+                    <UButton
+                        v-if="can('marketing.create')"
+                        icon="i-tabler-plus"
+                        label="New Event"
+                        @click="openCreateEvent"
+                    />
+                </template>
+            </AppPageHeader>
 
-            <UCard :ui="{ body: 'p-0' }">
-                <UTable
-                    :data="events ?? []"
-                    :columns="eventColumns"
-                    :loading="eventsPending"
-                    sticky
-                >
-                    <template #name-cell="{ row }">
-                        <span class="font-medium">{{ row.original.name }}</span>
-                    </template>
-                    <template #description-cell="{ row }">
-                        <span class="text-muted text-sm">{{
-                            row.original.description ?? '—'
-                        }}</span>
-                    </template>
-                    <template #createdAt-cell="{ row }">
-                        <span class="text-muted text-sm">{{
-                            formatDate(row.original.createdAt)
-                        }}</span>
-                    </template>
-                    <template #actions-cell="{ row }">
-                        <UDropdownMenu :items="eventRowActions(row.original)">
-                            <UButton
-                                icon="i-tabler-dots-vertical"
-                                color="neutral"
-                                variant="ghost"
-                                size="xs"
-                            />
-                        </UDropdownMenu>
-                    </template>
-                    <template #empty>
-                        <div class="space-y-2 py-10 text-center">
-                            <UIcon
-                                name="i-tabler-calendar-event"
-                                class="text-muted mx-auto size-10"
-                            />
-                            <p class="text-muted text-sm">No marketing events yet</p>
-                        </div>
-                    </template>
-                </UTable>
-            </UCard>
+            <AppListTable :rows="events ?? []" :columns="eventColumns" :loading="eventsPending">
+                <template #name-cell="{ row }">
+                    <span class="font-medium">{{ row.original.name }}</span>
+                </template>
+                <template #description-cell="{ row }">
+                    <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
+                </template>
+                <template #createdAt-cell="{ row }">
+                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+                </template>
+                <template #actions-cell="{ row }">
+                    <AppRowActions
+                        v-if="can('marketing.delete')"
+                        :items="eventRowActions(row.original)"
+                    />
+                </template>
+                <template #empty>
+                    <AppEmptyState
+                        icon="i-tabler-calendar-event"
+                        message="No marketing events yet"
+                    />
+                </template>
+            </AppListTable>
         </div>
 
         <!-- Campaigns section -->
         <div class="space-y-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h2 class="text-highlighted text-xl font-semibold">Campaigns</h2>
-                    <p class="text-muted text-sm">Email campaigns linked to marketing events</p>
-                </div>
-                <UButton icon="i-tabler-plus" label="New Campaign" @click="openCreateCampaign" />
-            </div>
+            <AppPageHeader title="Campaigns" subtitle="Email campaigns linked to marketing events">
+                <template #actions>
+                    <UButton
+                        v-if="can('marketing.create')"
+                        icon="i-tabler-plus"
+                        label="New Campaign"
+                        @click="openCreateCampaign"
+                    />
+                </template>
+            </AppPageHeader>
 
-            <UCard :ui="{ body: 'p-0' }">
-                <UTable
-                    :data="campaigns ?? []"
-                    :columns="campaignColumns"
-                    :loading="campaignsPending"
-                    sticky
-                >
-                    <template #name-cell="{ row }">
-                        <div>
-                            <p class="text-highlighted font-medium">{{ row.original.name }}</p>
-                            <p v-if="row.original.description" class="text-muted text-xs">
-                                {{ row.original.description }}
-                            </p>
-                        </div>
-                    </template>
-                    <template #subject-cell="{ row }">
-                        <span class="text-muted text-sm">{{ row.original.subject }}</span>
-                    </template>
-                    <template #event-cell="{ row }">
-                        <UBadge
-                            v-if="eventNameById(row.original.eventId)"
-                            :label="eventNameById(row.original.eventId)!"
-                            color="neutral"
-                            variant="soft"
-                            size="sm"
-                        />
-                        <span v-else class="text-muted text-sm">—</span>
-                    </template>
-                    <template #createdAt-cell="{ row }">
-                        <span class="text-muted text-sm">{{
-                            formatDate(row.original.createdAt)
-                        }}</span>
-                    </template>
-                    <template #actions-cell="{ row }">
-                        <UDropdownMenu :items="campaignRowActions(row.original)">
-                            <UButton
-                                icon="i-tabler-dots-vertical"
-                                color="neutral"
-                                variant="ghost"
-                                size="xs"
-                            />
-                        </UDropdownMenu>
-                    </template>
-                    <template #empty>
-                        <div class="space-y-2 py-10 text-center">
-                            <UIcon name="i-tabler-mail-bolt" class="text-muted mx-auto size-10" />
-                            <p class="text-muted text-sm">No campaigns yet</p>
-                        </div>
-                    </template>
-                </UTable>
-            </UCard>
+            <AppListTable
+                :rows="campaigns ?? []"
+                :columns="campaignColumns"
+                :loading="campaignsPending"
+            >
+                <template #name-cell="{ row }">
+                    <div>
+                        <p class="text-highlighted font-medium">{{ row.original.name }}</p>
+                        <p v-if="row.original.description" class="text-muted text-xs">
+                            {{ row.original.description }}
+                        </p>
+                    </div>
+                </template>
+                <template #subject-cell="{ row }">
+                    <span class="text-muted text-sm">{{ row.original.subject }}</span>
+                </template>
+                <template #event-cell="{ row }">
+                    <UBadge
+                        v-if="eventNameById(row.original.eventId)"
+                        :label="eventNameById(row.original.eventId)!"
+                        color="neutral"
+                        variant="soft"
+                        size="sm"
+                    />
+                    <span v-else class="text-muted text-sm">—</span>
+                </template>
+                <template #createdAt-cell="{ row }">
+                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+                </template>
+                <template #actions-cell="{ row }">
+                    <AppRowActions
+                        v-if="can('marketing.delete')"
+                        :items="campaignRowActions(row.original)"
+                    />
+                </template>
+                <template #empty>
+                    <AppEmptyState icon="i-tabler-mail-bolt" message="No campaigns yet" />
+                </template>
+            </AppListTable>
         </div>
 
         <!-- Create event modal -->
-        <UModal v-model:open="createEventOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Create Marketing Event</p>
-                    </template>
-                    <form class="space-y-3" @submit.prevent="submitCreateEvent">
-                        <UFormField label="Name" required>
-                            <UInput
-                                v-model="createEventForm.name"
-                                placeholder="e.g. Trial Started"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UInput
-                                v-model="createEventForm.description"
-                                placeholder="Optional"
-                                class="w-full"
-                            />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createEventOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creatingEvent"
-                                :disabled="!createEventForm.name"
-                                @click="submitCreateEvent"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="createEventOpen"
+            title="Create Marketing Event"
+            confirm-label="Create"
+            :loading="creatingEvent"
+            :confirm-disabled="!createEventForm.name"
+            @confirm="submitCreateEvent"
+        >
+            <form class="space-y-3" @submit.prevent="submitCreateEvent">
+                <UFormField label="Name" required>
+                    <UInput
+                        v-model="createEventForm.name"
+                        placeholder="e.g. Trial Started"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Description">
+                    <UInput
+                        v-model="createEventForm.description"
+                        placeholder="Optional"
+                        class="w-full"
+                    />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete event modal -->
-        <UModal v-model:open="deleteEventOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Event</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDeleteEvent?.name }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteEventOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deletingEvent"
-                                @click="confirmDeleteEvent"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="deleteEventOpen"
+            title="Delete Event"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deletingEvent"
+            @confirm="confirmDeleteEvent"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ eventToDelete?.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
 
         <!-- Create campaign modal -->
-        <UModal v-model:open="createCampaignOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Create Campaign</p>
-                    </template>
-                    <form class="space-y-3" @submit.prevent="submitCreateCampaign">
-                        <UFormField label="Name" required>
-                            <UInput
-                                v-model="createCampaignForm.name"
-                                placeholder="e.g. Welcome Email"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Subject" required>
-                            <UInput
-                                v-model="createCampaignForm.subject"
-                                placeholder="e.g. Welcome to Synoptic!"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UInput
-                                v-model="createCampaignForm.description"
-                                placeholder="Optional"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Marketing Event">
-                            <USelect
-                                v-model="createCampaignForm.eventId"
-                                :items="eventOptions"
-                                placeholder="Link to event (optional)"
-                                class="w-full"
-                            />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createCampaignOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creatingCampaign"
-                                :disabled="!createCampaignForm.name || !createCampaignForm.subject"
-                                @click="submitCreateCampaign"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="createCampaignOpen"
+            title="Create Campaign"
+            confirm-label="Create"
+            :loading="creatingCampaign"
+            :confirm-disabled="!createCampaignForm.name || !createCampaignForm.subject"
+            @confirm="submitCreateCampaign"
+        >
+            <form class="space-y-3" @submit.prevent="submitCreateCampaign">
+                <UFormField label="Name" required>
+                    <UInput
+                        v-model="createCampaignForm.name"
+                        placeholder="e.g. Welcome Email"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Subject" required>
+                    <UInput
+                        v-model="createCampaignForm.subject"
+                        placeholder="e.g. Welcome to Synoptic!"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Description">
+                    <UInput
+                        v-model="createCampaignForm.description"
+                        placeholder="Optional"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Marketing Event">
+                    <USelect
+                        v-model="createCampaignForm.eventId"
+                        :items="eventOptions"
+                        placeholder="Link to event (optional)"
+                        class="w-full"
+                    />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete campaign modal -->
-        <UModal v-model:open="deleteCampaignOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Campaign</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDeleteCampaign?.name }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteCampaignOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deletingCampaign"
-                                @click="confirmDeleteCampaign"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="deleteCampaignOpen"
+            title="Delete Campaign"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deletingCampaign"
+            @confirm="confirmDeleteCampaign"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ campaignToDelete?.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>
