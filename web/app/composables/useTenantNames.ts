@@ -7,10 +7,17 @@ import type { TenantResponse } from '~/types/sharing'
  * Requires `tenants.view`; without it the directory stays empty and
  * `tenantName` falls back to a shortened UUID (graceful degradation, since
  * relationship/share DTOs only carry tenant ids).
+ *
+ * Also exposes the caller's own tenant (`sessionTenantId` / `isSelf`), sourced
+ * from `/auth/me`, so cross-tenant surfaces can render "us vs them".
  */
 export function useTenantNames() {
     const api = useApi()
     const { can } = usePermissions()
+    const authStore = useAuthStore()
+
+    const sessionTenantId = computed(() => authStore.user?.tenantId ?? null)
+    const isSelf = (id?: string | null): boolean => !!id && id === sessionTenantId.value
 
     const { data } = useAsyncData<TenantResponse[]>(
         'sharing-tenants',
@@ -31,5 +38,5 @@ export function useTenantNames() {
     const tenantOptions = computed(() => tenants.value.map((t) => ({ label: t.name, value: t.id })))
     const hasTenantList = computed(() => tenants.value.length > 0)
 
-    return { tenants, tenantName, tenantOptions, hasTenantList }
+    return { tenants, tenantName, tenantOptions, hasTenantList, sessionTenantId, isSelf }
 }
