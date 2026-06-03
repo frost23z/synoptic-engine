@@ -113,12 +113,7 @@ async function submit() {
 </script>
 
 <template>
-    <div class="mx-auto max-w-xl space-y-6">
-        <div class="flex items-center gap-3">
-            <UButton icon="i-tabler-arrow-left" color="neutral" variant="ghost" to="/leads" />
-            <h2 class="text-highlighted text-xl font-semibold">New Lead</h2>
-        </div>
-
+    <AppDetailLayout to="/leads" title="New Lead" root-class="mx-auto max-w-xl space-y-6">
         <UCard>
             <form class="space-y-4" @submit.prevent="submit">
                 <UFormField label="Title" required>
@@ -209,5 +204,5 @@ async function submit() {
                 </div>
             </form>
         </UCard>
-    </div>
+    </AppDetailLayout>
 </template>

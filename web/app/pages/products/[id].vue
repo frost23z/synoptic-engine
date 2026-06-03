@@ -66,59 +66,44 @@ async function submitEdit() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    deleting.value = true
-    try {
-        await api(`/api/products/${id}`, { method: 'DELETE' })
-        toast.add({ title: 'Product deleted', color: 'success' })
+const {
+    open: deleteOpen,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<ProductResponse>({
+    endpoint: (p) => `/api/products/${p.id}`,
+    successMessage: 'Product deleted',
+    onDeleted: () => {
         router.push('/products')
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+    },
+})
 </script>
 
 <template>
-    <div v-if="product" class="space-y-6">
-        <!-- Header -->
-        <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-                <UButton
-                    icon="i-tabler-arrow-left"
-                    color="neutral"
-                    variant="ghost"
-                    to="/products"
-                />
-                <div>
-                    <h2 class="text-highlighted text-xl font-semibold">{{ product.name }}</h2>
-                    <p class="text-muted text-sm">
-                        {{ product.sku ? `SKU: ${product.sku}` : 'No SKU' }}
-                    </p>
-                </div>
-            </div>
-            <div class="flex gap-2">
-                <UButton
-                    v-if="can('products.edit')"
-                    icon="i-tabler-pencil"
-                    label="Edit"
-                    color="neutral"
-                    variant="outline"
-                    @click="openEdit"
-                />
-                <UButton
-                    v-if="can('products.delete')"
-                    icon="i-tabler-trash"
-                    color="error"
-                    variant="outline"
-                    @click="deleteOpen = true"
-                />
-            </div>
-        </div>
+    <AppDetailLayout
+        v-if="product"
+        to="/products"
+        :title="product.name"
+        :subtitle="product.sku ? `SKU: ${product.sku}` : 'No SKU'"
+    >
+        <template #actions>
+            <UButton
+                v-if="can('products.edit')"
+                icon="i-tabler-pencil"
+                label="Edit"
+                color="neutral"
+                variant="outline"
+                @click="openEdit"
+            />
+            <UButton
+                v-if="can('products.delete')"
+                icon="i-tabler-trash"
+                color="error"
+                variant="outline"
+                @click="promptDelete(product)"
+            />
+        </template>
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div class="space-y-4 lg:col-span-2">
@@ -162,85 +147,53 @@ async function confirmDelete() {
         </div>
 
         <!-- Edit modal -->
-        <UModal v-model:open="editing">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Edit Product</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitEdit">
-                        <UFormField label="Name" required>
-                            <UInput v-model="editForm.name" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UTextarea v-model="editForm.description" :rows="3" class="w-full" />
-                        </UFormField>
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Price">
-                                <UInput
-                                    v-model.number="editForm.price"
-                                    type="number"
-                                    step="0.01"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="SKU">
-                                <UInput v-model="editForm.sku" class="w-full" />
-                            </UFormField>
-                        </div>
-                        <USwitch v-model="editForm.active" label="Active" />
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="editing = false"
-                            />
-                            <UButton
-                                label="Save"
-                                :loading="saving"
-                                :disabled="!editForm.name"
-                                @click="submitEdit"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="editing"
+            title="Edit Product"
+            confirm-label="Save"
+            :loading="saving"
+            :confirm-disabled="!editForm.name"
+            @confirm="submitEdit"
+        >
+            <form class="space-y-3" @submit.prevent="submitEdit">
+                <UFormField label="Name" required>
+                    <UInput v-model="editForm.name" class="w-full" />
+                </UFormField>
+                <UFormField label="Description">
+                    <UTextarea v-model="editForm.description" :rows="3" class="w-full" />
+                </UFormField>
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Price">
+                        <UInput
+                            v-model.number="editForm.price"
+                            type="number"
+                            step="0.01"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="SKU">
+                        <UInput v-model="editForm.sku" class="w-full" />
+                    </UFormField>
+                </div>
+                <USwitch v-model="editForm.active" label="Active" />
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Product</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ product.name }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
-    </div>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Product"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ product.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
+    </AppDetailLayout>
 
     <div v-else-if="productPending" class="space-y-4">
         <USkeleton class="h-8 w-64" />
