@@ -64,6 +64,24 @@ const inventoryNav = computed<NavigationMenuItem[]>(() =>
             to: '/warehouses',
             permission: 'warehouses.view',
         },
+        {
+            label: 'Stock',
+            icon: 'i-tabler-stack-2',
+            to: '/inventory/stock',
+            permission: 'inventory.movements.view',
+        },
+        {
+            label: 'Reorder',
+            icon: 'i-tabler-alert-triangle',
+            to: '/inventory/reorder',
+            permission: 'inventory.reorder.view',
+        },
+        {
+            label: 'Transfers',
+            icon: 'i-tabler-arrows-exchange',
+            to: '/inventory/transfers',
+            permission: 'inventory.transfers.view',
+        },
     ])
 )
 
