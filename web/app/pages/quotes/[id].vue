@@ -96,86 +96,79 @@ async function downloadPdf() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    deleting.value = true
-    try {
-        await api(`/api/quotes/${id}`, { method: 'DELETE' })
-        toast.add({ title: 'Quote deleted', color: 'success' })
+const {
+    open: deleteOpen,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<QuoteResponse>({
+    endpoint: (q) => `/api/quotes/${q.id}`,
+    successMessage: 'Quote deleted',
+    onDeleted: () => {
         router.push('/quotes')
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+    },
+})
 </script>
 
 <template>
-    <div v-if="quote" class="space-y-6">
-        <!-- Header -->
-        <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-                <UButton icon="i-tabler-arrow-left" color="neutral" variant="ghost" to="/quotes" />
-                <div>
-                    <h2 class="text-highlighted text-xl font-semibold">{{ quote.title }}</h2>
-                    <div class="mt-0.5 flex items-center gap-2">
-                        <UBadge
-                            :label="QUOTE_STATUS_LABEL[quote.status as QuoteStatus] ?? quote.status"
-                            :color="QUOTE_STATUS_COLOR[quote.status as QuoteStatus] ?? 'neutral'"
-                            variant="soft"
-                            size="sm"
-                        />
-                        <span class="text-muted text-sm">{{ formatDate(quote.createdAt) }}</span>
-                    </div>
-                </div>
+    <AppDetailLayout v-if="quote" to="/quotes" :title="quote.title">
+        <template #subtitle>
+            <div class="mt-0.5 flex items-center gap-2">
+                <UBadge
+                    :label="QUOTE_STATUS_LABEL[quote.status as QuoteStatus] ?? quote.status"
+                    :color="QUOTE_STATUS_COLOR[quote.status as QuoteStatus] ?? 'neutral'"
+                    variant="soft"
+                    size="sm"
+                />
+                <span class="text-muted text-sm">{{ formatDate(quote.createdAt) }}</span>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <UDropdownMenu
-                    :items="[
-                        STATUS_OPTIONS.filter((s) => s.value.toLowerCase() !== quote?.status).map(
-                            (s) => ({ label: s.label, onSelect: () => changeStatus(s.value) })
-                        ),
-                    ]"
-                >
-                    <UButton
-                        icon="i-tabler-refresh"
-                        label="Change Status"
-                        color="neutral"
-                        variant="outline"
-                        size="sm"
-                        :loading="updatingStatus"
-                    />
-                </UDropdownMenu>
+        </template>
+        <template #actions>
+            <UDropdownMenu
+                v-if="can('quotes.edit')"
+                :items="[
+                    STATUS_OPTIONS.filter((s) => s.value.toLowerCase() !== quote?.status).map(
+                        (s) => ({ label: s.label, onSelect: () => changeStatus(s.value) })
+                    ),
+                ]"
+            >
                 <UButton
-                    icon="i-tabler-send"
-                    label="Send"
+                    icon="i-tabler-refresh"
+                    label="Change Status"
                     color="neutral"
                     variant="outline"
                     size="sm"
-                    @click="openSendMail"
+                    :loading="updatingStatus"
                 />
-                <UButton
-                    icon="i-tabler-file-download"
-                    label="Download PDF"
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    :loading="downloadingPdf"
-                    @click="downloadPdf"
-                />
-                <UButton
-                    v-if="can('quotes.delete')"
-                    icon="i-tabler-trash"
-                    color="error"
-                    variant="outline"
-                    size="sm"
-                    @click="deleteOpen = true"
-                />
-            </div>
-        </div>
+            </UDropdownMenu>
+            <UButton
+                v-if="can('quotes.edit')"
+                icon="i-tabler-send"
+                label="Send"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                @click="openSendMail"
+            />
+            <UButton
+                v-if="can('quotes.view')"
+                icon="i-tabler-file-download"
+                label="Download PDF"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                :loading="downloadingPdf"
+                @click="downloadPdf"
+            />
+            <UButton
+                v-if="can('quotes.delete')"
+                icon="i-tabler-trash"
+                color="error"
+                variant="outline"
+                size="sm"
+                @click="promptDelete(quote)"
+            />
+        </template>
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <!-- Line items -->
@@ -288,80 +281,47 @@ async function confirmDelete() {
         </div>
 
         <!-- Send mail modal -->
-        <UModal v-model:open="sendMailOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Send Quote</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitSendMail">
-                        <UFormField label="To" required>
-                            <UInput
-                                v-model="mailForm.to"
-                                type="email"
-                                placeholder="recipient@example.com"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Subject">
-                            <UInput v-model="mailForm.subject" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Message">
-                            <UTextarea v-model="mailForm.message" :rows="4" class="w-full" />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="sendMailOpen = false"
-                            />
-                            <UButton
-                                icon="i-tabler-send"
-                                label="Send"
-                                :loading="sending"
-                                :disabled="!mailForm.to"
-                                @click="submitSendMail"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="sendMailOpen"
+            title="Send Quote"
+            confirm-label="Send"
+            :loading="sending"
+            :confirm-disabled="!mailForm.to"
+            @confirm="submitSendMail"
+        >
+            <form class="space-y-3" @submit.prevent="submitSendMail">
+                <UFormField label="To" required>
+                    <UInput
+                        v-model="mailForm.to"
+                        type="email"
+                        placeholder="recipient@example.com"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Subject">
+                    <UInput v-model="mailForm.subject" class="w-full" />
+                </UFormField>
+                <UFormField label="Message">
+                    <UTextarea v-model="mailForm.message" :rows="4" class="w-full" />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Quote</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ quote.title }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
-    </div>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Quote"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ quote.title }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
+    </AppDetailLayout>
 
     <div v-else-if="quotePending" class="space-y-4">
         <USkeleton class="h-8 w-64" />

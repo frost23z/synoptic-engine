@@ -2,7 +2,7 @@
 import type { LeadResponse, TagResponse, StageResponse } from '~/types/leads'
 import type { PersonResponse, OrganizationResponse } from '~/types/contacts'
 import type { ActivityResponse } from '~/types/activities'
-import { ACTIVITY_TYPE_ICON } from '~/types/activities'
+import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL } from '~/types/leads'
 
 definePageMeta({ title: 'Lead' })
 
@@ -10,7 +10,7 @@ const api = useApi()
 const toast = useToast()
 const router = useRouter()
 const route = useRoute()
-const { formatCurrency, formatDate, formatRelativeDate } = useFormatters()
+const { formatCurrency, formatDate } = useFormatters()
 const { can } = usePermissions()
 const id = route.params.id as string
 
@@ -165,53 +165,18 @@ async function submitEdit() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    deleting.value = true
-    try {
-        await api(`/api/leads/${id}`, { method: 'DELETE' })
-        toast.add({ title: 'Lead deleted', color: 'success' })
+const {
+    open: deleteOpen,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<LeadResponse>({
+    endpoint: (l) => `/api/leads/${l.id}`,
+    successMessage: 'Lead deleted',
+    onDeleted: () => {
         router.push('/leads')
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
-
-// ── Tags ──────────────────────────────────────────────────────────────────
-const tagSearch = ref('')
-const addingTag = ref(false)
-
-const filteredTags = computed(() => {
-    const existing = new Set(lead.value?.tags.map((t) => t.id) ?? [])
-    return (allTags.value ?? []).filter(
-        (t) => !existing.has(t.id) && t.name.toLowerCase().includes(tagSearch.value.toLowerCase())
-    )
+    },
 })
-
-async function addTag(tag: TagResponse) {
-    addingTag.value = true
-    try {
-        await api(`/api/leads/${id}/tags`, { method: 'POST', body: { tagId: tag.id } })
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to add tag', color: 'error' })
-    } finally {
-        addingTag.value = false
-    }
-}
-
-async function removeTag(tagId: string) {
-    try {
-        await api(`/api/leads/${id}/tags/${tagId}`, { method: 'DELETE' })
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to remove tag', color: 'error' })
-    }
-}
 
 // ── Activities ────────────────────────────────────────────────────────────
 const { data: activities, refresh: refreshActivities } = await useAsyncData<ActivityResponse[]>(
@@ -290,49 +255,36 @@ const LEAD_STATUS_OPTIONS = [
 </script>
 
 <template>
-    <div v-if="lead" class="space-y-6">
-        <!-- Header -->
-        <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-                <UButton icon="i-tabler-arrow-left" color="neutral" variant="ghost" to="/leads" />
-                <div>
-                    <h2 class="text-highlighted text-xl font-semibold">{{ lead.title }}</h2>
-                    <div class="text-muted mt-0.5 flex items-center gap-2 text-sm">
-                        <UBadge
-                            :label="lead.status.charAt(0) + lead.status.slice(1).toLowerCase()"
-                            :color="
-                                lead.status === 'open'
-                                    ? 'info'
-                                    : lead.status === 'won'
-                                      ? 'success'
-                                      : 'error'
-                            "
-                            variant="soft"
-                            size="xs"
-                        />
-                        <span v-if="pipelineName">{{ pipelineName }}</span>
-                        <span v-if="stageName">· {{ stageName }}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="flex gap-2">
-                <UButton
-                    v-if="can('leads.edit')"
-                    icon="i-tabler-pencil"
-                    label="Edit"
-                    color="neutral"
-                    variant="outline"
-                    @click="openEdit"
+    <AppDetailLayout v-if="lead" to="/leads" :title="lead.title">
+        <template #subtitle>
+            <div class="text-muted mt-0.5 flex items-center gap-2 text-sm">
+                <UBadge
+                    :label="LEAD_STATUS_LABEL[lead.status]"
+                    :color="LEAD_STATUS_COLOR[lead.status]"
+                    variant="soft"
+                    size="xs"
                 />
-                <UButton
-                    v-if="can('leads.delete')"
-                    icon="i-tabler-trash"
-                    color="error"
-                    variant="outline"
-                    @click="deleteOpen = true"
-                />
+                <span v-if="pipelineName">{{ pipelineName }}</span>
+                <span v-if="stageName">· {{ stageName }}</span>
             </div>
-        </div>
+        </template>
+        <template #actions>
+            <UButton
+                v-if="can('leads.edit')"
+                icon="i-tabler-pencil"
+                label="Edit"
+                color="neutral"
+                variant="outline"
+                @click="openEdit"
+            />
+            <UButton
+                v-if="can('leads.delete')"
+                icon="i-tabler-trash"
+                color="error"
+                variant="outline"
+                @click="promptDelete(lead)"
+            />
+        </template>
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <!-- Left: details + activities -->
@@ -402,6 +354,7 @@ const LEAD_STATUS_OPTIONS = [
                         <div class="flex items-center justify-between">
                             <p class="text-highlighted font-semibold">Activities</p>
                             <UButton
+                                v-if="can('activities.create')"
                                 icon="i-tabler-plus"
                                 size="xs"
                                 color="neutral"
@@ -411,97 +364,23 @@ const LEAD_STATUS_OPTIONS = [
                             />
                         </div>
                     </template>
-                    <div v-if="!activities?.length" class="text-muted py-6 text-center text-sm">
-                        No activities yet
-                    </div>
-                    <ul v-else class="divide-default divide-y">
-                        <li
-                            v-for="act in activities"
-                            :key="act.id"
-                            class="flex items-start gap-3 py-3"
-                            :class="act.done ? 'opacity-60' : ''"
-                        >
-                            <div class="bg-muted mt-0.5 shrink-0 rounded-full p-1.5">
-                                <UIcon
-                                    :name="
-                                        ACTIVITY_TYPE_ICON[
-                                            act.type as keyof typeof ACTIVITY_TYPE_ICON
-                                        ] ?? 'i-tabler-activity'
-                                    "
-                                    class="text-muted size-3.5"
-                                />
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p
-                                    class="text-default text-sm font-medium"
-                                    :class="act.done ? 'line-through' : ''"
-                                >
-                                    {{ act.title }}
-                                </p>
-                                <p v-if="act.comment" class="text-muted mt-0.5 text-xs">
-                                    {{ act.comment }}
-                                </p>
-                                <p class="text-muted mt-0.5 text-xs">
-                                    {{ formatRelativeDate(act.scheduleFrom) }}
-                                </p>
-                            </div>
-                            <UButton
-                                :icon="
-                                    act.done ? 'i-tabler-circle-check-filled' : 'i-tabler-circle'
-                                "
-                                :color="act.done ? 'success' : 'neutral'"
-                                variant="ghost"
-                                size="xs"
-                                @click="toggleActivityDone(act)"
-                            />
-                        </li>
-                    </ul>
+                    <EntityTimeline
+                        :activities="activities ?? []"
+                        :can-toggle="can('activities.edit')"
+                        @toggle-done="toggleActivityDone"
+                    />
                 </UCard>
             </div>
 
             <!-- Right sidebar -->
             <div class="space-y-4">
-                <!-- Tags -->
-                <UCard>
-                    <template #header><p class="text-highlighted font-semibold">Tags</p></template>
-                    <div class="space-y-3">
-                        <div class="flex flex-wrap gap-1.5">
-                            <span
-                                v-for="tag in lead.tags"
-                                :key="tag.id"
-                                class="border-default flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium"
-                                :style="{ borderColor: tag.color, color: tag.color }"
-                            >
-                                {{ tag.name }}
-                                <button class="hover:opacity-70" @click="removeTag(tag.id)">
-                                    <UIcon name="i-tabler-x" class="size-3" />
-                                </button>
-                            </span>
-                            <span v-if="!lead.tags.length" class="text-muted text-xs">No tags</span>
-                        </div>
-                        <UInput
-                            v-model="tagSearch"
-                            placeholder="Add tag…"
-                            size="sm"
-                            icon="i-tabler-search"
-                        />
-                        <div class="max-h-36 space-y-1 overflow-y-auto">
-                            <button
-                                v-for="tag in filteredTags"
-                                :key="tag.id"
-                                class="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs"
-                                :disabled="addingTag"
-                                @click="addTag(tag)"
-                            >
-                                <span
-                                    class="size-2 rounded-full"
-                                    :style="{ backgroundColor: tag.color ?? '#888' }"
-                                />
-                                {{ tag.name }}
-                            </button>
-                        </div>
-                    </div>
-                </UCard>
+                <AppTagManager
+                    :tags="lead.tags"
+                    :all-tags="allTags ?? []"
+                    :endpoint="`/api/leads/${id}/tags`"
+                    :can-edit="can('leads.edit')"
+                    @changed="refresh"
+                />
 
                 <!-- Meta -->
                 <UCard>
@@ -521,214 +400,163 @@ const LEAD_STATUS_OPTIONS = [
         </div>
 
         <!-- Edit modal -->
-        <UModal v-model:open="editing" :ui="{ content: 'sm:max-w-2xl' }">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Edit Lead</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitEdit">
-                        <UFormField label="Title" required>
-                            <UInput v-model="editForm.title" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UTextarea v-model="editForm.description" :rows="3" class="w-full" />
-                        </UFormField>
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Amount">
-                                <UInput
-                                    v-model.number="editForm.amount"
-                                    type="number"
-                                    step="0.01"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="Expected Close">
-                                <UInput
-                                    v-model="editForm.expectedCloseDate"
-                                    type="date"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Pipeline">
-                                <USelect
-                                    v-model="editForm.pipelineId"
-                                    :items="pipelineOptions"
-                                    placeholder="Select pipeline"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="Stage">
-                                <USelect
-                                    v-model="editForm.stageId"
-                                    :items="stageOptions"
-                                    placeholder="Select stage"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Contact">
-                                <USelect
-                                    v-model="editForm.personId"
-                                    :items="personOptions"
-                                    placeholder="Select person"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="Organization">
-                                <USelect
-                                    v-model="editForm.organizationId"
-                                    :items="orgOptions"
-                                    placeholder="Select org"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Source">
-                                <USelect
-                                    v-model="editForm.leadSourceId"
-                                    :items="sourceOptions"
-                                    placeholder="Select source"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="Type">
-                                <USelect
-                                    v-model="editForm.leadTypeId"
-                                    :items="typeOptions"
-                                    placeholder="Select type"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                        </div>
-                        <UFormField label="Status">
-                            <USelect
-                                v-model="editForm.status"
-                                :items="LEAD_STATUS_OPTIONS"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField v-if="editForm.status === 'LOST'" label="Lost Reason">
-                            <UInput v-model="editForm.lostReason" class="w-full" />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="editing = false"
-                            />
-                            <UButton
-                                label="Save"
-                                :loading="saving"
-                                :disabled="!editForm.title"
-                                @click="submitEdit"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="editing"
+            title="Edit Lead"
+            confirm-label="Save"
+            :loading="saving"
+            :confirm-disabled="!editForm.title"
+            width-class="sm:max-w-2xl"
+            @confirm="submitEdit"
+        >
+            <form class="space-y-3" @submit.prevent="submitEdit">
+                <UFormField label="Title" required>
+                    <UInput v-model="editForm.title" class="w-full" />
+                </UFormField>
+                <UFormField label="Description">
+                    <UTextarea v-model="editForm.description" :rows="3" class="w-full" />
+                </UFormField>
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Amount">
+                        <UInput
+                            v-model.number="editForm.amount"
+                            type="number"
+                            step="0.01"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Expected Close">
+                        <UInput v-model="editForm.expectedCloseDate" type="date" class="w-full" />
+                    </UFormField>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Pipeline">
+                        <USelect
+                            v-model="editForm.pipelineId"
+                            :items="pipelineOptions"
+                            placeholder="Select pipeline"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Stage">
+                        <USelect
+                            v-model="editForm.stageId"
+                            :items="stageOptions"
+                            placeholder="Select stage"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Contact">
+                        <USelect
+                            v-model="editForm.personId"
+                            :items="personOptions"
+                            placeholder="Select person"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Organization">
+                        <USelect
+                            v-model="editForm.organizationId"
+                            :items="orgOptions"
+                            placeholder="Select org"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Source">
+                        <USelect
+                            v-model="editForm.leadSourceId"
+                            :items="sourceOptions"
+                            placeholder="Select source"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Type">
+                        <USelect
+                            v-model="editForm.leadTypeId"
+                            :items="typeOptions"
+                            placeholder="Select type"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+                <UFormField label="Status">
+                    <USelect
+                        v-model="editForm.status"
+                        :items="LEAD_STATUS_OPTIONS"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField v-if="editForm.status === 'LOST'" label="Lost Reason">
+                    <UInput v-model="editForm.lostReason" class="w-full" />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
         <!-- Add activity modal -->
-        <UModal v-model:open="addActivityOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Add Activity</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitActivity">
-                        <UFormField label="Title" required>
-                            <UInput
-                                v-model="activityForm.title"
-                                placeholder="e.g. Follow-up call"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Type" required>
-                            <USelect
-                                v-model="activityForm.type"
-                                :items="ACTIVITY_TYPES.map((t) => ({ label: t, value: t }))"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="From" required>
-                                <UInput
-                                    v-model="activityForm.scheduleFrom"
-                                    type="datetime-local"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField label="To" required>
-                                <UInput
-                                    v-model="activityForm.scheduleTo"
-                                    type="datetime-local"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                        </div>
-                        <UFormField label="Comment">
-                            <UTextarea v-model="activityForm.comment" :rows="3" class="w-full" />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="addActivityOpen = false"
-                            />
-                            <UButton
-                                label="Add"
-                                :loading="addingActivity"
-                                :disabled="!activityForm.title"
-                                @click="submitActivity"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="addActivityOpen"
+            title="Add Activity"
+            confirm-label="Add"
+            :loading="addingActivity"
+            :confirm-disabled="!activityForm.title"
+            @confirm="submitActivity"
+        >
+            <form class="space-y-3" @submit.prevent="submitActivity">
+                <UFormField label="Title" required>
+                    <UInput
+                        v-model="activityForm.title"
+                        placeholder="e.g. Follow-up call"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Type" required>
+                    <USelect
+                        v-model="activityForm.type"
+                        :items="ACTIVITY_TYPES.map((t) => ({ label: t, value: t }))"
+                        class="w-full"
+                    />
+                </UFormField>
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="From" required>
+                        <UInput
+                            v-model="activityForm.scheduleFrom"
+                            type="datetime-local"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="To" required>
+                        <UInput
+                            v-model="activityForm.scheduleTo"
+                            type="datetime-local"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+                <UFormField label="Comment">
+                    <UTextarea v-model="activityForm.comment" :rows="3" class="w-full" />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Lead</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ lead.title }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
-    </div>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Lead"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ lead.title }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
+    </AppDetailLayout>
 
     <div v-else-if="leadPending" class="space-y-4">
         <USkeleton class="h-8 w-64" />

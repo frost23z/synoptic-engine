@@ -6,6 +6,7 @@ useHead({ title: 'Mail — Synoptic' })
 
 const api = useApi()
 const toast = useToast()
+const { can } = usePermissions()
 const { formatRelativeDate } = useFormatters()
 const router = useRouter()
 
@@ -176,7 +177,7 @@ async function submitCompose() {
     <div class="flex h-full gap-0">
         <!-- Folder sidebar -->
         <aside class="border-default flex w-48 shrink-0 flex-col border-r">
-            <div class="p-3">
+            <div v-if="can('mail.edit')" class="p-3">
                 <UButton
                     icon="i-tabler-pencil"
                     label="Compose"
@@ -226,6 +227,7 @@ async function submitCompose() {
             >
                 <span class="text-muted text-sm">{{ count }} selected</span>
                 <UButton
+                    v-if="can('mail.edit')"
                     label="Mark Read"
                     size="sm"
                     color="info"
@@ -234,6 +236,7 @@ async function submitCompose() {
                     @click="massMarkRead"
                 />
                 <UButton
+                    v-if="can('mail.edit')"
                     icon="i-tabler-trash"
                     label="Delete"
                     size="sm"
@@ -312,6 +315,7 @@ async function submitCompose() {
 
                     <!-- Row actions (show on hover) -->
                     <div
+                        v-if="can('mail.edit')"
                         class="invisible flex shrink-0 items-center gap-1 group-hover:visible"
                         @click.stop
                     >
@@ -359,62 +363,42 @@ async function submitCompose() {
         </div>
 
         <!-- Compose modal -->
-        <UModal v-model:open="composeOpen" :ui="{ content: 'sm:max-w-xl' }">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">New Message</p>
-                    </template>
-                    <form class="space-y-3" @submit.prevent="submitCompose">
-                        <UFormField label="To" required>
-                            <UInput
-                                v-model="composeForm.to"
-                                placeholder="recipient@example.com"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="CC">
-                            <UInput
-                                v-model="composeForm.cc"
-                                placeholder="cc@example.com, ..."
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Subject">
-                            <UInput
-                                v-model="composeForm.subject"
-                                placeholder="Subject"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Message">
-                            <UTextarea
-                                v-model="composeForm.body"
-                                placeholder="Write your message..."
-                                :rows="8"
-                                class="w-full"
-                            />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="composeOpen = false"
-                            />
-                            <UButton
-                                icon="i-tabler-send"
-                                label="Send"
-                                :loading="sending"
-                                :disabled="!composeForm.to"
-                                @click="submitCompose"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="composeOpen"
+            title="New Message"
+            confirm-label="Send"
+            :loading="sending"
+            :confirm-disabled="!composeForm.to"
+            width-class="sm:max-w-xl"
+            @confirm="submitCompose"
+        >
+            <form class="space-y-3" @submit.prevent="submitCompose">
+                <UFormField label="To" required>
+                    <UInput
+                        v-model="composeForm.to"
+                        placeholder="recipient@example.com"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="CC">
+                    <UInput
+                        v-model="composeForm.cc"
+                        placeholder="cc@example.com, ..."
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Subject">
+                    <UInput v-model="composeForm.subject" placeholder="Subject" class="w-full" />
+                </UFormField>
+                <UFormField label="Message">
+                    <UTextarea
+                        v-model="composeForm.body"
+                        placeholder="Write your message..."
+                        :rows="8"
+                        class="w-full"
+                    />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
     </div>
 </template>
