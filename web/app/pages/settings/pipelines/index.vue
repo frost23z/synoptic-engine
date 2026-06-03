@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { PipelineResponse, StageResponse } from '~/types/settings'
 
 definePageMeta({ title: 'Pipelines' })
@@ -8,6 +8,7 @@ useHead({ title: 'Pipelines — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 const {
     data: pipelines,
@@ -19,7 +20,7 @@ const {
 
 // ── Stages panel ──────────────────────────────────────────────────────────
 const stagesOpen = ref(false)
-const selectedPipeline = ref<PipelineResponse | null>(null)
+const selectedPipeline = shallowRef<PipelineResponse | null>(null)
 const stages = ref<StageResponse[]>([])
 const stagesPending = ref(false)
 const newStageName = ref('')
@@ -143,26 +144,18 @@ async function submitCreate() {
 }
 
 // ── Delete pipeline ────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<PipelineResponse | null>(null)
-const deleting = ref(false)
+const {
+    open: deleteOpen,
+    target: pipelineToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<PipelineResponse>({
+    endpoint: (p) => `/api/pipelines/${p.id}`,
+    successMessage: 'Pipeline deleted',
+    onDeleted: refresh,
+})
 
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/pipelines/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Pipeline deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
-
-// ── Table columns ─────────────────────────────────────────────────────────
 const columns: TableColumn<PipelineResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'description', header: 'Description' },
@@ -171,18 +164,15 @@ const columns: TableColumn<PipelineResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(p: PipelineResponse) {
+function rowActions(p: PipelineResponse): DropdownMenuItem[][] {
     return [
-        [{ label: 'Stages', icon: 'i-tabler-git-branch', click: () => openStages(p) }],
+        [{ label: 'Stages', icon: 'i-tabler-git-branch', onSelect: () => openStages(p) }],
         [
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDelete.value = p
-                    deleteOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDelete(p),
             },
         ],
     ]
@@ -191,64 +181,56 @@ function rowActions(p: PipelineResponse) {
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Pipelines</h2>
-                <p class="text-muted text-sm">
-                    {{ (pipelines?.length ?? 0).toLocaleString() }} total
-                </p>
-            </div>
-            <UButton icon="i-tabler-plus" label="New Pipeline" @click="openCreate" />
-        </div>
+        <AppPageHeader
+            title="Pipelines"
+            :subtitle="`${(pipelines?.length ?? 0).toLocaleString()} total`"
+        >
+            <template #actions>
+                <UButton
+                    v-if="can('pipelines.create')"
+                    icon="i-tabler-plus"
+                    label="New Pipeline"
+                    @click="openCreate"
+                />
+            </template>
+        </AppPageHeader>
 
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="pipelines ?? []" :columns="columns" :loading="pending" sticky>
-                <template #name-cell="{ row }">
-                    <span class="font-medium">{{ row.original.name }}</span>
-                </template>
-                <template #description-cell="{ row }">
-                    <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
-                </template>
-                <template #status-cell="{ row }">
-                    <div class="flex gap-1.5">
-                        <UBadge
-                            v-if="row.original.default"
-                            label="Default"
-                            color="primary"
-                            variant="soft"
-                            size="sm"
-                        />
-                        <UBadge
-                            :label="row.original.active ? 'Active' : 'Inactive'"
-                            :color="row.original.active ? 'success' : 'neutral'"
-                            variant="soft"
-                            size="sm"
-                        />
-                    </div>
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-git-merge" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No pipelines found</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
+        <AppListTable :rows="pipelines ?? []" :columns="columns" :loading="pending">
+            <template #name-cell="{ row }">
+                <span class="font-medium">{{ row.original.name }}</span>
+            </template>
+            <template #description-cell="{ row }">
+                <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
+            </template>
+            <template #status-cell="{ row }">
+                <div class="flex gap-1.5">
+                    <UBadge
+                        v-if="row.original.default"
+                        label="Default"
+                        color="primary"
+                        variant="soft"
+                        size="sm"
+                    />
+                    <UBadge
+                        :label="row.original.active ? 'Active' : 'Inactive'"
+                        :color="row.original.active ? 'success' : 'neutral'"
+                        variant="soft"
+                        size="sm"
+                    />
+                </div>
+            </template>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions v-if="can('pipelines.edit')" :items="rowActions(row.original)" />
+            </template>
+            <template #empty>
+                <AppEmptyState icon="i-tabler-git-merge" message="No pipelines found" />
+            </template>
+        </AppListTable>
 
-        <!-- Stages modal -->
+        <!-- Stages management panel (bespoke) -->
         <UModal v-model:open="stagesOpen">
             <template #content>
                 <UCard>
@@ -327,77 +309,45 @@ function rowActions(p: PipelineResponse) {
         </UModal>
 
         <!-- Create pipeline modal -->
-        <UModal v-model:open="createOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Create Pipeline</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitCreate">
-                        <UFormField label="Name" required>
-                            <UInput
-                                v-model="createForm.name"
-                                placeholder="e.g. Sales Pipeline"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UInput
-                                v-model="createForm.description"
-                                placeholder="Optional description"
-                                class="w-full"
-                            />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creating"
-                                :disabled="!createForm.name"
-                                @click="submitCreate"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="createOpen"
+            title="Create Pipeline"
+            confirm-label="Create"
+            :loading="creating"
+            :confirm-disabled="!createForm.name"
+            @confirm="submitCreate"
+        >
+            <form class="space-y-3" @submit.prevent="submitCreate">
+                <UFormField label="Name" required>
+                    <UInput
+                        v-model="createForm.name"
+                        placeholder="e.g. Sales Pipeline"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Description">
+                    <UInput
+                        v-model="createForm.description"
+                        placeholder="Optional description"
+                        class="w-full"
+                    />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
-        <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Pipeline</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.name }}</strong
-                        >? All associated leads will be affected.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <!-- Delete pipeline modal -->
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Pipeline"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ pipelineToDelete?.name }}</strong
+                >? All associated leads will be affected.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>

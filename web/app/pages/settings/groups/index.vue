@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { GroupResponse } from '~/types/settings'
 
 definePageMeta({ title: 'Groups' })
@@ -8,6 +8,7 @@ useHead({ title: 'Groups — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 const {
     data: groups,
@@ -15,7 +16,7 @@ const {
     refresh,
 } = await useAsyncData<GroupResponse[]>('groups', () => api<GroupResponse[]>('/api/groups'))
 
-// ── Create modal ──────────────────────────────────────────────────────────
+// ── Create ──────────────────────────────────────────────────────────────
 const createOpen = ref(false)
 const creating = ref(false)
 const createForm = reactive({ name: '', description: '' })
@@ -47,25 +48,18 @@ async function submitCreate() {
     }
 }
 
-// ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<GroupResponse | null>(null)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/groups/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Group deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+// ── Delete ──────────────────────────────────────────────────────────────
+const {
+    open: deleteOpen,
+    target: groupToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<GroupResponse>({
+    endpoint: (g) => `/api/groups/${g.id}`,
+    successMessage: 'Group deleted',
+    onDeleted: refresh,
+})
 
 const columns: TableColumn<GroupResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
@@ -74,17 +68,14 @@ const columns: TableColumn<GroupResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(g: GroupResponse) {
+function rowActions(g: GroupResponse): DropdownMenuItem[][] {
     return [
         [
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDelete.value = g
-                    deleteOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDelete(g),
             },
         ],
     ]
@@ -93,116 +84,73 @@ function rowActions(g: GroupResponse) {
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Groups</h2>
-                <p class="text-muted text-sm">{{ (groups?.length ?? 0).toLocaleString() }} total</p>
-            </div>
-            <UButton icon="i-tabler-plus" label="New Group" @click="openCreate" />
-        </div>
-
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="groups ?? []" :columns="columns" :loading="pending" sticky>
-                <template #name-cell="{ row }">
-                    <span class="font-medium">{{ row.original.name }}</span>
-                </template>
-                <template #description-cell="{ row }">
-                    <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-users-group" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No groups found</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
-
-        <!-- Create group modal -->
-        <UModal v-model:open="createOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Create Group</p>
-                    </template>
-                    <form class="space-y-3" @submit.prevent="submitCreate">
-                        <UFormField label="Name" required>
-                            <UInput
-                                v-model="createForm.name"
-                                placeholder="e.g. Sales Team"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UInput
-                                v-model="createForm.description"
-                                placeholder="Optional description"
-                                class="w-full"
-                            />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creating"
-                                :disabled="!createForm.name"
-                                @click="submitCreate"
-                            />
-                        </div>
-                    </template>
-                </UCard>
+        <AppPageHeader title="Groups" :subtitle="`${(groups?.length ?? 0).toLocaleString()} total`">
+            <template #actions>
+                <UButton
+                    v-if="can('groups.create')"
+                    icon="i-tabler-plus"
+                    label="New Group"
+                    @click="openCreate"
+                />
             </template>
-        </UModal>
+        </AppPageHeader>
 
-        <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Group</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.name }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
+        <AppListTable :rows="groups ?? []" :columns="columns" :loading="pending">
+            <template #name-cell="{ row }">
+                <span class="font-medium">{{ row.original.name }}</span>
             </template>
-        </UModal>
+            <template #description-cell="{ row }">
+                <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
+            </template>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions v-if="can('groups.delete')" :items="rowActions(row.original)" />
+            </template>
+            <template #empty>
+                <AppEmptyState icon="i-tabler-users-group" message="No groups found" />
+            </template>
+        </AppListTable>
+
+        <AppConfirmModal
+            v-model:open="createOpen"
+            title="Create Group"
+            confirm-label="Create"
+            :loading="creating"
+            :confirm-disabled="!createForm.name"
+            @confirm="submitCreate"
+        >
+            <form class="space-y-3" @submit.prevent="submitCreate">
+                <UFormField label="Name" required>
+                    <UInput
+                        v-model="createForm.name"
+                        placeholder="e.g. Sales Team"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Description">
+                    <UInput
+                        v-model="createForm.description"
+                        placeholder="Optional description"
+                        class="w-full"
+                    />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
+
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Group"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ groupToDelete?.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>

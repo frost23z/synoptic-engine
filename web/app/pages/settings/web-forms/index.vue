@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 
 definePageMeta({ title: 'Web Forms' })
 useHead({ title: 'Web Forms — Synoptic' })
@@ -7,6 +7,7 @@ useHead({ title: 'Web Forms — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 interface AttributeResponse {
     id: string
@@ -60,7 +61,7 @@ type FormMode = 'create' | 'edit'
 const formOpen = ref(false)
 const formMode = ref<FormMode>('create')
 const formSaving = ref(false)
-const formTarget = ref<WebFormResponse | null>(null)
+const formTarget = shallowRef<WebFormResponse | null>(null)
 const formData = reactive({ title: '', description: '', active: true })
 const formFields = ref<WebFormField[]>([])
 
@@ -128,24 +129,17 @@ async function submitForm() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<WebFormResponse | null>(null)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/settings/web-forms/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Form deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+const {
+    open: deleteOpen,
+    target: formToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<WebFormResponse>({
+    endpoint: (w) => `/api/settings/web-forms/${w.id}`,
+    successMessage: 'Form deleted',
+    onDeleted: refresh,
+})
 
 const columns: TableColumn<WebFormResponse>[] = [
     { accessorKey: 'title', header: 'Title' },
@@ -155,213 +149,171 @@ const columns: TableColumn<WebFormResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(w: WebFormResponse) {
-    return [
-        [{ label: 'Edit', icon: 'i-tabler-pencil', click: () => openEdit(w) }],
-        [
+function rowActions(w: WebFormResponse): DropdownMenuItem[][] {
+    const groups: DropdownMenuItem[][] = []
+    if (can('web-forms.edit')) {
+        groups.push([{ label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(w) }])
+    }
+    if (can('web-forms.delete')) {
+        groups.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDelete.value = w
-                    deleteOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDelete(w),
             },
-        ],
-    ]
+        ])
+    }
+    return groups
 }
 </script>
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Web Forms</h2>
-                <p class="text-muted text-sm">Embeddable forms linked to CRM attributes</p>
-            </div>
-            <UButton icon="i-tabler-plus" label="New Form" @click="openCreate" />
-        </div>
+        <AppPageHeader title="Web Forms" subtitle="Embeddable forms linked to CRM attributes">
+            <template #actions>
+                <UButton
+                    v-if="can('web-forms.create')"
+                    icon="i-tabler-plus"
+                    label="New Form"
+                    @click="openCreate"
+                />
+            </template>
+        </AppPageHeader>
 
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="forms ?? []" :columns="columns" :loading="pending" sticky>
-                <template #title-cell="{ row }">
-                    <div>
-                        <p class="text-highlighted font-medium">{{ row.original.title }}</p>
-                        <p v-if="row.original.description" class="text-muted text-xs">
-                            {{ row.original.description }}
-                        </p>
-                    </div>
-                </template>
-                <template #fields-cell="{ row }">
-                    <UBadge
-                        :label="`${row.original.fields.length} field${row.original.fields.length === 1 ? '' : 's'}`"
-                        color="neutral"
-                        variant="soft"
-                        size="sm"
-                    />
-                </template>
-                <template #status-cell="{ row }">
-                    <UBadge
-                        :label="row.original.active ? 'Active' : 'Inactive'"
-                        :color="row.original.active ? 'success' : 'neutral'"
-                        variant="soft"
-                        size="sm"
-                    />
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-forms" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No web forms yet</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
+        <AppListTable :rows="forms ?? []" :columns="columns" :loading="pending">
+            <template #title-cell="{ row }">
+                <div>
+                    <p class="text-highlighted font-medium">{{ row.original.title }}</p>
+                    <p v-if="row.original.description" class="text-muted text-xs">
+                        {{ row.original.description }}
+                    </p>
+                </div>
+            </template>
+            <template #fields-cell="{ row }">
+                <UBadge
+                    :label="`${row.original.fields.length} field${row.original.fields.length === 1 ? '' : 's'}`"
+                    color="neutral"
+                    variant="soft"
+                    size="sm"
+                />
+            </template>
+            <template #status-cell="{ row }">
+                <UBadge
+                    :label="row.original.active ? 'Active' : 'Inactive'"
+                    :color="row.original.active ? 'success' : 'neutral'"
+                    variant="soft"
+                    size="sm"
+                />
+            </template>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions
+                    v-if="can('web-forms.edit') || can('web-forms.delete')"
+                    :items="rowActions(row.original)"
+                />
+            </template>
+            <template #empty>
+                <AppEmptyState icon="i-tabler-forms" message="No web forms yet" />
+            </template>
+        </AppListTable>
 
         <!-- Create / Edit modal -->
-        <UModal v-model:open="formOpen" :ui="{ content: 'sm:max-w-2xl' }">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">
-                            {{ formMode === 'create' ? 'Create' : 'Edit' }} Web Form
-                        </p>
-                    </template>
-                    <form class="space-y-4" @submit.prevent="submitForm">
-                        <UFormField label="Title" required>
-                            <UInput
-                                v-model="formData.title"
-                                placeholder="e.g. Lead Capture Form"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UInput
-                                v-model="formData.description"
-                                placeholder="Optional"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <USwitch v-model="formData.active" label="Active" />
+        <AppConfirmModal
+            v-model:open="formOpen"
+            :title="`${formMode === 'create' ? 'Create' : 'Edit'} Web Form`"
+            :confirm-label="formMode === 'create' ? 'Create' : 'Save'"
+            :loading="formSaving"
+            :confirm-disabled="!formData.title"
+            width-class="sm:max-w-2xl"
+            @confirm="submitForm"
+        >
+            <form class="space-y-4" @submit.prevent="submitForm">
+                <UFormField label="Title" required>
+                    <UInput
+                        v-model="formData.title"
+                        placeholder="e.g. Lead Capture Form"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Description">
+                    <UInput v-model="formData.description" placeholder="Optional" class="w-full" />
+                </UFormField>
+                <USwitch v-model="formData.active" label="Active" />
 
-                        <!-- Fields builder -->
-                        <div class="space-y-2">
-                            <div class="flex items-center justify-between">
-                                <p class="text-highlighted text-sm font-semibold">Fields</p>
-                                <UButton
-                                    icon="i-tabler-plus"
-                                    size="xs"
-                                    color="neutral"
-                                    variant="outline"
-                                    label="Add field"
-                                    @click="addField"
-                                />
-                            </div>
-                            <div
-                                v-if="formFields.length === 0"
-                                class="text-muted border-default rounded-lg border py-4 text-center text-sm"
-                            >
-                                No fields added yet
-                            </div>
-                            <div
-                                v-for="(field, i) in formFields"
-                                :key="i"
-                                class="border-default grid grid-cols-12 items-end gap-2 rounded-lg border p-3"
-                            >
-                                <UFormField label="Attribute" class="col-span-7">
-                                    <USelect
-                                        v-model="field.attributeId"
-                                        :items="attributeOptions"
-                                        placeholder="Select attribute"
-                                        class="w-full"
-                                    />
-                                </UFormField>
-                                <UFormField label="Sort" class="col-span-2">
-                                    <UInput
-                                        v-model.number="field.sortOrder"
-                                        type="number"
-                                        min="0"
-                                        class="w-full"
-                                    />
-                                </UFormField>
-                                <div class="col-span-2 flex flex-col gap-1 pb-1">
-                                    <label class="text-muted text-xs">Required</label>
-                                    <USwitch v-model="field.required" />
-                                </div>
-                                <div class="col-span-1 pb-1">
-                                    <UButton
-                                        icon="i-tabler-trash"
-                                        color="error"
-                                        variant="ghost"
-                                        size="xs"
-                                        @click="removeField(i)"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="formOpen = false"
+                <!-- Fields builder -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <p class="text-highlighted text-sm font-semibold">Fields</p>
+                        <UButton
+                            icon="i-tabler-plus"
+                            size="xs"
+                            color="neutral"
+                            variant="outline"
+                            label="Add field"
+                            @click="addField"
+                        />
+                    </div>
+                    <div
+                        v-if="formFields.length === 0"
+                        class="text-muted border-default rounded-lg border py-4 text-center text-sm"
+                    >
+                        No fields added yet
+                    </div>
+                    <div
+                        v-for="(field, i) in formFields"
+                        :key="i"
+                        class="border-default grid grid-cols-12 items-end gap-2 rounded-lg border p-3"
+                    >
+                        <UFormField label="Attribute" class="col-span-7">
+                            <USelect
+                                v-model="field.attributeId"
+                                :items="attributeOptions"
+                                placeholder="Select attribute"
+                                class="w-full"
                             />
+                        </UFormField>
+                        <UFormField label="Sort" class="col-span-2">
+                            <UInput
+                                v-model.number="field.sortOrder"
+                                type="number"
+                                min="0"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <div class="col-span-2 flex flex-col gap-1 pb-1">
+                            <label class="text-muted text-xs">Required</label>
+                            <USwitch v-model="field.required" />
+                        </div>
+                        <div class="col-span-1 pb-1">
                             <UButton
-                                :label="formMode === 'create' ? 'Create' : 'Save'"
-                                :loading="formSaving"
-                                :disabled="!formData.title"
-                                @click="submitForm"
+                                icon="i-tabler-trash"
+                                color="error"
+                                variant="ghost"
+                                size="xs"
+                                @click="removeField(i)"
                             />
                         </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+                    </div>
+                </div>
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Web Form</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.title }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Web Form"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ formToDelete?.title }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>

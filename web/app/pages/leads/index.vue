@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
-import type { KanbanStageGroup, LeadResponse, LeadsPage } from '~/types/leads'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import type { KanbanStageGroup, LeadResponse } from '~/types/leads'
 import type { PipelineResponse } from '~/types/pipelines'
 import type { StageResponse } from '~/types/settings'
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL } from '~/types/leads'
@@ -14,17 +14,40 @@ const router = useRouter()
 const { formatCurrency, formatDate } = useFormatters()
 const { can } = usePermissions()
 
-// ── View + filters ──────────────────────────────────────────────────────
+// ── View + selection ────────────────────────────────────────────────────
 const view = ref<'list' | 'kanban'>('list')
-const page = ref(1)
-const PAGE_SIZE = 20
-const search = ref('')
 const selectedPipelineId = ref<string | undefined>()
 
-const { selected, isSelected, toggle, selectAll, clearAll, hasSelection, count } = useMassSelect()
+const { selected, selectAll, clearAll, count } = useMassSelect()
 const massDeleting = ref(false)
 const massUpdating = ref(false)
 const massStageId = ref('')
+
+// ── List data ────────────────────────────────────────────────────────────
+const {
+    page,
+    search,
+    items: leads,
+    total: totalLeads,
+    pending: listPending,
+    refresh: refreshList,
+} = await usePaginatedList<LeadResponse>('/api/leads', {
+    key: 'leads-list',
+    params: () => ({ pipelineId: selectedPipelineId.value }),
+})
+
+// ── Pipelines (kanban selector + default) ─────────────────────────────────
+const { data: pipelines } = await useAsyncData<PipelineResponse[]>('pipelines', () =>
+    api<PipelineResponse[]>('/api/pipelines')
+)
+const pipelineOptions = computed(
+    () => pipelines.value?.map((p) => ({ label: p.name, value: p.id })) ?? []
+)
+watchEffect(() => {
+    if (pipelines.value?.length && !selectedPipelineId.value) {
+        selectedPipelineId.value = pipelines.value[0]?.id
+    }
+})
 
 // Load stages when pipeline changes for the mass-move select
 const massStageList = ref<StageResponse[]>([])
@@ -45,14 +68,30 @@ const stageOptions = computed(() =>
     massStageList.value.map((s) => ({ label: s.name, value: s.id }))
 )
 
+// ── Kanban data ──────────────────────────────────────────────────────────
+const kanbanQueryKey = computed(() => ['leads-kanban', selectedPipelineId.value])
+const {
+    data: kanbanData,
+    pending: kanbanPending,
+    refresh: refreshKanban,
+} = await useAsyncData<KanbanStageGroup[]>(
+    () => kanbanQueryKey.value.join('-'),
+    () => {
+        if (!selectedPipelineId.value) return Promise.resolve([])
+        return api<KanbanStageGroup[]>('/api/leads/kanban', {
+            params: { pipelineId: selectedPipelineId.value },
+        })
+    },
+    { watch: [kanbanQueryKey] }
+)
+const kanbanGroups = computed(() => kanbanData.value ?? [])
+
+// ── Mass ops ──────────────────────────────────────────────────────────────
 async function massDelete() {
-    if (!hasSelection.value) return
+    if (!selected.value.length) return
     massDeleting.value = true
     try {
-        await api('/api/leads/mass-destroy', {
-            method: 'POST',
-            body: { ids: selected.value },
-        })
+        await api('/api/leads/mass-destroy', { method: 'POST', body: { ids: selected.value } })
         toast.add({ title: `${count.value} leads deleted`, color: 'success' })
         clearAll()
         refreshList()
@@ -65,7 +104,7 @@ async function massDelete() {
 }
 
 async function massUpdateStage() {
-    if (!hasSelection.value || !massStageId.value) return
+    if (!selected.value.length || !massStageId.value) return
     massUpdating.value = true
     try {
         await api('/api/leads/mass-update', {
@@ -82,154 +121,53 @@ async function massUpdateStage() {
     }
 }
 
-const debouncedSearch = refDebounced(search, 300)
-
-// ── Pipelines (for kanban pipeline selector) ─────────────────────────────
-const { data: pipelines } = await useAsyncData<PipelineResponse[]>('pipelines', () =>
-    api<PipelineResponse[]>('/api/pipelines')
-)
-
-const pipelineOptions = computed(
-    () => pipelines.value?.map((p) => ({ label: p.name, value: p.id })) ?? []
-)
-
-// Default to first pipeline
-watchEffect(() => {
-    if (pipelines.value?.length && !selectedPipelineId.value) {
-        selectedPipelineId.value = pipelines.value[0]?.id
-    }
+// ── Delete ────────────────────────────────────────────────────────────────
+const {
+    open: deleteOpen,
+    target: leadToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<LeadResponse>({
+    endpoint: (l) => `/api/leads/${l.id}`,
+    successMessage: 'Lead deleted',
+    onDeleted: () => {
+        refreshList()
+        if (view.value === 'kanban') refreshKanban()
+    },
 })
 
-// ── List view data ─────────────────────────────────────────────────────────
-const listQueryKey = computed(() => [
-    'leads-list',
-    page.value,
-    debouncedSearch.value,
-    selectedPipelineId.value,
-])
-
-const {
-    data: leadsPage,
-    pending: listPending,
-    refresh: refreshList,
-} = await useAsyncData<LeadsPage>(
-    () => listQueryKey.value.join('-'),
-    () => {
-        const params: Record<string, string | number> = {
-            page: page.value - 1,
-            size: PAGE_SIZE,
-        }
-        if (debouncedSearch.value) params.q = debouncedSearch.value
-        if (selectedPipelineId.value) params.pipelineId = selectedPipelineId.value
-        return api<LeadsPage>('/api/leads', { params })
-    },
-    { watch: [listQueryKey] }
-)
-
-// ── Kanban data ─────────────────────────────────────────────────────────
-const kanbanQueryKey = computed(() => ['leads-kanban', selectedPipelineId.value])
-
-const {
-    data: kanbanData,
-    pending: kanbanPending,
-    refresh: refreshKanban,
-} = await useAsyncData<KanbanStageGroup[]>(
-    () => kanbanQueryKey.value.join('-'),
-    () => {
-        if (!selectedPipelineId.value) return Promise.resolve([])
-        return api<KanbanStageGroup[]>('/api/leads/kanban', {
-            params: { pipelineId: selectedPipelineId.value },
-        })
-    },
-    { watch: [kanbanQueryKey] }
-)
-
-const leads = computed(() => leadsPage.value?.content ?? [])
-const totalLeads = computed(() => leadsPage.value?.totalElements ?? 0)
-const kanbanGroups = computed(() => kanbanData.value ?? [])
-
-// ── Table columns ──────────────────────────────────────────────────────────
+// ── Table columns + row actions ───────────────────────────────────────────
 const columns: TableColumn<LeadResponse>[] = [
-    {
-        id: 'select',
-        header: '',
-        meta: { class: { th: 'w-8', td: 'w-8' } },
-    },
-    {
-        accessorKey: 'title',
-        header: 'Title',
-        meta: { class: { td: 'font-medium' } },
-    },
-    {
-        accessorKey: 'status',
-        header: 'Status',
-    },
-    {
-        accessorKey: 'amount',
-        header: 'Amount',
-    },
-    {
-        accessorKey: 'createdAt',
-        header: 'Created',
-    },
-    {
-        id: 'actions',
-        header: '',
-        meta: { class: { th: 'w-10', td: 'w-10' } },
-    },
+    { accessorKey: 'title', header: 'Title', meta: { class: { td: 'font-medium' } } },
+    { accessorKey: 'status', header: 'Status' },
+    { accessorKey: 'amount', header: 'Amount' },
+    { accessorKey: 'createdAt', header: 'Created' },
+    { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-// ── Row actions ─────────────────────────────────────────────────────────
-function rowActions(lead: LeadResponse) {
-    const items: object[][] = [
-        [{ label: 'View', icon: 'i-tabler-eye', click: () => router.push(`/leads/${lead.id}`) }],
+function rowActions(lead: LeadResponse): DropdownMenuItem[][] {
+    const items: DropdownMenuItem[][] = [
+        [{ label: 'View', icon: 'i-tabler-eye', onSelect: () => router.push(`/leads/${lead.id}`) }],
     ]
     if (can('leads.delete')) {
         items.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => openDeleteModal(lead),
+                color: 'error',
+                onSelect: () => promptDelete(lead),
             },
         ])
     }
     return items
 }
 
-// ── Delete ─────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const leadToDelete = ref<LeadResponse | null>(null)
-const deleting = ref(false)
-
-function openDeleteModal(lead: LeadResponse) {
-    leadToDelete.value = lead
-    deleteOpen.value = true
-}
-
-async function confirmDelete() {
-    if (!leadToDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/leads/${leadToDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Lead deleted', color: 'success' })
-        deleteOpen.value = false
-        refreshList()
-        if (view.value === 'kanban') refreshKanban()
-    } catch {
-        toast.add({ title: 'Failed to delete lead', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
-
-// ── Kanban drag-and-drop ───────────────────────────────────────────────
+// ── Kanban drag-and-drop ──────────────────────────────────────────────────
 const dragging = ref<{ leadId: string; fromStageId: string } | null>(null)
-
 function onDragStart(leadId: string, stageId: string) {
     dragging.value = { leadId, fromStageId: stageId }
 }
-
 async function onDrop(toStageId: string) {
     if (!dragging.value || dragging.value.fromStageId === toStageId) {
         dragging.value = null
@@ -252,14 +190,8 @@ async function onDrop(toStageId: string) {
 
 <template>
     <div class="space-y-4">
-        <!-- Page header -->
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Leads</h2>
-                <p class="text-muted text-sm">{{ totalLeads.toLocaleString() }} total</p>
-            </div>
-            <div class="flex items-center gap-2">
-                <!-- View toggle -->
+        <AppPageHeader title="Leads" :subtitle="`${totalLeads.toLocaleString()} total`">
+            <template #actions>
                 <UButtonGroup>
                     <UButton
                         icon="i-tabler-list"
@@ -274,11 +206,14 @@ async function onDrop(toStageId: string) {
                         @click="view = 'kanban'"
                     />
                 </UButtonGroup>
-                <NuxtLink v-if="can('leads.create')" to="/leads/create">
-                    <UButton icon="i-tabler-plus" label="New Lead" />
-                </NuxtLink>
-            </div>
-        </div>
+                <UButton
+                    v-if="can('leads.create')"
+                    icon="i-tabler-plus"
+                    label="New Lead"
+                    to="/leads/create"
+                />
+            </template>
+        </AppPageHeader>
 
         <!-- Filters -->
         <div class="flex flex-wrap items-center gap-3">
@@ -298,12 +233,7 @@ async function onDrop(toStageId: string) {
 
         <!-- LIST VIEW -->
         <template v-if="view === 'list'">
-            <!-- Mass-ops action bar -->
-            <div
-                v-if="hasSelection"
-                class="bg-default border-default flex items-center gap-3 rounded-lg border px-4 py-2"
-            >
-                <span class="text-muted text-sm">{{ count }} selected</span>
+            <AppMassActionBar :count="count" @clear="clearAll">
                 <USelect
                     v-model="massStageId"
                     :items="stageOptions"
@@ -326,108 +256,55 @@ async function onDrop(toStageId: string) {
                     :loading="massDeleting"
                     @click="massDelete"
                 />
-                <UButton
-                    label="Clear"
-                    size="sm"
-                    color="neutral"
-                    variant="ghost"
-                    @click="clearAll"
-                />
-            </div>
+            </AppMassActionBar>
 
-            <UCard :ui="{ body: 'p-0' }">
-                <UTable :data="leads" :columns="columns" :loading="listPending" sticky>
-                    <!-- Select header -->
-                    <template #select-header>
-                        <UCheckbox
-                            :checked="leads.length > 0 && selected.length === leads.length"
-                            :indeterminate="selected.length > 0 && selected.length < leads.length"
-                            @change="
-                                leads.length === selected.length
-                                    ? clearAll()
-                                    : selectAll(leads.map((l) => l.id))
-                            "
-                        />
-                    </template>
-                    <template #select-cell="{ row }">
-                        <UCheckbox
-                            :checked="isSelected(row.original.id)"
-                            @change="toggle(row.original.id)"
-                        />
-                    </template>
-
-                    <!-- Title cell -->
-                    <template #title-cell="{ row }">
-                        <NuxtLink
-                            :to="`/leads/${row.original.id}`"
-                            class="text-primary hover:underline"
-                        >
-                            {{ row.original.title }}
+            <AppListTable
+                :rows="leads"
+                :columns="columns"
+                :loading="listPending"
+                selectable
+                :selected="selected"
+                @update:selected="selectAll"
+            >
+                <template #title-cell="{ row }">
+                    <NuxtLink
+                        :to="`/leads/${row.original.id}`"
+                        class="text-primary hover:underline"
+                    >
+                        {{ row.original.title }}
+                    </NuxtLink>
+                </template>
+                <template #status-cell="{ row }">
+                    <UBadge
+                        :label="LEAD_STATUS_LABEL[row.original.status]"
+                        :color="LEAD_STATUS_COLOR[row.original.status]"
+                        variant="soft"
+                        size="sm"
+                    />
+                </template>
+                <template #amount-cell="{ row }">
+                    <span class="font-medium">{{ formatCurrency(row.original.amount) }}</span>
+                </template>
+                <template #createdAt-cell="{ row }">
+                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+                </template>
+                <template #actions-cell="{ row }">
+                    <AppRowActions :items="rowActions(row.original)" />
+                </template>
+                <template #empty>
+                    <AppEmptyState icon="i-tabler-target-off" message="No leads found">
+                        <NuxtLink to="/leads/create">
+                            <UButton size="sm" variant="outline" label="Create first lead" />
                         </NuxtLink>
-                    </template>
+                    </AppEmptyState>
+                </template>
+            </AppListTable>
 
-                    <!-- Status cell -->
-                    <template #status-cell="{ row }">
-                        <UBadge
-                            :label="LEAD_STATUS_LABEL[row.original.status]"
-                            :color="LEAD_STATUS_COLOR[row.original.status]"
-                            variant="soft"
-                            size="sm"
-                        />
-                    </template>
-
-                    <!-- Amount cell -->
-                    <template #amount-cell="{ row }">
-                        <span class="font-medium">{{ formatCurrency(row.original.amount) }}</span>
-                    </template>
-
-                    <!-- Created cell -->
-                    <template #createdAt-cell="{ row }">
-                        <span class="text-muted text-sm">
-                            {{ formatDate(row.original.createdAt) }}
-                        </span>
-                    </template>
-
-                    <!-- Actions cell -->
-                    <template #actions-cell="{ row }">
-                        <UDropdownMenu :items="rowActions(row.original)">
-                            <UButton
-                                icon="i-tabler-dots-vertical"
-                                color="neutral"
-                                variant="ghost"
-                                size="xs"
-                            />
-                        </UDropdownMenu>
-                    </template>
-
-                    <!-- Empty state -->
-                    <template #empty>
-                        <div class="space-y-2 py-12 text-center">
-                            <UIcon name="i-tabler-target-off" class="text-muted mx-auto size-10" />
-                            <p class="text-muted text-sm">No leads found</p>
-                            <NuxtLink to="/leads/create">
-                                <UButton size="sm" variant="outline" label="Create first lead" />
-                            </NuxtLink>
-                        </div>
-                    </template>
-                </UTable>
-            </UCard>
-
-            <!-- Pagination -->
-            <div v-if="totalLeads > PAGE_SIZE" class="flex justify-center">
-                <UPagination
-                    v-model:page="page"
-                    :total="totalLeads"
-                    :items-per-page="PAGE_SIZE"
-                    :sibling-count="1"
-                    show-edges
-                />
-            </div>
+            <AppPagination v-model:page="page" :total="totalLeads" />
         </template>
 
         <!-- KANBAN VIEW -->
         <template v-else>
-            <!-- Pipeline selector for kanban -->
             <USelect
                 v-model="selectedPipelineId"
                 :items="pipelineOptions"
@@ -435,7 +312,6 @@ async function onDrop(toStageId: string) {
                 class="w-56"
             />
 
-            <!-- Skeleton -->
             <div v-if="kanbanPending" class="flex gap-4 overflow-x-auto pb-4">
                 <div v-for="i in 4" :key="i" class="w-64 shrink-0 space-y-2">
                     <USkeleton class="h-8 w-full" />
@@ -443,7 +319,6 @@ async function onDrop(toStageId: string) {
                 </div>
             </div>
 
-            <!-- Columns -->
             <div v-else class="flex gap-3 overflow-x-auto pb-6">
                 <div
                     v-for="group in kanbanGroups"
@@ -452,7 +327,6 @@ async function onDrop(toStageId: string) {
                     @dragover.prevent
                     @drop="onDrop(group.stage.id)"
                 >
-                    <!-- Column header -->
                     <div class="flex items-center justify-between px-1 py-0.5">
                         <span class="text-highlighted text-sm font-semibold">
                             {{ group.stage.name }}
@@ -470,7 +344,6 @@ async function onDrop(toStageId: string) {
                         {{ formatCurrency(group.totalAmount) }}
                     </p>
 
-                    <!-- Lead cards -->
                     <div class="min-h-16 space-y-2">
                         <UCard
                             v-for="lead in group.leads"
@@ -506,34 +379,18 @@ async function onDrop(toStageId: string) {
         </template>
 
         <!-- Delete confirmation modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Delete Lead</p>
-                    </template>
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ leadToDelete?.title }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Lead"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ leadToDelete?.title }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>
