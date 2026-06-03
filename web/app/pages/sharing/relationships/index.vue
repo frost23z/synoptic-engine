@@ -15,7 +15,17 @@ const toast = useToast()
 const router = useRouter()
 const { can } = usePermissions()
 const { formatDate } = useFormatters()
-const { tenantName, tenantOptions, hasTenantList } = useTenantNames()
+const { tenantName, tenantOptions, hasTenantList, isSelf } = useTenantNames()
+
+/** Our side of a relationship is shown as "You"; the badge reads the direction. */
+function sideLabel(id: string): string {
+    return isSelf(id) ? 'You' : tenantName(id)
+}
+function directionOf(rel: RelationshipResponse): 'Incoming' | 'Outgoing' | '' {
+    if (isSelf(rel.sourceTenantId)) return 'Outgoing'
+    if (isSelf(rel.targetTenantId)) return 'Incoming'
+    return ''
+}
 
 const {
     data: relationships,
@@ -107,14 +117,27 @@ function rowActions(rel: RelationshipResponse): DropdownMenuItem[][] {
 
         <AppListTable :rows="rows" :columns="columns" :loading="pending">
             <template #tenants-cell="{ row }">
-                <NuxtLink
-                    :to="`/sharing/relationships/${row.original.id}`"
-                    class="text-primary inline-flex items-center gap-1.5 hover:underline"
-                >
-                    <span>{{ tenantName(row.original.sourceTenantId) }}</span>
-                    <UIcon name="i-tabler-arrow-right" class="text-muted size-3.5" />
-                    <span>{{ tenantName(row.original.targetTenantId) }}</span>
-                </NuxtLink>
+                <div class="flex items-center gap-2">
+                    <NuxtLink
+                        :to="`/sharing/relationships/${row.original.id}`"
+                        class="text-primary inline-flex items-center gap-1.5 hover:underline"
+                    >
+                        <span :class="{ 'font-semibold': isSelf(row.original.sourceTenantId) }">{{
+                            sideLabel(row.original.sourceTenantId)
+                        }}</span>
+                        <UIcon name="i-tabler-arrow-right" class="text-muted size-3.5" />
+                        <span :class="{ 'font-semibold': isSelf(row.original.targetTenantId) }">{{
+                            sideLabel(row.original.targetTenantId)
+                        }}</span>
+                    </NuxtLink>
+                    <UBadge
+                        v-if="directionOf(row.original)"
+                        :label="directionOf(row.original)"
+                        :color="directionOf(row.original) === 'Incoming' ? 'info' : 'neutral'"
+                        variant="soft"
+                        size="xs"
+                    />
+                </div>
             </template>
             <template #type-cell="{ row }">
                 <UBadge

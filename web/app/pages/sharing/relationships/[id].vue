@@ -18,7 +18,7 @@ const toast = useToast()
 const route = useRoute()
 const { can } = usePermissions()
 const { formatDate } = useFormatters()
-const { tenantName } = useTenantNames()
+const { tenantName, isSelf } = useTenantNames()
 const id = route.params.id as string
 
 const {
@@ -29,6 +29,17 @@ const {
     api<RelationshipResponse>(`/api/relationships/${id}`)
 )
 useHead({ title: 'Relationship — Synoptic' })
+
+// "Us vs them" direction from the session tenant's point of view.
+const direction = computed<'Incoming' | 'Outgoing' | ''>(() => {
+    if (!rel.value) return ''
+    if (isSelf(rel.value.sourceTenantId)) return 'Outgoing'
+    if (isSelf(rel.value.targetTenantId)) return 'Incoming'
+    return ''
+})
+function sideLabel(id?: string | null): string {
+    return id && isSelf(id) ? 'You' : tenantName(id)
+}
 
 // ── Lifecycle (accept / suspend / resume / revoke) ──────────────────────────
 const acting = ref(false)
@@ -189,6 +200,13 @@ const {
                     variant="soft"
                     size="sm"
                 />
+                <UBadge
+                    v-if="direction"
+                    :label="direction"
+                    :color="direction === 'Incoming' ? 'info' : 'neutral'"
+                    variant="soft"
+                    size="sm"
+                />
             </div>
         </template>
         <template #actions>
@@ -246,13 +264,13 @@ const {
                         <div>
                             <dt class="text-muted">Source tenant</dt>
                             <dd class="text-highlighted mt-0.5">
-                                {{ tenantName(rel.sourceTenantId) }}
+                                {{ sideLabel(rel.sourceTenantId) }}
                             </dd>
                         </div>
                         <div>
                             <dt class="text-muted">Target tenant</dt>
                             <dd class="text-highlighted mt-0.5">
-                                {{ tenantName(rel.targetTenantId) }}
+                                {{ sideLabel(rel.targetTenantId) }}
                             </dd>
                         </div>
                         <div>
