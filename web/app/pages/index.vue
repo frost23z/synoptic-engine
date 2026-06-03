@@ -100,20 +100,16 @@ function activityIcon(type: string) {
 
         <!-- Stat cards -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <UCard v-for="stat in statCards" :key="stat.label">
-                <div class="flex items-center gap-3">
-                    <div class="shrink-0 rounded-lg p-2" :class="stat.bg">
-                        <UIcon :name="stat.icon" class="size-5" :class="stat.color" />
-                    </div>
-                    <div class="min-w-0">
-                        <p v-if="pending" class="mb-1">
-                            <USkeleton class="h-6 w-16" />
-                        </p>
-                        <p v-else class="text-highlighted text-2xl font-bold">{{ stat.value }}</p>
-                        <p class="text-muted text-xs">{{ stat.label }}</p>
-                    </div>
-                </div>
-            </UCard>
+            <AppStatCard
+                v-for="stat in statCards"
+                :key="stat.label"
+                :label="stat.label"
+                :icon="stat.icon"
+                :value="stat.value"
+                :icon-color="stat.color"
+                :icon-bg="stat.bg"
+                :loading="pending"
+            />
         </div>
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
