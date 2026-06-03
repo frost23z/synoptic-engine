@@ -31,28 +31,39 @@ Enums: RelationshipType `PARENT_CHILD|PARTNER|SUPPLIER_CLIENT`; RelationshipStat
 CrossTenantAction `VIEW|EDIT|COMMENT|DELETE|SHARE|RESHARE|REVOKE`. Resource types are the
 plural path names: `leads|persons|organizations|quotes|products`.
 
-### Checklist (this phase)
+### Checklist (this phase) — ✅ shipped in PR #53
 
-- [ ] `app/types/sharing.ts` (DTOs + label/color maps)
-- [ ] Nav: "Sharing" section (Relationships, Shared with me, Audit)
-- [ ] `sharing/relationships/index.vue` — list + request-relationship modal
-- [ ] `sharing/relationships/[id].vue` — detail + lifecycle (accept/revoke/suspend/resume) + policies (list/create/revoke)
-- [ ] `sharing/shared-with-me.vue` — records other tenants shared with us
-- [ ] `sharing/audit.vue` — record-scoped cross-tenant audit viewer
+- [x] `app/types/sharing.ts` (DTOs + label/color maps)
+- [x] `useTenantNames` composable
+- [x] Nav: "Sharing" section (Relationships, Shared with me, Audit) + Sign-out `onSelect` fix
+- [x] `sharing/relationships/index.vue` — list + request-relationship modal
+- [x] `sharing/relationships/[id].vue` — detail + lifecycle (accept/revoke/suspend/resume) + policies (list/create/revoke)
+- [x] `sharing/shared-with-me.vue` — records other tenants shared with us
+- [x] `sharing/audit.vue` — record-scoped cross-tenant audit viewer
 
-### Known gaps to carry forward (NOT done here — next session)
+### NEXT UP (start here): record-level sharing on entity pages
 
-- **Record-level "Share" action on entity detail pages** (leads/quotes/persons/orgs/products):
-  a shared `ShareRecordModal` (pick consumer tenant + access level + expiry) calling
-  `POST /records/share`, plus a "Shares" list (`GET /records/{type}/{id}/shares`) with revoke,
-  and the reshare flow. This is the biggest remaining sharing piece.
-- **Share-policy edit** (`PUT /share-policies/{id}`) — only create+revoke shipped first.
+This is the remaining Sharing piece and the natural next branch (`claude/frontend-record-sharing`):
+- **`ShareRecordModal` component** — pick consumer tenant (from `useTenantNames`) + access level
+  (`GRANTABLE_ACCESS_LEVELS`) + optional expiry + note; `POST /api/records/share`. Types/maps
+  already exist in `app/types/sharing.ts`.
+- **`RecordSharesPanel` (or inline)** — `GET /api/records/{resourceType}/{resourceId}/shares`,
+  list consumer tenant + access + expiry, revoke via `DELETE /api/records/share/{id}`
+  (`useDeleteResource`), all gated `records.share`.
+- Wire a **"Share" action** into the detail pages — `leads/[id]` (`leads`), `quotes/[id]`
+  (`quotes`), `contacts/persons/[id]` (`persons`), `contacts/organizations/[id]`
+  (`organizations`), `products/[id]` (`products`). resourceType = the plural names.
+- **Reshare** (`POST /api/records/reshare`, `records.reshare`) — for records shared *to* us with
+  MANAGE access; surface from `shared-with-me`.
+
+### Smaller follow-ups
+
+- **Share-policy edit** (`PUT /share-policies/{id}`) — only create+revoke shipped.
 - **Audit "owner/actor" self-views** need the caller's tenantId, which `/auth/me` does NOT
   return today. Either (a) add `tenantId` to `MeResponse` + `AuthUser`/store (small backend
   change), then default the audit page to `ownerTenantId=self`; or keep it record-scoped.
-- **Tenant-name resolution / "us vs them" direction**: relationships show source→target names
-  via `GET /api/tenants` (needs `tenants.view`; falls back to short UUIDs). Knowing which side
-  is "us" also needs session tenantId.
+- **"Us vs them" relationship direction** also needs session tenantId (currently shows
+  source→target names via `GET /api/tenants`, `tenants.view`, with short-UUID fallback).
 
 ## After P1: remaining F2 / F3 (see FRONTEND_PLAN.md)
 
