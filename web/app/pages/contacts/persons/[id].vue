@@ -81,95 +81,49 @@ async function submitEdit() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    deleting.value = true
-    try {
-        await api(`/api/contacts/persons/${id}`, { method: 'DELETE' })
-        toast.add({ title: 'Person deleted', color: 'success' })
+const {
+    open: deleteOpen,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<PersonResponse>({
+    endpoint: (p) => `/api/contacts/persons/${p.id}`,
+    successMessage: 'Person deleted',
+    onDeleted: () => {
         router.push('/contacts/persons')
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+    },
+})
 
 // ── Tags ──────────────────────────────────────────────────────────────────
 const { data: allTags } = await useAsyncData<TagResponse[]>('tags-lookup', () =>
     api<TagResponse[]>('/api/tags')
 )
-const tagSearch = ref('')
-const addingTag = ref(false)
-
-const filteredTags = computed(() => {
-    const existing = new Set(person.value?.tags.map((t) => t.id) ?? [])
-    return (allTags.value ?? []).filter(
-        (t) => !existing.has(t.id) && t.name.toLowerCase().includes(tagSearch.value.toLowerCase())
-    )
-})
-
-async function addTag(tag: TagResponse) {
-    addingTag.value = true
-    try {
-        await api(`/api/contacts/persons/${id}/tags`, { method: 'POST', body: { tagId: tag.id } })
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to add tag', color: 'error' })
-    } finally {
-        addingTag.value = false
-    }
-}
-
-async function removeTag(tagId: string) {
-    try {
-        await api(`/api/contacts/persons/${id}/tags/${tagId}`, { method: 'DELETE' })
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to remove tag', color: 'error' })
-    }
-}
 </script>
 
 <template>
-    <div v-if="person" class="space-y-6">
-        <!-- Header -->
-        <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-                <UButton
-                    icon="i-tabler-arrow-left"
-                    color="neutral"
-                    variant="ghost"
-                    to="/contacts/persons"
-                />
-                <div>
-                    <h2 class="text-highlighted text-xl font-semibold">{{ person.fullName }}</h2>
-                    <p class="text-muted text-sm">
-                        {{ person.jobTitle ?? 'No title'
-                        }}<span v-if="orgName"> · {{ orgName }}</span>
-                    </p>
-                </div>
-            </div>
-            <div class="flex gap-2">
-                <UButton
-                    v-if="can('contacts.persons.edit')"
-                    icon="i-tabler-pencil"
-                    label="Edit"
-                    color="neutral"
-                    variant="outline"
-                    @click="openEdit"
-                />
-                <UButton
-                    v-if="can('contacts.persons.delete')"
-                    icon="i-tabler-trash"
-                    color="error"
-                    variant="outline"
-                    @click="deleteOpen = true"
-                />
-            </div>
-        </div>
+    <AppDetailLayout v-if="person" to="/contacts/persons" :title="person.fullName">
+        <template #subtitle>
+            <p class="text-muted text-sm">
+                {{ person.jobTitle ?? 'No title' }}<span v-if="orgName"> · {{ orgName }}</span>
+            </p>
+        </template>
+        <template #actions>
+            <UButton
+                v-if="can('contacts.persons.edit')"
+                icon="i-tabler-pencil"
+                label="Edit"
+                color="neutral"
+                variant="outline"
+                @click="openEdit"
+            />
+            <UButton
+                v-if="can('contacts.persons.delete')"
+                icon="i-tabler-trash"
+                color="error"
+                variant="outline"
+                @click="promptDelete(person)"
+            />
+        </template>
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <!-- Details -->
@@ -201,136 +155,69 @@ async function removeTag(tagId: string) {
 
             <!-- Tags sidebar -->
             <div>
-                <UCard>
-                    <template #header><p class="text-highlighted font-semibold">Tags</p></template>
-                    <div class="space-y-3">
-                        <div class="flex flex-wrap gap-1.5">
-                            <span
-                                v-for="tag in person.tags"
-                                :key="tag.id"
-                                class="border-default flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium"
-                                :style="{ borderColor: tag.color, color: tag.color }"
-                            >
-                                {{ tag.name }}
-                                <button class="hover:opacity-70" @click="removeTag(tag.id)">
-                                    <UIcon name="i-tabler-x" class="size-3" />
-                                </button>
-                            </span>
-                            <span v-if="!person.tags.length" class="text-muted text-xs"
-                                >No tags</span
-                            >
-                        </div>
-                        <UInput
-                            v-model="tagSearch"
-                            placeholder="Search tags…"
-                            size="sm"
-                            icon="i-tabler-search"
-                        />
-                        <div class="max-h-40 space-y-1 overflow-y-auto">
-                            <button
-                                v-for="tag in filteredTags"
-                                :key="tag.id"
-                                class="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors"
-                                :disabled="addingTag"
-                                @click="addTag(tag)"
-                            >
-                                <span
-                                    class="size-2 rounded-full"
-                                    :style="{ backgroundColor: tag.color ?? '#888' }"
-                                />
-                                {{ tag.name }}
-                            </button>
-                        </div>
-                    </div>
-                </UCard>
+                <AppTagManager
+                    :tags="person.tags"
+                    :all-tags="allTags ?? []"
+                    :endpoint="`/api/contacts/persons/${id}/tags`"
+                    :can-edit="can('contacts.persons.edit')"
+                    @changed="refresh"
+                />
             </div>
         </div>
 
         <!-- Edit modal -->
-        <UModal v-model:open="editing">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Edit Person</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitEdit">
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="First name" required>
-                                <UInput v-model="editForm.firstName" class="w-full" />
-                            </UFormField>
-                            <UFormField label="Last name" required>
-                                <UInput v-model="editForm.lastName" class="w-full" />
-                            </UFormField>
-                        </div>
-                        <UFormField label="Email">
-                            <UInput v-model="editForm.email" type="email" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Phone">
-                            <UInput v-model="editForm.phone" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Job title">
-                            <UInput v-model="editForm.jobTitle" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Organization">
-                            <USelect
-                                v-model="editForm.organizationId"
-                                :items="orgOptions"
-                                placeholder="Select organization"
-                                class="w-full"
-                            />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="editing = false"
-                            />
-                            <UButton
-                                label="Save"
-                                :loading="saving"
-                                :disabled="!editForm.firstName || !editForm.lastName"
-                                @click="submitEdit"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="editing"
+            title="Edit Person"
+            confirm-label="Save"
+            :loading="saving"
+            :confirm-disabled="!editForm.firstName || !editForm.lastName"
+            @confirm="submitEdit"
+        >
+            <form class="space-y-3" @submit.prevent="submitEdit">
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="First name" required>
+                        <UInput v-model="editForm.firstName" class="w-full" />
+                    </UFormField>
+                    <UFormField label="Last name" required>
+                        <UInput v-model="editForm.lastName" class="w-full" />
+                    </UFormField>
+                </div>
+                <UFormField label="Email">
+                    <UInput v-model="editForm.email" type="email" class="w-full" />
+                </UFormField>
+                <UFormField label="Phone">
+                    <UInput v-model="editForm.phone" class="w-full" />
+                </UFormField>
+                <UFormField label="Job title">
+                    <UInput v-model="editForm.jobTitle" class="w-full" />
+                </UFormField>
+                <UFormField label="Organization">
+                    <USelect
+                        v-model="editForm.organizationId"
+                        :items="orgOptions"
+                        placeholder="Select organization"
+                        class="w-full"
+                    />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Person</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ person.fullName }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
-    </div>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Person"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ person.fullName }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
+    </AppDetailLayout>
 
     <div v-else-if="personPending" class="space-y-4">
         <USkeleton class="h-8 w-64" />
