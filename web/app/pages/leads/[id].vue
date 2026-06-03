@@ -301,9 +301,9 @@ const LEAD_STATUS_OPTIONS = [
                         <UBadge
                             :label="lead.status.charAt(0) + lead.status.slice(1).toLowerCase()"
                             :color="
-                                lead.status === 'open' || lead.status === 'OPEN'
+                                lead.status === 'open'
                                     ? 'info'
-                                    : lead.status === 'won' || lead.status === 'WON'
+                                    : lead.status === 'won'
                                       ? 'success'
                                       : 'error'
                             "

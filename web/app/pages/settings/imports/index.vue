@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 
 definePageMeta({ title: 'Imports' })
 useHead({ title: 'Imports — Synoptic' })
@@ -7,6 +7,7 @@ useHead({ title: 'Imports — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 interface DataImportResponse {
     id: string
@@ -122,10 +123,7 @@ async function openStats(imp: DataImportResponse) {
 }
 
 // ── Download errors ───────────────────────────────────────────────────────
-const downloadingErrors = ref<string | null>(null)
-
 async function downloadErrors(imp: DataImportResponse) {
-    downloadingErrors.value = imp.id
     try {
         const blob = await $fetch<Blob>(`/api/settings/imports/${imp.id}/download-errors`, {
             headers: { Accept: 'text/csv' },
@@ -139,8 +137,6 @@ async function downloadErrors(imp: DataImportResponse) {
         URL.revokeObjectURL(url)
     } catch {
         toast.add({ title: 'Failed to download errors', color: 'error' })
-    } finally {
-        downloadingErrors.value = null
     }
 }
 
@@ -163,24 +159,17 @@ async function downloadSample(entityType: string) {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<DataImportResponse | null>(null)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/settings/imports/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Import deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+const {
+    open: deleteOpen,
+    target: importToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<DataImportResponse>({
+    endpoint: (i) => `/api/settings/imports/${i.id}`,
+    successMessage: 'Import deleted',
+    onDeleted: refresh,
+})
 
 // ── Table ─────────────────────────────────────────────────────────────────
 const columns: TableColumn<DataImportResponse>[] = [
@@ -192,66 +181,58 @@ const columns: TableColumn<DataImportResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(imp: DataImportResponse) {
-    const items: {
-        label: string
-        icon: string
-        color?: 'error'
-        loading?: boolean
-        click: () => void
-    }[][] = []
-    const primary = []
+const sampleItems: DropdownMenuItem[][] = [
+    ENTITY_TYPES.map((t) => ({
+        label: `${t} sample`,
+        icon: 'i-tabler-file-download',
+        onSelect: () => downloadSample(t),
+    })),
+]
+
+function rowActions(imp: DataImportResponse): DropdownMenuItem[][] {
+    const primary: DropdownMenuItem[] = []
     if (imp.status === 'PENDING') {
         primary.push({
             label: 'Start Import',
             icon: 'i-tabler-player-play',
             loading: starting.value === imp.id,
-            click: () => startImport(imp),
+            onSelect: () => startImport(imp),
         })
     }
-    primary.push({ label: 'View Stats', icon: 'i-tabler-chart-bar', click: () => openStats(imp) })
+    primary.push({
+        label: 'View Stats',
+        icon: 'i-tabler-chart-bar',
+        onSelect: () => openStats(imp),
+    })
     if (imp.errorCount > 0) {
         primary.push({
             label: 'Download Errors',
             icon: 'i-tabler-download',
-            click: () => downloadErrors(imp),
+            onSelect: () => downloadErrors(imp),
         })
     }
-    items.push(primary)
-    items.push([
-        {
-            label: 'Delete',
-            icon: 'i-tabler-trash',
-            color: 'error' as const,
-            click: () => {
-                toDelete.value = imp
-                deleteOpen.value = true
+    return [
+        primary,
+        [
+            {
+                label: 'Delete',
+                icon: 'i-tabler-trash',
+                color: 'error',
+                onSelect: () => promptDelete(imp),
             },
-        },
-    ])
-    return items
+        ],
+    ]
 }
 </script>
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Data Imports</h2>
-                <p class="text-muted text-sm">
-                    Import contacts, leads, and products from CSV files
-                </p>
-            </div>
-            <div class="flex gap-2">
-                <UDropdownMenu
-                    :items="[
-                        ENTITY_TYPES.map((t) => ({
-                            label: `${t} sample`,
-                            icon: 'i-tabler-file-download',
-                            click: () => downloadSample(t),
-                        })),
-                    ]"
-                >
+        <AppPageHeader
+            title="Data Imports"
+            subtitle="Import contacts, leads, and products from CSV files"
+        >
+            <template #actions>
+                <UDropdownMenu :items="sampleItems">
                     <UButton
                         icon="i-tabler-file-download"
                         label="Sample CSV"
@@ -259,119 +240,90 @@ function rowActions(imp: DataImportResponse) {
                         variant="outline"
                     />
                 </UDropdownMenu>
-                <UButton icon="i-tabler-upload" label="Upload CSV" @click="openUpload" />
-            </div>
-        </div>
+                <UButton
+                    v-if="can('imports.create')"
+                    icon="i-tabler-upload"
+                    label="Upload CSV"
+                    @click="openUpload"
+                />
+            </template>
+        </AppPageHeader>
 
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="imports ?? []" :columns="columns" :loading="pending" sticky>
-                <template #name-cell="{ row }">
-                    <span class="font-medium">{{ row.original.name }}</span>
-                </template>
-                <template #entityType-cell="{ row }">
-                    <UBadge
-                        :label="row.original.entityType"
-                        color="neutral"
-                        variant="soft"
-                        size="sm"
-                    />
-                </template>
-                <template #status-cell="{ row }">
-                    <UBadge
-                        :label="row.original.status"
-                        :color="STATUS_COLOR[row.original.status]"
-                        variant="soft"
-                        size="sm"
-                    />
-                </template>
-                <template #results-cell="{ row }">
-                    <div class="flex items-center gap-2 text-sm">
-                        <span class="text-success">{{ row.original.successCount }} ok</span>
-                        <span v-if="row.original.errorCount > 0" class="text-error"
-                            >{{ row.original.errorCount }} err</span
-                        >
-                        <span v-else class="text-muted">0 err</span>
-                    </div>
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-file-import" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No imports yet</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
+        <AppListTable :rows="imports ?? []" :columns="columns" :loading="pending">
+            <template #name-cell="{ row }">
+                <span class="font-medium">{{ row.original.name }}</span>
+            </template>
+            <template #entityType-cell="{ row }">
+                <UBadge :label="row.original.entityType" color="neutral" variant="soft" size="sm" />
+            </template>
+            <template #status-cell="{ row }">
+                <UBadge
+                    :label="row.original.status"
+                    :color="STATUS_COLOR[row.original.status]"
+                    variant="soft"
+                    size="sm"
+                />
+            </template>
+            <template #results-cell="{ row }">
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="text-success">{{ row.original.successCount }} ok</span>
+                    <span v-if="row.original.errorCount > 0" class="text-error"
+                        >{{ row.original.errorCount }} err</span
+                    >
+                    <span v-else class="text-muted">0 err</span>
+                </div>
+            </template>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions :items="rowActions(row.original)" />
+            </template>
+            <template #empty>
+                <AppEmptyState icon="i-tabler-file-import" message="No imports yet" />
+            </template>
+        </AppListTable>
 
         <!-- Upload modal -->
-        <UModal v-model:open="uploadOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Upload CSV</p>
-                    </template>
-                    <div class="space-y-4">
-                        <UFormField label="Entity Type" required>
-                            <USelect
-                                v-model="selectedEntityType"
-                                :items="ENTITY_TYPES.map((t) => ({ label: t, value: t }))"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="CSV File" required>
-                            <div
-                                class="border-default hover:border-primary flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors"
-                                @click="fileInput?.click()"
-                            >
-                                <UIcon name="i-tabler-upload" class="text-muted size-8" />
-                                <p v-if="selectedFile" class="text-highlighted text-sm font-medium">
-                                    {{ selectedFile.name }}
-                                </p>
-                                <p v-else class="text-muted text-sm">Click to select a CSV file</p>
-                                <input
-                                    ref="fileInput"
-                                    type="file"
-                                    accept=".csv"
-                                    class="hidden"
-                                    @change="onFileChange"
-                                />
-                            </div>
-                        </UFormField>
+        <AppConfirmModal
+            v-model:open="uploadOpen"
+            title="Upload CSV"
+            confirm-label="Upload"
+            :loading="uploading"
+            :confirm-disabled="!selectedFile"
+            @confirm="submitUpload"
+        >
+            <div class="space-y-4">
+                <UFormField label="Entity Type" required>
+                    <USelect
+                        v-model="selectedEntityType"
+                        :items="ENTITY_TYPES.map((t) => ({ label: t, value: t }))"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="CSV File" required>
+                    <div
+                        class="border-default hover:border-primary flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors"
+                        @click="fileInput?.click()"
+                    >
+                        <UIcon name="i-tabler-upload" class="text-muted size-8" />
+                        <p v-if="selectedFile" class="text-highlighted text-sm font-medium">
+                            {{ selectedFile.name }}
+                        </p>
+                        <p v-else class="text-muted text-sm">Click to select a CSV file</p>
+                        <input
+                            ref="fileInput"
+                            type="file"
+                            accept=".csv"
+                            class="hidden"
+                            @change="onFileChange"
+                        />
                     </div>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="uploadOpen = false"
-                            />
-                            <UButton
-                                icon="i-tabler-upload"
-                                label="Upload"
-                                :loading="uploading"
-                                :disabled="!selectedFile"
-                                @click="submitUpload"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+                </UFormField>
+            </div>
+        </AppConfirmModal>
 
-        <!-- Stats modal -->
+        <!-- Stats modal (view-only) -->
         <UModal v-model:open="statsOpen">
             <template #content>
                 <UCard>
@@ -441,34 +393,18 @@ function rowActions(imp: DataImportResponse) {
         </UModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Import</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.name }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Import"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ importToDelete?.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>

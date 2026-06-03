@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { PermissionResponse, RoleResponse } from '~/types/settings'
 
 definePageMeta({ title: 'Roles' })
@@ -8,6 +8,7 @@ useHead({ title: 'Roles — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 // ── Roles list ────────────────────────────────────────────────────────────
 const {
@@ -16,7 +17,7 @@ const {
     refresh,
 } = await useAsyncData<RoleResponse[]>('roles', () => api<RoleResponse[]>('/api/roles'))
 
-// ── All permissions (for create/edit form) ────────────────────────────────
+// ── All permissions (for create form) ──────────────────────────────────────
 const { data: allPermissions } = await useAsyncData<PermissionResponse[]>('all-permissions', () =>
     api<PermissionResponse[]>('/api/roles/permissions')
 )
@@ -31,7 +32,7 @@ const permissionGroups = computed(() => {
     return groups
 })
 
-// ── Create modal ──────────────────────────────────────────────────────────
+// ── Create ──────────────────────────────────────────────────────────────
 const createOpen = ref(false)
 const creating = ref(false)
 const createForm = reactive({
@@ -67,27 +68,19 @@ async function submitCreate() {
     }
 }
 
-// ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<RoleResponse | null>(null)
-const deleting = ref(false)
+// ── Delete ──────────────────────────────────────────────────────────────
+const {
+    open: deleteOpen,
+    target: roleToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<RoleResponse>({
+    endpoint: (r) => `/api/roles/${r.id}`,
+    successMessage: 'Role deleted',
+    onDeleted: refresh,
+})
 
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/roles/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Role deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
-
-// ── Table columns ─────────────────────────────────────────────────────────
 const columns: TableColumn<RoleResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'description', header: 'Description' },
@@ -96,17 +89,14 @@ const columns: TableColumn<RoleResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(r: RoleResponse) {
+function rowActions(r: RoleResponse): DropdownMenuItem[][] {
     return [
         [
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDelete.value = r
-                    deleteOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDelete(r),
             },
         ],
     ]
@@ -115,166 +105,118 @@ function rowActions(r: RoleResponse) {
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Roles</h2>
-                <p class="text-muted text-sm">{{ (roles?.length ?? 0).toLocaleString() }} total</p>
-            </div>
-            <UButton icon="i-tabler-plus" label="New Role" @click="openCreate" />
-        </div>
+        <AppPageHeader title="Roles" :subtitle="`${(roles?.length ?? 0).toLocaleString()} total`">
+            <template #actions>
+                <UButton
+                    v-if="can('roles.create')"
+                    icon="i-tabler-plus"
+                    label="New Role"
+                    @click="openCreate"
+                />
+            </template>
+        </AppPageHeader>
 
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="roles ?? []" :columns="columns" :loading="pending" sticky>
-                <template #name-cell="{ row }">
-                    <span class="font-medium">{{ row.original.name }}</span>
-                </template>
-                <template #description-cell="{ row }">
-                    <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
-                </template>
-                <template #permissions-cell="{ row }">
-                    <UBadge
-                        :label="`${row.original.permissions.length} permissions`"
-                        color="neutral"
-                        variant="soft"
-                        size="sm"
+        <AppListTable :rows="roles ?? []" :columns="columns" :loading="pending">
+            <template #name-cell="{ row }">
+                <span class="font-medium">{{ row.original.name }}</span>
+            </template>
+            <template #description-cell="{ row }">
+                <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
+            </template>
+            <template #permissions-cell="{ row }">
+                <UBadge
+                    :label="`${row.original.permissions.length} permissions`"
+                    color="neutral"
+                    variant="soft"
+                    size="sm"
+                />
+            </template>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions v-if="can('roles.delete')" :items="rowActions(row.original)" />
+            </template>
+            <template #empty>
+                <AppEmptyState icon="i-tabler-shield-off" message="No roles found" />
+            </template>
+        </AppListTable>
+
+        <AppConfirmModal
+            v-model:open="createOpen"
+            title="Create Role"
+            confirm-label="Create"
+            :loading="creating"
+            :confirm-disabled="!createForm.name"
+            @confirm="submitCreate"
+        >
+            <form class="space-y-3" @submit.prevent="submitCreate">
+                <UFormField label="Name" required>
+                    <UInput v-model="createForm.name" placeholder="e.g. MANAGER" class="w-full" />
+                </UFormField>
+                <UFormField label="Description">
+                    <UInput
+                        v-model="createForm.description"
+                        placeholder="Optional description"
+                        class="w-full"
                     />
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-shield-off" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No roles found</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
-
-        <!-- Create role modal -->
-        <UModal v-model:open="createOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Create Role</p>
-                    </template>
-                    <form class="space-y-3" @submit.prevent="submitCreate">
-                        <UFormField label="Name" required>
-                            <UInput
-                                v-model="createForm.name"
-                                placeholder="e.g. MANAGER"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UInput
-                                v-model="createForm.description"
-                                placeholder="Optional description"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Permissions">
-                            <!-- Permission groups for easier selection -->
-                            <div
-                                class="border-default max-h-56 space-y-3 overflow-y-auto rounded-md border p-3"
-                            >
-                                <div v-for="(perms, group) in permissionGroups" :key="group">
-                                    <p class="text-muted mb-1.5 text-xs font-semibold uppercase">
-                                        {{ group }}
-                                    </p>
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <label
-                                            v-for="perm in perms"
-                                            :key="perm"
-                                            class="border-default hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
-                                            :class="
-                                                createForm.permissions.includes(perm)
-                                                    ? 'bg-primary/10 border-primary text-primary'
-                                                    : ''
-                                            "
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                class="hidden"
-                                                :checked="createForm.permissions.includes(perm)"
-                                                @change="
-                                                    createForm.permissions.includes(perm)
-                                                        ? createForm.permissions.splice(
-                                                              createForm.permissions.indexOf(perm),
-                                                              1
-                                                          )
-                                                        : createForm.permissions.push(perm)
-                                                "
-                                            />
-                                            {{ perm.split(':')[1] }}
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            <p class="text-muted mt-1 text-xs">
-                                {{ createForm.permissions.length }} selected
-                            </p>
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creating"
-                                :disabled="!createForm.name"
-                                @click="submitCreate"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
-
-        <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Role</p></template
+                </UFormField>
+                <UFormField label="Permissions">
+                    <div
+                        class="border-default max-h-56 space-y-3 overflow-y-auto rounded-md border p-3"
                     >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.name }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
+                        <div v-for="(perms, group) in permissionGroups" :key="group">
+                            <p class="text-muted mb-1.5 text-xs font-semibold uppercase">
+                                {{ group }}
+                            </p>
+                            <div class="flex flex-wrap gap-1.5">
+                                <label
+                                    v-for="perm in perms"
+                                    :key="perm"
+                                    class="border-default hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
+                                    :class="
+                                        createForm.permissions.includes(perm)
+                                            ? 'bg-primary/10 border-primary text-primary'
+                                            : ''
+                                    "
+                                >
+                                    <input
+                                        type="checkbox"
+                                        class="hidden"
+                                        :checked="createForm.permissions.includes(perm)"
+                                        @change="
+                                            createForm.permissions.includes(perm)
+                                                ? createForm.permissions.splice(
+                                                      createForm.permissions.indexOf(perm),
+                                                      1
+                                                  )
+                                                : createForm.permissions.push(perm)
+                                        "
+                                    />
+                                    {{ perm.split(':')[1] }}
+                                </label>
+                            </div>
                         </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+                    </div>
+                    <p class="text-muted mt-1 text-xs">
+                        {{ createForm.permissions.length }} selected
+                    </p>
+                </UFormField>
+            </form>
+        </AppConfirmModal>
+
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Role"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ roleToDelete?.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>

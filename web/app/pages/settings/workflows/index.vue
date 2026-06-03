@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { WorkflowResponse } from '~/types/settings'
 
 definePageMeta({ title: 'Workflows' })
@@ -8,6 +8,7 @@ useHead({ title: 'Workflows — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 const KNOWN_EVENTS = [
     'lead.created',
@@ -25,7 +26,7 @@ const {
     api<WorkflowResponse[]>('/api/settings/workflows')
 )
 
-// ── Create modal ──────────────────────────────────────────────────────────
+// ── Create ──────────────────────────────────────────────────────────────
 const createOpen = ref(false)
 const creating = ref(false)
 const createForm = reactive({
@@ -69,27 +70,19 @@ async function submitCreate() {
     }
 }
 
-// ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<WorkflowResponse | null>(null)
-const deleting = ref(false)
+// ── Delete ──────────────────────────────────────────────────────────────
+const {
+    open: deleteOpen,
+    target: workflowToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<WorkflowResponse>({
+    endpoint: (w) => `/api/settings/workflows/${w.id}`,
+    successMessage: 'Workflow deleted',
+    onDeleted: refresh,
+})
 
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/settings/workflows/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Workflow deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
-
-// ── Table columns ─────────────────────────────────────────────────────────
 const columns: TableColumn<WorkflowResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'eventName', header: 'Trigger Event' },
@@ -99,17 +92,14 @@ const columns: TableColumn<WorkflowResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(w: WorkflowResponse) {
+function rowActions(w: WorkflowResponse): DropdownMenuItem[][] {
     return [
         [
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDelete.value = w
-                    deleteOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDelete(w),
             },
         ],
     ]
@@ -118,148 +108,100 @@ function rowActions(w: WorkflowResponse) {
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Workflows</h2>
-                <p class="text-muted text-sm">Automate actions based on CRM events</p>
-            </div>
-            <UButton icon="i-tabler-plus" label="New Workflow" @click="openCreate" />
-        </div>
-
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="workflows ?? []" :columns="columns" :loading="pending" sticky>
-                <template #name-cell="{ row }">
-                    <div>
-                        <p class="text-highlighted font-medium">{{ row.original.name }}</p>
-                        <p v-if="row.original.description" class="text-muted text-xs">
-                            {{ row.original.description }}
-                        </p>
-                    </div>
-                </template>
-                <template #eventName-cell="{ row }">
-                    <UBadge
-                        :label="row.original.eventName"
-                        color="neutral"
-                        variant="soft"
-                        size="sm"
-                    />
-                </template>
-                <template #status-cell="{ row }">
-                    <UBadge
-                        :label="row.original.active ? 'Active' : 'Inactive'"
-                        :color="row.original.active ? 'success' : 'neutral'"
-                        variant="soft"
-                        size="sm"
-                    />
-                </template>
-                <template #rules-cell="{ row }">
-                    <span class="text-muted text-sm">
-                        {{ row.original.conditions.length }}c / {{ row.original.actions.length }}a
-                    </span>
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-git-branch" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No workflows yet</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
-
-        <!-- Create modal -->
-        <UModal v-model:open="createOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Create Workflow</p>
-                    </template>
-                    <form class="space-y-3" @submit.prevent="submitCreate">
-                        <UFormField label="Name" required>
-                            <UInput
-                                v-model="createForm.name"
-                                placeholder="e.g. Notify on new lead"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Description">
-                            <UInput
-                                v-model="createForm.description"
-                                placeholder="Optional"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Trigger Event" required>
-                            <USelect
-                                v-model="createForm.eventName"
-                                :items="KNOWN_EVENTS.map((e) => ({ label: e, value: e }))"
-                                placeholder="Select event"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <USwitch v-model="createForm.active" label="Active" />
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creating"
-                                :disabled="!createForm.name || !createForm.eventName"
-                                @click="submitCreate"
-                            />
-                        </div>
-                    </template>
-                </UCard>
+        <AppPageHeader title="Workflows" subtitle="Automate actions based on CRM events">
+            <template #actions>
+                <UButton
+                    v-if="can('automations.create')"
+                    icon="i-tabler-plus"
+                    label="New Workflow"
+                    @click="openCreate"
+                />
             </template>
-        </UModal>
+        </AppPageHeader>
 
-        <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Workflow</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.name }}</strong
-                        >? This cannot be undone.
+        <AppListTable :rows="workflows ?? []" :columns="columns" :loading="pending">
+            <template #name-cell="{ row }">
+                <div>
+                    <p class="text-highlighted font-medium">{{ row.original.name }}</p>
+                    <p v-if="row.original.description" class="text-muted text-xs">
+                        {{ row.original.description }}
                     </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
+                </div>
             </template>
-        </UModal>
+            <template #eventName-cell="{ row }">
+                <UBadge :label="row.original.eventName" color="neutral" variant="soft" size="sm" />
+            </template>
+            <template #status-cell="{ row }">
+                <UBadge
+                    :label="row.original.active ? 'Active' : 'Inactive'"
+                    :color="row.original.active ? 'success' : 'neutral'"
+                    variant="soft"
+                    size="sm"
+                />
+            </template>
+            <template #rules-cell="{ row }">
+                <span class="text-muted text-sm">
+                    {{ row.original.conditions.length }}c / {{ row.original.actions.length }}a
+                </span>
+            </template>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions v-if="can('automations.delete')" :items="rowActions(row.original)" />
+            </template>
+            <template #empty>
+                <AppEmptyState icon="i-tabler-git-branch" message="No workflows yet" />
+            </template>
+        </AppListTable>
+
+        <AppConfirmModal
+            v-model:open="createOpen"
+            title="Create Workflow"
+            confirm-label="Create"
+            :loading="creating"
+            :confirm-disabled="!createForm.name || !createForm.eventName"
+            @confirm="submitCreate"
+        >
+            <form class="space-y-3" @submit.prevent="submitCreate">
+                <UFormField label="Name" required>
+                    <UInput
+                        v-model="createForm.name"
+                        placeholder="e.g. Notify on new lead"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Description">
+                    <UInput
+                        v-model="createForm.description"
+                        placeholder="Optional"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField label="Trigger Event" required>
+                    <USelect
+                        v-model="createForm.eventName"
+                        :items="KNOWN_EVENTS.map((e) => ({ label: e, value: e }))"
+                        placeholder="Select event"
+                        class="w-full"
+                    />
+                </UFormField>
+                <USwitch v-model="createForm.active" label="Active" />
+            </form>
+        </AppConfirmModal>
+
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Workflow"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ workflowToDelete?.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>
