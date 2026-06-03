@@ -3,9 +3,15 @@ import type { AccessLevel, RecordShareResponse } from '~/types/sharing'
 import { ACCESS_LEVEL_COLOR, ACCESS_LEVEL_LABEL, GRANTABLE_ACCESS_LEVELS } from '~/types/sharing'
 
 /**
- * Manage cross-tenant sharing for a single record: lists the tenants it's
- * currently shared with (revocable) and a form to share it with another tenant.
- * Gate the trigger + this component on `records.share`.
+ * Manage cross-tenant sharing for a single record.
+ *
+ * - `mode="share"` (default, owner side): lists the tenants the record is
+ *   currently shared with (revocable) plus a form to share it (`POST
+ *   /records/share`). Gate the trigger + this component on `records.share`.
+ * - `mode="reshare"` (consumer side): for a record shared *to* us with MANAGE
+ *   access, share it onward to another tenant (`POST /records/reshare`). The
+ *   current-shares list is owner-scoped, so it is hidden here. Gate on
+ *   `records.reshare`.
  */
 const props = defineProps<{
     open: boolean
@@ -14,6 +20,8 @@ const props = defineProps<{
     resourceId: string
     /** Optional record label for the dialog title. */
     resourceLabel?: string
+    /** "share" (default) = owner grants; "reshare" = a MANAGE consumer shares onward. */
+    mode?: 'share' | 'reshare'
 }>()
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
 
@@ -21,6 +29,12 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { tenantName, tenantOptions, hasTenantList } = useTenantNames()
+
+const isReshare = computed(() => props.mode === 'reshare')
+const title = computed(() => {
+    const verb = isReshare.value ? 'Reshare' : 'Share'
+    return props.resourceLabel ? `${verb} “${props.resourceLabel}”` : `${verb} record`
+})
 
 const shares = ref<RecordShareResponse[]>([])
 const loading = ref(false)
@@ -64,17 +78,18 @@ async function loadShares() {
 watch(
     () => props.open,
     (isOpen) => {
-        if (isOpen) {
-            resetForm()
-            loadShares()
-        }
+        if (!isOpen) return
+        resetForm()
+        // The current-shares list is owner-scoped (`records.share`); skip it when
+        // resharing as a consumer.
+        if (!isReshare.value) loadShares()
     }
 )
 
-async function addShare() {
+async function submit() {
     adding.value = true
     try {
-        await api('/api/records/share', {
+        await api(isReshare.value ? '/api/records/reshare' : '/api/records/share', {
             method: 'POST',
             body: {
                 consumerTenantId: form.consumerTenantId,
@@ -85,12 +100,21 @@ async function addShare() {
                 note: form.note || undefined,
             },
         })
-        toast.add({ title: 'Record shared', color: 'success' })
+        toast.add({
+            title: isReshare.value ? 'Record reshared' : 'Record shared',
+            color: 'success',
+        })
         resetForm()
-        loadShares()
+        // No owner-scoped list to refresh when resharing — just close.
+        if (isReshare.value) emit('update:open', false)
+        else loadShares()
     } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to share', description: e?.data?.message, color: 'error' })
+        toast.add({
+            title: isReshare.value ? 'Failed to reshare' : 'Failed to share',
+            description: e?.data?.message,
+            color: 'error',
+        })
     } finally {
         adding.value = false
     }
@@ -110,17 +134,23 @@ async function revokeShare(share: RecordShareResponse) {
 <template>
     <AppConfirmModal
         :open="open"
-        :title="resourceLabel ? `Share “${resourceLabel}”` : 'Share record'"
-        confirm-label="Share"
+        :title="title"
+        :confirm-label="isReshare ? 'Reshare' : 'Share'"
         :loading="adding"
         :confirm-disabled="!form.consumerTenantId"
         width-class="sm:max-w-2xl"
         @update:open="emit('update:open', $event)"
-        @confirm="addShare"
+        @confirm="submit"
     >
         <div class="space-y-4">
-            <!-- Existing shares -->
-            <div>
+            <!-- Reshare context (the current-shares list is owner-scoped) -->
+            <p v-if="isReshare" class="text-muted text-sm">
+                Share this record onward to another tenant. You have Manage access, so you can grant
+                up to Manage.
+            </p>
+
+            <!-- Existing shares (owner side only) -->
+            <div v-else>
                 <p class="text-muted mb-2 text-xs font-semibold uppercase">Shared with</p>
                 <div v-if="loading" class="space-y-2">
                     <USkeleton class="h-8 w-full" />
@@ -161,8 +191,10 @@ async function revokeShare(share: RecordShareResponse) {
             </div>
 
             <!-- Add form -->
-            <form class="border-default space-y-3 border-t pt-4" @submit.prevent="addShare">
-                <p class="text-muted text-xs font-semibold uppercase">Share with a tenant</p>
+            <form class="border-default space-y-3 border-t pt-4" @submit.prevent="submit">
+                <p class="text-muted text-xs font-semibold uppercase">
+                    {{ isReshare ? 'Reshare with a tenant' : 'Share with a tenant' }}
+                </p>
                 <div class="grid grid-cols-2 gap-3">
                     <UFormField label="Tenant" required>
                         <USelect

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { RecordShareResponse } from '~/types/sharing'
 import {
     ACCESS_LEVEL_COLOR,
@@ -12,8 +12,12 @@ definePageMeta({ title: 'Shared with me' })
 useHead({ title: 'Shared with me — Synoptic' })
 
 const api = useApi()
+const { can } = usePermissions()
 const { formatDate } = useFormatters()
 const { tenantName } = useTenantNames()
+
+/** Records shared to us with MANAGE can be reshared onward (`records.reshare`). */
+const canReshare = computed(() => can('records.reshare'))
 
 const resourceType = ref('')
 
@@ -33,13 +37,35 @@ const typeFilterOptions = [
     ...SHARE_RESOURCE_TYPES.map((t) => ({ label: RESOURCE_TYPE_LABEL[t] ?? t, value: t })),
 ]
 
-const columns: TableColumn<RecordShareResponse>[] = [
-    { id: 'resource', header: 'Resource' },
-    { accessorKey: 'ownerTenantId', header: 'Owner tenant' },
-    { accessorKey: 'accessLevel', header: 'Access' },
-    { accessorKey: 'expiresAt', header: 'Expires' },
-    { accessorKey: 'createdAt', header: 'Shared' },
-]
+const columns = computed<TableColumn<RecordShareResponse>[]>(() => {
+    const cols: TableColumn<RecordShareResponse>[] = [
+        { id: 'resource', header: 'Resource' },
+        { accessorKey: 'ownerTenantId', header: 'Owner tenant' },
+        { accessorKey: 'accessLevel', header: 'Access' },
+        { accessorKey: 'expiresAt', header: 'Expires' },
+        { accessorKey: 'createdAt', header: 'Shared' },
+    ]
+    if (canReshare.value) cols.push({ id: 'actions', header: '' })
+    return cols
+})
+
+// ── Reshare (records shared to us with MANAGE) ──────────────────────────────
+const reshareOpen = ref(false)
+const reshareTarget = ref<RecordShareResponse | null>(null)
+const reshareLabel = computed(() => {
+    const t = reshareTarget.value
+    if (!t) return undefined
+    return `${RESOURCE_TYPE_LABEL[t.resourceType] ?? t.resourceType} ${t.resourceId.slice(0, 8)}…`
+})
+
+function openReshare(share: RecordShareResponse) {
+    reshareTarget.value = share
+    reshareOpen.value = true
+}
+
+function reshareActions(share: RecordShareResponse): DropdownMenuItem[][] {
+    return [[{ label: 'Reshare', icon: 'i-tabler-share-3', onSelect: () => openReshare(share) }]]
+}
 </script>
 
 <template>
@@ -86,6 +112,12 @@ const columns: TableColumn<RecordShareResponse>[] = [
             <template #createdAt-cell="{ row }">
                 <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
             </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions
+                    v-if="canReshare && row.original.accessLevel === 'MANAGE'"
+                    :items="reshareActions(row.original)"
+                />
+            </template>
             <template #empty>
                 <AppEmptyState
                     icon="i-tabler-share-off"
@@ -93,5 +125,14 @@ const columns: TableColumn<RecordShareResponse>[] = [
                 />
             </template>
         </AppListTable>
+
+        <ShareRecordModal
+            v-if="canReshare && reshareTarget"
+            v-model:open="reshareOpen"
+            mode="reshare"
+            :resource-type="reshareTarget.resourceType"
+            :resource-id="reshareTarget.resourceId"
+            :resource-label="reshareLabel"
+        />
     </div>
 </template>
