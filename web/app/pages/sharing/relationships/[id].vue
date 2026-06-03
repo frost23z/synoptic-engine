@@ -69,6 +69,8 @@ const activePolicies = computed(() => (policies.value ?? []).filter((p) => !p.re
 
 const policyOpen = ref(false)
 const savingPolicy = ref(false)
+const editingPolicyId = ref<string | null>(null)
+const isEditPolicy = computed(() => editingPolicyId.value !== null)
 const policyForm = reactive<{
     resourceType: string
     accessLevel: AccessLevel
@@ -93,6 +95,7 @@ const accessLevelOptions = GRANTABLE_ACCESS_LEVELS.map((a) => ({
 }))
 
 function openPolicy() {
+    editingPolicyId.value = null
     Object.assign(policyForm, {
         resourceType: 'leads',
         accessLevel: 'READ',
@@ -103,25 +106,55 @@ function openPolicy() {
     policyOpen.value = true
 }
 
+function openEditPolicy(policy: SharePolicyResponse) {
+    editingPolicyId.value = policy.id
+    Object.assign(policyForm, {
+        resourceType: policy.resourceType,
+        accessLevel: policy.accessLevel,
+        materialize: policy.materialize,
+        filterJson: policy.filterJson ?? '',
+        cascadeJson: policy.cascadeJson ?? '',
+    })
+    policyOpen.value = true
+}
+
 async function submitPolicy() {
     savingPolicy.value = true
     try {
-        await api(`/api/relationships/${id}/policies`, {
-            method: 'POST',
-            body: {
-                resourceType: policyForm.resourceType,
-                accessLevel: policyForm.accessLevel,
-                materialize: policyForm.materialize,
-                filterJson: policyForm.filterJson || undefined,
-                cascadeJson: policyForm.cascadeJson || undefined,
-            },
-        })
-        toast.add({ title: 'Policy added', color: 'success' })
+        // resourceType + materialize are immutable, so editing only sends the
+        // updatable fields (PUT /share-policies/{id}); create sends the full body.
+        if (isEditPolicy.value) {
+            await api(`/api/share-policies/${editingPolicyId.value}`, {
+                method: 'PUT',
+                body: {
+                    accessLevel: policyForm.accessLevel,
+                    filterJson: policyForm.filterJson || undefined,
+                    cascadeJson: policyForm.cascadeJson || undefined,
+                },
+            })
+            toast.add({ title: 'Policy updated', color: 'success' })
+        } else {
+            await api(`/api/relationships/${id}/policies`, {
+                method: 'POST',
+                body: {
+                    resourceType: policyForm.resourceType,
+                    accessLevel: policyForm.accessLevel,
+                    materialize: policyForm.materialize,
+                    filterJson: policyForm.filterJson || undefined,
+                    cascadeJson: policyForm.cascadeJson || undefined,
+                },
+            })
+            toast.add({ title: 'Policy added', color: 'success' })
+        }
         policyOpen.value = false
         refreshPolicies()
     } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to add policy', description: e?.data?.message, color: 'error' })
+        toast.add({
+            title: isEditPolicy.value ? 'Failed to update policy' : 'Failed to add policy',
+            description: e?.data?.message,
+            color: 'error',
+        })
     } finally {
         savingPolicy.value = false
     }
@@ -313,14 +346,22 @@ const {
                             size="xs"
                         />
                     </div>
-                    <UButton
-                        v-if="can('share-policies.manage')"
-                        icon="i-tabler-trash"
-                        color="error"
-                        variant="ghost"
-                        size="xs"
-                        @click="promptRevokePolicy(policy)"
-                    />
+                    <div v-if="can('share-policies.manage')" class="flex items-center gap-1">
+                        <UButton
+                            icon="i-tabler-pencil"
+                            color="neutral"
+                            variant="ghost"
+                            size="xs"
+                            @click="openEditPolicy(policy)"
+                        />
+                        <UButton
+                            icon="i-tabler-trash"
+                            color="error"
+                            variant="ghost"
+                            size="xs"
+                            @click="promptRevokePolicy(policy)"
+                        />
+                    </div>
                 </li>
             </ul>
         </UCard>
@@ -340,20 +381,25 @@ const {
             </p>
         </AppConfirmModal>
 
-        <!-- Add policy modal -->
+        <!-- Add / edit policy modal -->
         <AppConfirmModal
             v-model:open="policyOpen"
-            title="Add share policy"
-            confirm-label="Add policy"
+            :title="isEditPolicy ? 'Edit share policy' : 'Add share policy'"
+            :confirm-label="isEditPolicy ? 'Save' : 'Add policy'"
             :loading="savingPolicy"
             @confirm="submitPolicy"
         >
             <form class="space-y-3" @submit.prevent="submitPolicy">
                 <div class="grid grid-cols-2 gap-3">
-                    <UFormField label="Resource type" required>
+                    <UFormField
+                        label="Resource type"
+                        :required="!isEditPolicy"
+                        :hint="isEditPolicy ? 'Fixed' : undefined"
+                    >
                         <USelect
                             v-model="policyForm.resourceType"
                             :items="resourceTypeOptions"
+                            :disabled="isEditPolicy"
                             class="w-full"
                         />
                     </UFormField>
@@ -365,7 +411,11 @@ const {
                         />
                     </UFormField>
                 </div>
-                <USwitch v-model="policyForm.materialize" label="Materialize shared records" />
+                <USwitch
+                    v-model="policyForm.materialize"
+                    :disabled="isEditPolicy"
+                    label="Materialize shared records"
+                />
                 <UFormField label="Filter (JSON)" hint="Optional">
                     <UTextarea
                         v-model="policyForm.filterJson"
