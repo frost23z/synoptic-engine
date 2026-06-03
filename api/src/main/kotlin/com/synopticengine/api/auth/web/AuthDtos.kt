@@ -25,6 +25,7 @@ data class TokenResponse(
     val refreshToken: String,
     val tokenType: String = "Bearer",
     val userId: UUID,
+    val tenantId: UUID,
     val email: String,
     val fullName: String,
     val authorities: List<String>,
@@ -34,6 +35,7 @@ data class TokenResponse(
 
 data class MeResponse(
     val id: UUID,
+    val tenantId: UUID,
     val email: String,
     val fullName: String,
     val isActive: Boolean,

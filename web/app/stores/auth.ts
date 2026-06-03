@@ -24,6 +24,7 @@ export const useAuthStore = defineStore('auth', () => {
         refreshToken.value = data.refreshToken
         user.value = {
             id: data.userId,
+            tenantId: data.tenantId,
             email: data.email,
             fullName: data.fullName,
             authorities: data.authorities,
@@ -64,6 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
     async function fetchMe() {
         const data = await $fetch<{
             id: string
+            tenantId: string
             email: string
             fullName: string
             authorities: string[]
@@ -73,6 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
         })
         user.value = {
             id: data.id,
+            tenantId: data.tenantId,
             email: data.email,
             fullName: data.fullName,
             authorities: data.authorities,

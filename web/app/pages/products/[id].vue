@@ -10,6 +10,7 @@ const router = useRouter()
 const route = useRoute()
 const { formatCurrency, formatDate } = useFormatters()
 const id = route.params.id as string
+const shareOpen = ref(false)
 
 const {
     data: product,
@@ -88,6 +89,14 @@ const {
         :subtitle="product.sku ? `SKU: ${product.sku}` : 'No SKU'"
     >
         <template #actions>
+            <UButton
+                v-if="can('records.share')"
+                icon="i-tabler-share"
+                label="Share"
+                color="neutral"
+                variant="outline"
+                @click="shareOpen = true"
+            />
             <UButton
                 v-if="can('products.edit')"
                 icon="i-tabler-pencil"
@@ -193,6 +202,14 @@ const {
                 >? This cannot be undone.
             </p>
         </AppConfirmModal>
+
+        <ShareRecordModal
+            v-if="can('records.share')"
+            v-model:open="shareOpen"
+            resource-type="products"
+            :resource-id="id"
+            :resource-label="product.name"
+        />
     </AppDetailLayout>
 
     <div v-else-if="productPending" class="space-y-4">

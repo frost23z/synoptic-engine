@@ -178,6 +178,9 @@ const {
     },
 })
 
+// ── Share ───────────────────────────────────────────────────────────────────
+const shareOpen = ref(false)
+
 // ── Activities ────────────────────────────────────────────────────────────
 const { data: activities, refresh: refreshActivities } = await useAsyncData<ActivityResponse[]>(
     `lead-${id}-activities`,
@@ -269,6 +272,14 @@ const LEAD_STATUS_OPTIONS = [
             </div>
         </template>
         <template #actions>
+            <UButton
+                v-if="can('records.share')"
+                icon="i-tabler-share"
+                label="Share"
+                color="neutral"
+                variant="outline"
+                @click="shareOpen = true"
+            />
             <UButton
                 v-if="can('leads.edit')"
                 icon="i-tabler-pencil"
@@ -556,6 +567,14 @@ const LEAD_STATUS_OPTIONS = [
                 >? This cannot be undone.
             </p>
         </AppConfirmModal>
+
+        <ShareRecordModal
+            v-if="can('records.share')"
+            v-model:open="shareOpen"
+            resource-type="leads"
+            :resource-id="id"
+            :resource-label="lead.title"
+        />
     </AppDetailLayout>
 
     <div v-else-if="leadPending" class="space-y-4">

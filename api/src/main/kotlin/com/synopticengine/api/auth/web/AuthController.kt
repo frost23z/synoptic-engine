@@ -52,6 +52,7 @@ class AuthController(
         return ResponseEntity.ok(
             MeResponse(
                 id = user.id,
+                tenantId = principal.tenantId,
                 email = user.email,
                 fullName = user.fullName,
                 isActive = user.isActive,
@@ -79,6 +80,7 @@ class AuthController(
         return ResponseEntity.ok(
             MeResponse(
                 id = user.id,
+                tenantId = principal.tenantId,
                 email = user.email,
                 fullName = user.fullName,
                 isActive = user.isActive,
