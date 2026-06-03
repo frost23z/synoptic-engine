@@ -50,11 +50,6 @@ export interface WarehouseProductEntry {
 export type ProductsPage = PageResponse<ProductResponse>
 export type WarehousesPage = PageResponse<WarehouseResponse>
 
-export interface WarehouseTagResponse {
-    id: string
-    name: string
-}
-
 // ── Inventory movements / stock ────────────────────────────────────────────
 /** Per-location stock state for a product (`GET /api/inventory/stock`). */
 export interface StockStateResponse {
