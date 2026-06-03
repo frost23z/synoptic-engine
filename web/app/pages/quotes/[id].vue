@@ -12,6 +12,7 @@ const router = useRouter()
 const route = useRoute()
 const { formatCurrency, formatDate } = useFormatters()
 const id = route.params.id as string
+const shareOpen = ref(false)
 
 const {
     data: quote,
@@ -124,6 +125,15 @@ const {
             </div>
         </template>
         <template #actions>
+            <UButton
+                v-if="can('records.share')"
+                icon="i-tabler-share"
+                label="Share"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                @click="shareOpen = true"
+            />
             <UDropdownMenu
                 v-if="can('quotes.edit')"
                 :items="[
@@ -321,6 +331,14 @@ const {
                 >? This cannot be undone.
             </p>
         </AppConfirmModal>
+
+        <ShareRecordModal
+            v-if="can('records.share')"
+            v-model:open="shareOpen"
+            resource-type="quotes"
+            :resource-id="id"
+            :resource-label="quote.title"
+        />
     </AppDetailLayout>
 
     <div v-else-if="quotePending" class="space-y-4">

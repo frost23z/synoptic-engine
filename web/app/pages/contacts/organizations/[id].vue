@@ -10,6 +10,7 @@ const { can } = usePermissions()
 const router = useRouter()
 const route = useRoute()
 const id = route.params.id as string
+const shareOpen = ref(false)
 
 const {
     data: org,
@@ -92,6 +93,14 @@ const {
             <p v-if="org.website" class="text-muted text-sm">{{ org.website }}</p>
         </template>
         <template #actions>
+            <UButton
+                v-if="can('records.share')"
+                icon="i-tabler-share"
+                label="Share"
+                color="neutral"
+                variant="outline"
+                @click="shareOpen = true"
+            />
             <UButton
                 v-if="can('contacts.organizations.edit')"
                 icon="i-tabler-pencil"
@@ -215,6 +224,14 @@ const {
                 >? This cannot be undone.
             </p>
         </AppConfirmModal>
+
+        <ShareRecordModal
+            v-if="can('records.share')"
+            v-model:open="shareOpen"
+            resource-type="organizations"
+            :resource-id="id"
+            :resource-label="org.name"
+        />
     </AppDetailLayout>
 
     <div v-else-if="orgPending" class="space-y-4">

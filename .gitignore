@@ -1,0 +1,3 @@
+# Sample config that `lefthook install` (run by web/'s postinstall) regenerates
+# at the git root on every install. The real hook config is web/lefthook.yml.
+/lefthook.yml

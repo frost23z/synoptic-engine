@@ -3,11 +3,11 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const authStore = useAuthStore()
 const route = useRoute()
-const { can } = usePermissions()
+const { can, canAny } = usePermissions()
 
 const open = useCookie<boolean>('sidebar-open', { default: () => true })
 
-type NavEntry = NavigationMenuItem & { permission?: string }
+type NavEntry = NavigationMenuItem & { permission?: string; permissionAny?: string[] }
 
 const mainNav = computed<NavigationMenuItem[]>(() => [
     { label: 'Dashboard', icon: 'i-tabler-layout-dashboard', to: '/' },
@@ -15,8 +15,12 @@ const mainNav = computed<NavigationMenuItem[]>(() => [
 
 const filterNav = (items: NavEntry[]): NavigationMenuItem[] =>
     items
-        .filter((i) => !i.permission || can(i.permission))
-        .map(({ permission: _p, ...rest }) => rest as NavigationMenuItem)
+        .filter(
+            (i) =>
+                (!i.permission || can(i.permission)) &&
+                (!i.permissionAny || canAny(...i.permissionAny))
+        )
+        .map(({ permission: _p, permissionAny: _pa, ...rest }) => rest as NavigationMenuItem)
 
 const crmNav = computed<NavigationMenuItem[]>(() =>
     filterNav([
@@ -59,6 +63,30 @@ const inventoryNav = computed<NavigationMenuItem[]>(() =>
             icon: 'i-tabler-building-warehouse',
             to: '/warehouses',
             permission: 'warehouses.view',
+        },
+    ])
+)
+
+const sharingNav = computed<NavigationMenuItem[]>(() =>
+    filterNav([
+        { label: 'Sharing', type: 'label' },
+        {
+            label: 'Relationships',
+            icon: 'i-tabler-arrows-left-right',
+            to: '/sharing/relationships',
+            permission: 'relationships.view',
+        },
+        {
+            label: 'Shared with me',
+            icon: 'i-tabler-share',
+            to: '/sharing/shared-with-me',
+            permission: 'records.share',
+        },
+        {
+            label: 'Cross-tenant Audit',
+            icon: 'i-tabler-history',
+            to: '/sharing/audit',
+            permissionAny: ['records.share', 'records.reshare', 'relationships.view'],
         },
     ])
 )
@@ -169,7 +197,7 @@ const userMenuItems = computed(() => [
         {
             label: 'Sign out',
             icon: 'i-tabler-logout',
-            click: () => authStore.logout(),
+            onSelect: () => authStore.logout(),
         },
     ],
 ])
@@ -211,6 +239,12 @@ const userMenuItems = computed(() => [
                     />
                     <UNavigationMenu
                         :items="inventoryNav"
+                        orientation="vertical"
+                        :collapsed="state === 'collapsed'"
+                        :tooltip="tooltipProps"
+                    />
+                    <UNavigationMenu
+                        :items="sharingNav"
                         orientation="vertical"
                         :collapsed="state === 'collapsed'"
                         :tooltip="tooltipProps"
