@@ -10,6 +10,7 @@ const { can } = usePermissions()
 const router = useRouter()
 const route = useRoute()
 const id = route.params.id as string
+const shareOpen = ref(false)
 
 const {
     data: person,
@@ -108,6 +109,14 @@ const { data: allTags } = await useAsyncData<TagResponse[]>('tags-lookup', () =>
             </p>
         </template>
         <template #actions>
+            <UButton
+                v-if="can('records.share')"
+                icon="i-tabler-share"
+                label="Share"
+                color="neutral"
+                variant="outline"
+                @click="shareOpen = true"
+            />
             <UButton
                 v-if="can('contacts.persons.edit')"
                 icon="i-tabler-pencil"
@@ -217,6 +226,14 @@ const { data: allTags } = await useAsyncData<TagResponse[]>('tags-lookup', () =>
                 >? This cannot be undone.
             </p>
         </AppConfirmModal>
+
+        <ShareRecordModal
+            v-if="can('records.share')"
+            v-model:open="shareOpen"
+            resource-type="persons"
+            :resource-id="id"
+            :resource-label="person.fullName"
+        />
     </AppDetailLayout>
 
     <div v-else-if="personPending" class="space-y-4">
