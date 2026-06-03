@@ -12,7 +12,7 @@ useHead({ title: 'Cross-tenant Audit — Synoptic' })
 
 const api = useApi()
 const { formatDate } = useFormatters()
-const { tenantName } = await useTenantNames()
+const { tenantName } = useTenantNames()
 
 // Record-scoped query (resourceType + resourceId): the audit view that does not
 // require the caller's own tenant id. The owner/actor self-views are noted in

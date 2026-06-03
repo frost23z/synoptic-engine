@@ -8,11 +8,11 @@ import type { TenantResponse } from '~/types/sharing'
  * `tenantName` falls back to a shortened UUID (graceful degradation, since
  * relationship/share DTOs only carry tenant ids).
  */
-export async function useTenantNames() {
+export function useTenantNames() {
     const api = useApi()
     const { can } = usePermissions()
 
-    const { data } = await useAsyncData<TenantResponse[]>(
+    const { data } = useAsyncData<TenantResponse[]>(
         'sharing-tenants',
         () => (can('tenants.view') ? api<TenantResponse[]>('/api/tenants') : Promise.resolve([])),
         { default: () => [] }

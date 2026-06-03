@@ -15,7 +15,7 @@ const toast = useToast()
 const router = useRouter()
 const { can } = usePermissions()
 const { formatDate } = useFormatters()
-const { tenantName, tenantOptions, hasTenantList } = await useTenantNames()
+const { tenantName, tenantOptions, hasTenantList } = useTenantNames()
 
 const {
     data: relationships,

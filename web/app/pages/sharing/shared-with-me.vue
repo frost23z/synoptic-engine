@@ -13,7 +13,7 @@ useHead({ title: 'Shared with me — Synoptic' })
 
 const api = useApi()
 const { formatDate } = useFormatters()
-const { tenantName } = await useTenantNames()
+const { tenantName } = useTenantNames()
 
 const resourceType = ref('')
 

@@ -18,7 +18,7 @@ const toast = useToast()
 const route = useRoute()
 const { can } = usePermissions()
 const { formatDate } = useFormatters()
-const { tenantName } = await useTenantNames()
+const { tenantName } = useTenantNames()
 const id = route.params.id as string
 
 const {
