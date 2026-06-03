@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { MailFolder, EmailResponse } from '~/types/mail'
 
 definePageMeta({ title: 'Email' })
 
 const api = useApi()
 const toast = useToast()
+const { can } = usePermissions()
 const { formatDate } = useFormatters()
 const route = useRoute()
 const router = useRouter()
@@ -22,7 +24,7 @@ useHead({ title: pageTitle })
 
 // Mark as read on open
 onMounted(async () => {
-    if (email.value && !email.value.read) {
+    if (email.value && !email.value.read && can('mail.edit')) {
         await api(`/api/mail/${id}/read`, { method: 'PATCH', body: { read: true } }).catch(() => {})
     }
 })
@@ -122,11 +124,11 @@ function addressDisplay(
     return a.name ? `${a.name} <${a.email ?? ''}>` : (a.email ?? '—')
 }
 
-const moveItems = computed(() =>
+const moveItems = computed<DropdownMenuItem[]>(() =>
     FOLDERS.filter((f) => !email.value?.folders.includes(f.key)).map((f) => ({
         label: f.label,
         icon: 'i-tabler-folder',
-        click: () => moveToFolder(f.key),
+        onSelect: () => moveToFolder(f.key),
     }))
 )
 
@@ -142,47 +144,39 @@ async function downloadAttachment(attachment: { id: string; name: string }) {
 </script>
 
 <template>
-    <div class="mx-auto max-w-3xl space-y-4 p-6">
-        <!-- Back + actions -->
-        <div class="flex items-center justify-between">
+    <AppDetailLayout to="/mail" root-class="mx-auto max-w-3xl space-y-4 p-6">
+        <template #actions>
             <UButton
-                icon="i-tabler-arrow-left"
-                label="Back"
+                v-if="can('mail.edit')"
+                :icon="email?.read ? 'i-tabler-mail' : 'i-tabler-mail-opened'"
+                :label="email?.read ? 'Mark unread' : 'Mark read'"
                 color="neutral"
-                variant="ghost"
-                @click="router.push('/mail')"
+                variant="outline"
+                size="sm"
+                :loading="toggling"
+                @click="toggleRead"
             />
-            <div class="flex items-center gap-2">
+            <UDropdownMenu v-if="can('mail.edit')" :items="[moveItems]">
                 <UButton
-                    :icon="email?.read ? 'i-tabler-mail' : 'i-tabler-mail-opened'"
-                    :label="email?.read ? 'Mark unread' : 'Mark read'"
+                    icon="i-tabler-folder-arrow-right"
+                    label="Move"
                     color="neutral"
                     variant="outline"
                     size="sm"
-                    :loading="toggling"
-                    @click="toggleRead"
+                    :loading="movingFolder"
                 />
-                <UDropdownMenu :items="[moveItems]">
-                    <UButton
-                        icon="i-tabler-folder-arrow-right"
-                        label="Move"
-                        color="neutral"
-                        variant="outline"
-                        size="sm"
-                        :loading="movingFolder"
-                    />
-                </UDropdownMenu>
-                <UButton
-                    icon="i-tabler-trash"
-                    label="Delete"
-                    color="error"
-                    variant="outline"
-                    size="sm"
-                    :loading="deleting"
-                    @click="deleteEmail"
-                />
-            </div>
-        </div>
+            </UDropdownMenu>
+            <UButton
+                v-if="can('mail.edit')"
+                icon="i-tabler-trash"
+                label="Delete"
+                color="error"
+                variant="outline"
+                size="sm"
+                :loading="deleting"
+                @click="deleteEmail"
+            />
+        </template>
 
         <!-- Loading -->
         <div v-if="pending" class="space-y-3">
@@ -262,7 +256,7 @@ async function downloadAttachment(attachment: { id: string; name: string }) {
             </div>
 
             <!-- Reply -->
-            <div v-if="!replyOpen" class="pt-2">
+            <div v-if="can('mail.edit') && !replyOpen" class="pt-2">
                 <UButton
                     icon="i-tabler-arrow-back"
                     label="Reply"
@@ -272,7 +266,10 @@ async function downloadAttachment(attachment: { id: string; name: string }) {
                 />
             </div>
 
-            <div v-if="replyOpen" class="border-default space-y-3 rounded-lg border p-4">
+            <div
+                v-if="can('mail.edit') && replyOpen"
+                class="border-default space-y-3 rounded-lg border p-4"
+            >
                 <p class="text-highlighted text-sm font-semibold">
                     Reply to {{ addressDisplay(email.from) }}
                 </p>
@@ -305,5 +302,5 @@ async function downloadAttachment(attachment: { id: string; name: string }) {
             <UIcon name="i-tabler-mail-off" class="text-muted mx-auto size-12" />
             <p class="text-muted mt-2 text-sm">Email not found</p>
         </div>
-    </div>
+    </AppDetailLayout>
 </template>

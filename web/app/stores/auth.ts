@@ -39,14 +39,26 @@ export const useAuthStore = defineStore('auth', () => {
         setSession(data)
     }
 
-    async function refresh() {
-        if (!refreshToken.value) throw new Error('No refresh token')
-        const data = await $fetch<TokenResponse>('/auth/refresh', {
-            baseURL: config.public.apiBase,
-            method: 'POST',
-            body: { refreshToken: refreshToken.value },
-        })
-        setSession(data)
+    // Single-flight refresh: concurrent 401s share one in-flight call instead
+    // of each firing its own /auth/refresh (which races and storms the server).
+    // Kept inside the store setup so it stays per-instance (SSR-safe).
+    let refreshInFlight: Promise<void> | null = null
+
+    function refresh() {
+        if (!refreshInFlight) {
+            refreshInFlight = (async () => {
+                if (!refreshToken.value) throw new Error('No refresh token')
+                const data = await $fetch<TokenResponse>('/auth/refresh', {
+                    baseURL: config.public.apiBase,
+                    method: 'POST',
+                    body: { refreshToken: refreshToken.value },
+                })
+                setSession(data)
+            })().finally(() => {
+                refreshInFlight = null
+            })
+        }
+        return refreshInFlight
     }
 
     async function fetchMe() {

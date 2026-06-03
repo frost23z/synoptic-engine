@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { OrganizationResponse } from '~/types/contacts'
 import type { ActivityResponse } from '~/types/activities'
-import { ACTIVITY_TYPE_ICON } from '~/types/activities'
 
 definePageMeta({ title: 'Organization' })
 
@@ -73,57 +72,42 @@ async function submitEdit() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    deleting.value = true
-    try {
-        await api(`/api/contacts/organizations/${id}`, { method: 'DELETE' })
-        toast.add({ title: 'Organization deleted', color: 'success' })
+const {
+    open: deleteOpen,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<OrganizationResponse>({
+    endpoint: (o) => `/api/contacts/organizations/${o.id}`,
+    successMessage: 'Organization deleted',
+    onDeleted: () => {
         router.push('/contacts/organizations')
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+    },
+})
 </script>
 
 <template>
-    <div v-if="org" class="space-y-6">
-        <!-- Header -->
-        <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-                <UButton
-                    icon="i-tabler-arrow-left"
-                    color="neutral"
-                    variant="ghost"
-                    to="/contacts/organizations"
-                />
-                <div>
-                    <h2 class="text-highlighted text-xl font-semibold">{{ org.name }}</h2>
-                    <p v-if="org.website" class="text-muted text-sm">{{ org.website }}</p>
-                </div>
-            </div>
-            <div class="flex gap-2">
-                <UButton
-                    v-if="can('contacts.organizations.edit')"
-                    icon="i-tabler-pencil"
-                    label="Edit"
-                    color="neutral"
-                    variant="outline"
-                    @click="openEdit"
-                />
-                <UButton
-                    v-if="can('contacts.organizations.delete')"
-                    icon="i-tabler-trash"
-                    color="error"
-                    variant="outline"
-                    @click="deleteOpen = true"
-                />
-            </div>
-        </div>
+    <AppDetailLayout v-if="org" to="/contacts/organizations" :title="org.name">
+        <template #subtitle>
+            <p v-if="org.website" class="text-muted text-sm">{{ org.website }}</p>
+        </template>
+        <template #actions>
+            <UButton
+                v-if="can('contacts.organizations.edit')"
+                icon="i-tabler-pencil"
+                label="Edit"
+                color="neutral"
+                variant="outline"
+                @click="openEdit"
+            />
+            <UButton
+                v-if="can('contacts.organizations.delete')"
+                icon="i-tabler-trash"
+                color="error"
+                variant="outline"
+                @click="promptDelete(org)"
+            />
+        </template>
 
         <!-- Tab bar -->
         <div class="border-default mb-4 flex gap-4 border-b pb-0">
@@ -177,103 +161,61 @@ async function confirmDelete() {
         </div>
 
         <!-- Activities tab -->
-        <div v-if="activeTab === 'activities'" class="space-y-2">
-            <div v-if="!orgActivities?.length" class="text-muted py-8 text-center text-sm">
-                No activities linked to this organization
-            </div>
-            <div
-                v-for="act in orgActivities"
-                :key="act.id"
-                class="border-default rounded-lg border p-3"
-            >
-                <div class="flex items-center gap-2">
-                    <UIcon :name="ACTIVITY_TYPE_ICON[act.type]" class="text-muted size-4" />
-                    <p class="text-sm font-medium">{{ act.title }}</p>
-                    <UBadge v-if="act.done" label="Done" color="success" variant="soft" size="xs" />
-                </div>
-                <p v-if="act.comment" class="text-muted mt-1 text-xs">{{ act.comment }}</p>
-            </div>
+        <div v-if="activeTab === 'activities'">
+            <UCard>
+                <template #header
+                    ><p class="text-highlighted font-semibold">Activities</p></template
+                >
+                <EntityTimeline
+                    :activities="orgActivities ?? []"
+                    empty-message="No activities linked to this organization"
+                />
+            </UCard>
         </div>
 
         <!-- Edit modal -->
-        <UModal v-model:open="editing">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Edit Organization</p></template
-                    >
-                    <form class="space-y-3" @submit.prevent="submitEdit">
-                        <UFormField label="Name" required>
-                            <UInput v-model="editForm.name" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Email">
-                            <UInput v-model="editForm.email" type="email" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Phone">
-                            <UInput v-model="editForm.phone" class="w-full" />
-                        </UFormField>
-                        <UFormField label="Website">
-                            <UInput
-                                v-model="editForm.website"
-                                placeholder="https://..."
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField label="Address">
-                            <UInput v-model="editForm.address" class="w-full" />
-                        </UFormField>
-                    </form>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="editing = false"
-                            />
-                            <UButton
-                                label="Save"
-                                :loading="saving"
-                                :disabled="!editForm.name"
-                                @click="submitEdit"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="editing"
+            title="Edit Organization"
+            confirm-label="Save"
+            :loading="saving"
+            :confirm-disabled="!editForm.name"
+            @confirm="submitEdit"
+        >
+            <form class="space-y-3" @submit.prevent="submitEdit">
+                <UFormField label="Name" required>
+                    <UInput v-model="editForm.name" class="w-full" />
+                </UFormField>
+                <UFormField label="Email">
+                    <UInput v-model="editForm.email" type="email" class="w-full" />
+                </UFormField>
+                <UFormField label="Phone">
+                    <UInput v-model="editForm.phone" class="w-full" />
+                </UFormField>
+                <UFormField label="Website">
+                    <UInput v-model="editForm.website" placeholder="https://..." class="w-full" />
+                </UFormField>
+                <UFormField label="Address">
+                    <UInput v-model="editForm.address" class="w-full" />
+                </UFormField>
+            </form>
+        </AppConfirmModal>
 
         <!-- Delete modal -->
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Organization</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ org.name }}</strong
-                        >? This cannot be undone.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
-    </div>
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Organization"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ org.name }}</strong
+                >? This cannot be undone.
+            </p>
+        </AppConfirmModal>
+    </AppDetailLayout>
 
     <div v-else-if="orgPending" class="space-y-4">
         <USkeleton class="h-8 w-64" />
