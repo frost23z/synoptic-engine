@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 
 definePageMeta({ title: 'Lead Sources' })
 useHead({ title: 'Lead Sources — Synoptic' })
@@ -7,6 +7,7 @@ useHead({ title: 'Lead Sources — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
+const { can } = usePermissions()
 
 interface LeadSourceResponse {
     id: string
@@ -50,7 +51,7 @@ async function submitCreate() {
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editOpen = ref(false)
 const saving = ref(false)
-const editTarget = ref<LeadSourceResponse | null>(null)
+const editTarget = shallowRef<LeadSourceResponse | null>(null)
 const editName = ref('')
 
 function openEdit(s: LeadSourceResponse) {
@@ -79,24 +80,17 @@ async function submitEdit() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
-const deleteOpen = ref(false)
-const toDelete = ref<LeadSourceResponse | null>(null)
-const deleting = ref(false)
-
-async function confirmDelete() {
-    if (!toDelete.value) return
-    deleting.value = true
-    try {
-        await api(`/api/lead-sources/${toDelete.value.id}`, { method: 'DELETE' })
-        toast.add({ title: 'Source deleted', color: 'success' })
-        deleteOpen.value = false
-        refresh()
-    } catch {
-        toast.add({ title: 'Failed to delete', color: 'error' })
-    } finally {
-        deleting.value = false
-    }
-}
+const {
+    open: deleteOpen,
+    target: sourceToDelete,
+    deleting,
+    prompt: promptDelete,
+    confirm: confirmDelete,
+} = useDeleteResource<LeadSourceResponse>({
+    endpoint: (s) => `/api/lead-sources/${s.id}`,
+    successMessage: 'Source deleted',
+    onDeleted: refresh,
+})
 
 const columns: TableColumn<LeadSourceResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
@@ -104,18 +98,15 @@ const columns: TableColumn<LeadSourceResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
-function rowActions(s: LeadSourceResponse) {
+function rowActions(s: LeadSourceResponse): DropdownMenuItem[][] {
     return [
-        [{ label: 'Edit', icon: 'i-tabler-pencil', click: () => openEdit(s) }],
+        [{ label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(s) }],
         [
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
-                color: 'error' as const,
-                click: () => {
-                    toDelete.value = s
-                    deleteOpen.value = true
-                },
+                color: 'error',
+                onSelect: () => promptDelete(s),
             },
         ],
     ]
@@ -124,134 +115,78 @@ function rowActions(s: LeadSourceResponse) {
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <h2 class="text-highlighted text-xl font-semibold">Lead Sources</h2>
-                <p class="text-muted text-sm">
-                    Where leads originate (website, referral, cold call…)
-                </p>
-            </div>
-            <UButton icon="i-tabler-plus" label="New Source" @click="openCreate" />
-        </div>
-
-        <UCard :ui="{ body: 'p-0' }">
-            <UTable :data="sources ?? []" :columns="columns" :loading="pending" sticky>
-                <template #name-cell="{ row }">
-                    <span class="font-medium">{{ row.original.name }}</span>
-                </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
-                </template>
-                <template #actions-cell="{ row }">
-                    <UDropdownMenu :items="rowActions(row.original)">
-                        <UButton
-                            icon="i-tabler-dots-vertical"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                        />
-                    </UDropdownMenu>
-                </template>
-                <template #empty>
-                    <div class="space-y-2 py-12 text-center">
-                        <UIcon name="i-tabler-source-code" class="text-muted mx-auto size-10" />
-                        <p class="text-muted text-sm">No lead sources yet</p>
-                    </div>
-                </template>
-            </UTable>
-        </UCard>
-
-        <UModal v-model:open="createOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">New Lead Source</p></template
-                    >
-                    <UFormField label="Name" required>
-                        <UInput
-                            v-model="createName"
-                            placeholder="e.g. Website, Cold Call, Referral"
-                            class="w-full"
-                            @keydown.enter="submitCreate"
-                        />
-                    </UFormField>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="createOpen = false"
-                            />
-                            <UButton
-                                label="Create"
-                                :loading="creating"
-                                :disabled="!createName.trim()"
-                                @click="submitCreate"
-                            />
-                        </div>
-                    </template>
-                </UCard>
+        <AppPageHeader
+            title="Lead Sources"
+            subtitle="Where leads originate (website, referral, cold call…)"
+        >
+            <template #actions>
+                <UButton
+                    v-if="can('leads.edit')"
+                    icon="i-tabler-plus"
+                    label="New Source"
+                    @click="openCreate"
+                />
             </template>
-        </UModal>
+        </AppPageHeader>
 
-        <UModal v-model:open="editOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Edit Lead Source</p></template
-                    >
-                    <UFormField label="Name" required>
-                        <UInput v-model="editName" class="w-full" @keydown.enter="submitEdit" />
-                    </UFormField>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="editOpen = false"
-                            />
-                            <UButton
-                                label="Save"
-                                :loading="saving"
-                                :disabled="!editName.trim()"
-                                @click="submitEdit"
-                            />
-                        </div>
-                    </template>
-                </UCard>
+        <AppListTable :rows="sources ?? []" :columns="columns" :loading="pending">
+            <template #name-cell="{ row }">
+                <span class="font-medium">{{ row.original.name }}</span>
             </template>
-        </UModal>
+            <template #createdAt-cell="{ row }">
+                <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+            </template>
+            <template #actions-cell="{ row }">
+                <AppRowActions v-if="can('leads.edit')" :items="rowActions(row.original)" />
+            </template>
+            <template #empty>
+                <AppEmptyState icon="i-tabler-source-code" message="No lead sources yet" />
+            </template>
+        </AppListTable>
 
-        <UModal v-model:open="deleteOpen">
-            <template #content>
-                <UCard>
-                    <template #header
-                        ><p class="text-highlighted font-semibold">Delete Source</p></template
-                    >
-                    <p class="text-muted text-sm">
-                        Delete <strong class="text-highlighted">{{ toDelete?.name }}</strong
-                        >? Leads using this source will be unlinked.
-                    </p>
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Cancel"
-                                @click="deleteOpen = false"
-                            />
-                            <UButton
-                                color="error"
-                                label="Delete"
-                                :loading="deleting"
-                                @click="confirmDelete"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
+        <AppConfirmModal
+            v-model:open="createOpen"
+            title="New Lead Source"
+            confirm-label="Create"
+            :loading="creating"
+            :confirm-disabled="!createName.trim()"
+            @confirm="submitCreate"
+        >
+            <UFormField label="Name" required>
+                <UInput
+                    v-model="createName"
+                    placeholder="e.g. Website, Cold Call, Referral"
+                    class="w-full"
+                    @keydown.enter="submitCreate"
+                />
+            </UFormField>
+        </AppConfirmModal>
+
+        <AppConfirmModal
+            v-model:open="editOpen"
+            title="Edit Lead Source"
+            confirm-label="Save"
+            :loading="saving"
+            :confirm-disabled="!editName.trim()"
+            @confirm="submitEdit"
+        >
+            <UFormField label="Name" required>
+                <UInput v-model="editName" class="w-full" @keydown.enter="submitEdit" />
+            </UFormField>
+        </AppConfirmModal>
+
+        <AppConfirmModal
+            v-model:open="deleteOpen"
+            title="Delete Source"
+            confirm-label="Delete"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmDelete"
+        >
+            <p class="text-muted text-sm">
+                Delete <strong class="text-highlighted">{{ sourceToDelete?.name }}</strong
+                >? Leads using this source will be unlinked.
+            </p>
+        </AppConfirmModal>
     </div>
 </template>

@@ -13,10 +13,9 @@ export const useApi = () => {
         onRequest({ options }) {
             const token = authStore.accessToken
             if (token) {
-                options.headers = {
-                    ...(options.headers as Record<string, string>),
-                    Authorization: `Bearer ${token}`,
-                }
+                const headers = new Headers(options.headers as HeadersInit)
+                headers.set('Authorization', `Bearer ${token}`)
+                options.headers = headers
             }
         },
         async onResponseError({ response }) {

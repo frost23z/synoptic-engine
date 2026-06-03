@@ -26,3 +26,6 @@ logs
 # Ignore all test-results files
 test-results
 playwright-report
+
+# Generated API types (regenerate with: pnpm openapi:types)
+app/types/api.gen.ts

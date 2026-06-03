@@ -11,7 +11,10 @@ export const ACTIVITY_TYPE_ICON: Record<ActivityType, string> = {
     MESSAGE: 'i-tabler-message',
 }
 
-export const ACTIVITY_TYPE_COLOR: Record<ActivityType, string> = {
+export const ACTIVITY_TYPE_COLOR: Record<
+    ActivityType,
+    'info' | 'primary' | 'warning' | 'secondary' | 'neutral' | 'success'
+> = {
     CALL: 'info',
     EMAIL: 'primary',
     MEETING: 'warning',
