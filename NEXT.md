@@ -41,20 +41,19 @@ plural path names: `leads|persons|organizations|quotes|products`.
 - [x] `sharing/shared-with-me.vue` — records other tenants shared with us
 - [x] `sharing/audit.vue` — record-scoped cross-tenant audit viewer
 
-### NEXT UP (start here): record-level sharing on entity pages
+### Record-level sharing — ✅ shipped (PR #53)
 
-This is the remaining Sharing piece and the natural next branch (`claude/frontend-record-sharing`):
-- **`ShareRecordModal` component** — pick consumer tenant (from `useTenantNames`) + access level
-  (`GRANTABLE_ACCESS_LEVELS`) + optional expiry + note; `POST /api/records/share`. Types/maps
-  already exist in `app/types/sharing.ts`.
-- **`RecordSharesPanel` (or inline)** — `GET /api/records/{resourceType}/{resourceId}/shares`,
-  list consumer tenant + access + expiry, revoke via `DELETE /api/records/share/{id}`
-  (`useDeleteResource`), all gated `records.share`.
-- Wire a **"Share" action** into the detail pages — `leads/[id]` (`leads`), `quotes/[id]`
-  (`quotes`), `contacts/persons/[id]` (`persons`), `contacts/organizations/[id]`
-  (`organizations`), `products/[id]` (`products`). resourceType = the plural names.
-- **Reshare** (`POST /api/records/reshare`, `records.reshare`) — for records shared *to* us with
-  MANAGE access; surface from `shared-with-me`.
+- [x] `ShareRecordModal` — lists current shares (revoke via `DELETE /records/share/{id}`) + a
+  form to share (`POST /records/share`): consumer tenant + access level + optional expiry/note.
+  Gated `records.share`. `useTenantNames` made non-blocking so it's safe in the mounted modal.
+- [x] Wired the **Share** action into all five detail pages: leads, quotes, products,
+  contacts/persons, contacts/organizations (resourceType = plural path names).
+
+### NEXT UP (start here): reshare + polish
+
+- **Reshare** (`POST /api/records/reshare`, perm `records.reshare`) — for records shared *to* us
+  with MANAGE access; surface a "Reshare" action from `sharing/shared-with-me.vue` (a modal much
+  like `ShareRecordModal`, or extend it with a `mode: 'share' | 'reshare'` prop).
 
 ### Smaller follow-ups
 
