@@ -1,5 +1,6 @@
 export interface AuthUser {
     id: string
+    tenantId: string
     email: string
     fullName: string
     authorities: string[]
@@ -11,6 +12,7 @@ export interface TokenResponse {
     refreshToken: string
     tokenType: string
     userId: string
+    tenantId: string
     email: string
     fullName: string
     authorities: string[]
