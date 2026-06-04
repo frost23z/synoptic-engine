@@ -165,10 +165,26 @@ export interface WebhookResponse {
     id: string
     name: string
     payloadUrl: string
+    hasSecret: boolean
     events: string[]
-    active: boolean
-    createdAt: string
-    updatedAt: string
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
+}
+
+/** A single webhook delivery attempt. */
+export interface WebhookDeliveryRunResponse {
+    id: string
+    webhookId: string
+    eventName: string
+    entityType: string
+    entityId: string
+    /** `SUCCESS` | `FAILED` */
+    status: string
+    responseCode?: number
+    responseBody?: string
+    errorMessage?: string
+    createdAt?: string
 }
 
 // ── Marketing ────────────────────────────────────────────────────────────
