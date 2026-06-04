@@ -22,6 +22,13 @@ const {
     refresh,
 } = await usePaginatedList<PersonResponse>('/api/contacts/persons', { key: 'persons' })
 
+// ── Saved views (datagrid filters) ────────────────────────────────────────
+const appliedFilter = computed(() => ({ search: search.value || undefined }))
+function applySavedFilter(applied: Record<string, unknown>) {
+    search.value = typeof applied.search === 'string' ? applied.search : ''
+    page.value = 1
+}
+
 const massDeleting = ref(false)
 async function massDelete() {
     if (!selected.value.length) return
@@ -99,12 +106,19 @@ function rowActions(person: PersonResponse): DropdownMenuItem[][] {
             </template>
         </AppPageHeader>
 
-        <UInput
-            v-model="search"
-            placeholder="Search persons…"
-            icon="i-tabler-search"
-            class="w-64"
-        />
+        <div class="flex flex-wrap items-center gap-3">
+            <UInput
+                v-model="search"
+                placeholder="Search persons…"
+                icon="i-tabler-search"
+                class="w-64"
+            />
+            <AppSavedFilters
+                src="contacts.persons"
+                :applied="appliedFilter"
+                @apply="applySavedFilter"
+            />
+        </div>
 
         <AppMassActionBar :count="count" @clear="clearAll">
             <UButton

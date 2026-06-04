@@ -88,6 +88,18 @@ export interface StageOrderEntry {
     sortOrder: number
 }
 
+// ── Saved datagrid filters ───────────────────────────────────────────────
+export interface DataGridFilterResponse {
+    id: string
+    userId: string
+    name: string
+    /** The list/datagrid this filter belongs to, e.g. `leads`. */
+    src: string
+    applied: Record<string, unknown>
+    createdAt?: string
+    updatedAt?: string
+}
+
 // ── Tenants ──────────────────────────────────────────────────────────────
 export interface TenantResponse {
     id: string
