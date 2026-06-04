@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { GroupResponse } from '~/types/settings'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Groups' })
 useHead({ title: 'Groups — Synoptic' })
@@ -9,6 +10,13 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const {
+    submitting: saving,
+    errors,
+    validate,
+    run,
+    clearErrors,
+} = useFormSubmit({ failureTitle: 'Failed to save group' })
 
 const {
     data: groups,
@@ -18,44 +26,40 @@ const {
 
 // ── Create / Edit (shared modal) ────────────────────────────────────────────
 const formOpen = ref(false)
-const saving = ref(false)
 const editingId = ref<string | null>(null)
 const form = reactive({ name: '', description: '' })
 
 const isEdit = computed(() => editingId.value !== null)
 
 function openCreate() {
+    clearErrors()
     editingId.value = null
     Object.assign(form, { name: '', description: '' })
     formOpen.value = true
 }
 
 function openEdit(g: GroupResponse) {
+    clearErrors()
     editingId.value = g.id
     Object.assign(form, { name: g.name, description: g.description ?? '' })
     formOpen.value = true
 }
 
-async function submitForm() {
-    saving.value = true
-    try {
-        await api(isEdit.value ? `/api/groups/${editingId.value}` : '/api/groups', {
-            method: isEdit.value ? 'PUT' : 'POST',
-            body: { name: form.name, description: form.description || undefined },
-        })
-        toast.add({ title: isEdit.value ? 'Group updated' : 'Group created', color: 'success' })
-        formOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({
-            title: isEdit.value ? 'Failed to update group' : 'Failed to create group',
-            description: e?.data?.message,
-            color: 'error',
-        })
-    } finally {
-        saving.value = false
-    }
+function submitForm() {
+    run({
+        validate: () => validate(form, { name: [required('Name is required')] }),
+        call: () =>
+            api(isEdit.value ? `/api/groups/${editingId.value}` : '/api/groups', {
+                method: isEdit.value ? 'PUT' : 'POST',
+                body: { name: form.name, description: form.description || undefined },
+            }),
+        fieldHints: ['name'],
+        onSuccess: () => {
+            toast.add({ title: isEdit.value ? 'Group updated' : 'Group created', color: 'success' })
+            formOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -140,7 +144,7 @@ function rowActions(g: GroupResponse): DropdownMenuItem[][] {
             @confirm="submitForm"
         >
             <form class="space-y-3" @submit.prevent="submitForm">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="form.name" placeholder="e.g. Sales Team" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
