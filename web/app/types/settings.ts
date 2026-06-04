@@ -192,6 +192,8 @@ export interface MarketingEventResponse {
     id: string
     name: string
     description?: string
+    /** ISO date `YYYY-MM-DD`. */
+    eventDate?: string
     createdAt: string
     updatedAt: string
 }
