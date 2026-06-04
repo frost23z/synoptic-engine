@@ -88,6 +88,19 @@ export interface StageOrderEntry {
     sortOrder: number
 }
 
+// ── Tenants ──────────────────────────────────────────────────────────────
+export interface TenantResponse {
+    id: string
+    name: string
+    slug: string
+    status: string
+    legalName?: string
+    timezone?: string
+    locale?: string
+    createdAt?: string
+    updatedAt?: string
+}
+
 // ── System config ──────────────────────────────────────────────────────────
 export interface SystemConfigResponse {
     code: string

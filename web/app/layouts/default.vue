@@ -197,6 +197,12 @@ const settingsNav = computed<NavigationMenuItem[]>(() =>
             to: '/settings/config',
             permission: 'settings.view',
         },
+        {
+            label: 'Tenants',
+            icon: 'i-tabler-building-community',
+            to: '/settings/tenants',
+            permission: 'tenants.view',
+        },
     ])
 )
 
