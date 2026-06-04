@@ -7,7 +7,25 @@ export interface UserResponse {
     firstName: string
     lastName: string
     fullName: string
-    active: boolean
+    isActive: boolean
+    createdAt: string
+    updatedAt: string
+}
+
+export type ViewPermission = 'ALL' | 'GLOBAL' | 'GROUP' | 'INDIVIDUAL'
+
+export interface UserDetailResponse {
+    id: string
+    email: string
+    firstName: string
+    lastName: string
+    fullName: string
+    phone?: string
+    isActive: boolean
+    viewPermission: ViewPermission
+    roles: string[]
+    /** Each entry is `{ id, name }`. */
+    groups: { id: string; name: string }[]
     createdAt: string
     updatedAt: string
 }
