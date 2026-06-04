@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { OrganizationResponse } from '~/types/contacts'
+import { email, required } from '~/utils/validators'
 
 definePageMeta({ title: 'New Person' })
 useHead({ title: 'New Person — Synoptic' })
@@ -7,13 +8,15 @@ useHead({ title: 'New Person — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const router = useRouter()
+const { submitting, errors, validate, run } = useFormSubmit({
+    failureTitle: 'Failed to create person',
+})
 
 const { data: orgs } = await useAsyncData<OrganizationResponse[]>('orgs-for-person', () =>
     api<OrganizationResponse[]>('/api/contacts/organizations')
 )
 const orgOptions = computed(() => orgs.value?.map((o) => ({ label: o.name, value: o.id })) ?? [])
 
-const saving = ref(false)
 const form = reactive({
     firstName: '',
     lastName: '',
@@ -23,28 +26,32 @@ const form = reactive({
     organizationId: '',
 })
 
-async function submit() {
-    saving.value = true
-    try {
-        const person = await api<{ id: string }>('/api/contacts/persons', {
-            method: 'POST',
-            body: {
-                firstName: form.firstName,
-                lastName: form.lastName,
-                email: form.email || undefined,
-                phone: form.phone || undefined,
-                jobTitle: form.jobTitle || undefined,
-                organizationId: form.organizationId || undefined,
-            },
-        })
-        toast.add({ title: 'Person created', color: 'success' })
-        router.push(`/contacts/persons/${person.id}`)
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submit() {
+    run({
+        validate: () =>
+            validate(form, {
+                firstName: [required('First name is required')],
+                lastName: [required('Last name is required')],
+                email: [email()],
+            }),
+        call: () =>
+            api<{ id: string }>('/api/contacts/persons', {
+                method: 'POST',
+                body: {
+                    firstName: form.firstName,
+                    lastName: form.lastName,
+                    email: form.email || undefined,
+                    phone: form.phone || undefined,
+                    jobTitle: form.jobTitle || undefined,
+                    organizationId: form.organizationId || undefined,
+                },
+            }),
+        fieldHints: ['email'],
+        onSuccess: (person) => {
+            toast.add({ title: 'Person created', color: 'success' })
+            router.push(`/contacts/persons/${person.id}`)
+        },
+    })
 }
 </script>
 
@@ -57,14 +64,14 @@ async function submit() {
         <UCard>
             <form class="space-y-4" @submit.prevent="submit">
                 <div class="grid grid-cols-2 gap-4">
-                    <UFormField label="First name" required>
+                    <UFormField label="First name" required :error="errors.firstName">
                         <UInput v-model="form.firstName" placeholder="John" class="w-full" />
                     </UFormField>
-                    <UFormField label="Last name" required>
+                    <UFormField label="Last name" required :error="errors.lastName">
                         <UInput v-model="form.lastName" placeholder="Doe" class="w-full" />
                     </UFormField>
                 </div>
-                <UFormField label="Email">
+                <UFormField label="Email" :error="errors.email">
                     <UInput
                         v-model="form.email"
                         type="email"
@@ -97,12 +104,7 @@ async function submit() {
                         label="Cancel"
                         to="/contacts/persons"
                     />
-                    <UButton
-                        label="Create Person"
-                        :loading="saving"
-                        :disabled="!form.firstName || !form.lastName"
-                        @click="submit"
-                    />
+                    <UButton label="Create Person" :loading="submitting" @click="submit" />
                 </div>
             </form>
         </UCard>
