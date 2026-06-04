@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { TagResponse } from '~/types/leads'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Tags' })
 useHead({ title: 'Tags — Synoptic' })
@@ -9,6 +10,9 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const { submitting, errors, validate, run, clearErrors } = useFormSubmit({
+    failureTitle: 'Failed to create tag',
+})
 
 const {
     data: tags,
@@ -18,30 +22,29 @@ const {
 
 // ── Create ──────────────────────────────────────────────────────────────
 const createOpen = ref(false)
-const creating = ref(false)
 const createForm = reactive({ name: '', color: '#6366f1' })
 
 function openCreate() {
+    clearErrors()
     Object.assign(createForm, { name: '', color: '#6366f1' })
     createOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
-    try {
-        await api('/api/tags', {
-            method: 'POST',
-            body: { name: createForm.name, color: createForm.color },
-        })
-        toast.add({ title: 'Tag created', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create tag', description: e?.data?.message, color: 'error' })
-    } finally {
-        creating.value = false
-    }
+function submitCreate() {
+    run({
+        validate: () => validate(createForm, { name: [required('Name is required')] }),
+        call: () =>
+            api('/api/tags', {
+                method: 'POST',
+                body: { name: createForm.name, color: createForm.color },
+            }),
+        fieldHints: ['name'],
+        onSuccess: () => {
+            toast.add({ title: 'Tag created', color: 'success' })
+            createOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -115,12 +118,12 @@ function rowActions(t: TagResponse): DropdownMenuItem[][] {
             v-model:open="createOpen"
             title="Create Tag"
             confirm-label="Create"
-            :loading="creating"
+            :loading="submitting"
             :confirm-disabled="!createForm.name"
             @confirm="submitCreate"
         >
             <form class="space-y-3" @submit.prevent="submitCreate">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="createForm.name" placeholder="e.g. Hot Lead" class="w-full" />
                 </UFormField>
                 <UFormField label="Color">
