@@ -137,11 +137,28 @@ export interface WorkflowResponse {
     name: string
     description?: string
     eventName: string
-    conditions: Record<string, string>[]
-    actions: Record<string, string>[]
-    active: boolean
-    createdAt: string
-    updatedAt: string
+    conditions: Record<string, unknown>[]
+    actions: Record<string, unknown>[]
+    /** `and` (default) or `or`. */
+    conditionType: string
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
+}
+
+/** A single action execution recorded by the workflow engine. */
+export interface WorkflowActionRunResponse {
+    id: string
+    workflowId: string
+    eventName: string
+    entityType: string
+    entityId: string
+    actionType: string
+    /** `SUCCESS` | `FAILED` | `SKIPPED` */
+    status: string
+    errorMessage?: string
+    payload?: Record<string, unknown>
+    createdAt?: string
 }
 
 export interface WebhookResponse {
