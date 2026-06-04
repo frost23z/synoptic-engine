@@ -10,6 +10,9 @@ const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
 
+// Backend gates marketing update + delete + execute on marketing.edit.
+const canManage = computed(() => can('marketing.edit'))
+
 // ── Events ────────────────────────────────────────────────────────────────
 const {
     data: events,
@@ -19,37 +22,55 @@ const {
     api<MarketingEventResponse[]>('/api/settings/marketing/events')
 )
 
-const createEventOpen = ref(false)
-const creatingEvent = ref(false)
-const createEventForm = reactive({ name: '', description: '' })
+const eventFormOpen = ref(false)
+const savingEvent = ref(false)
+const editingEventId = ref<string | null>(null)
+const eventForm = reactive({ name: '', description: '', eventDate: '' })
+const isEventEdit = computed(() => editingEventId.value !== null)
 
 function openCreateEvent() {
-    Object.assign(createEventForm, { name: '', description: '' })
-    createEventOpen.value = true
+    editingEventId.value = null
+    Object.assign(eventForm, { name: '', description: '', eventDate: '' })
+    eventFormOpen.value = true
 }
 
-async function submitCreateEvent() {
-    creatingEvent.value = true
+function openEditEvent(e: MarketingEventResponse) {
+    editingEventId.value = e.id
+    Object.assign(eventForm, {
+        name: e.name,
+        description: e.description ?? '',
+        eventDate: e.eventDate ?? '',
+    })
+    eventFormOpen.value = true
+}
+
+async function submitEvent() {
+    savingEvent.value = true
     try {
-        await api('/api/settings/marketing/events', {
-            method: 'POST',
-            body: {
-                name: createEventForm.name,
-                description: createEventForm.description || undefined,
-            },
+        await api(
+            isEventEdit.value
+                ? `/api/settings/marketing/events/${editingEventId.value}`
+                : '/api/settings/marketing/events',
+            {
+                method: isEventEdit.value ? 'PUT' : 'POST',
+                body: {
+                    name: eventForm.name,
+                    description: eventForm.description || undefined,
+                    eventDate: eventForm.eventDate || undefined,
+                },
+            }
+        )
+        toast.add({
+            title: isEventEdit.value ? 'Event updated' : 'Event created',
+            color: 'success',
         })
-        toast.add({ title: 'Event created', color: 'success' })
-        createEventOpen.value = false
+        eventFormOpen.value = false
         refreshEvents()
     } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
-        toast.add({
-            title: 'Failed to create event',
-            description: e?.data?.message,
-            color: 'error',
-        })
+        toast.add({ title: 'Failed to save event', description: e?.data?.message, color: 'error' })
     } finally {
-        creatingEvent.value = false
+        savingEvent.value = false
     }
 }
 
@@ -68,12 +89,13 @@ const {
 const eventColumns: TableColumn<MarketingEventResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'description', header: 'Description' },
-    { accessorKey: 'createdAt', header: 'Created' },
+    { accessorKey: 'eventDate', header: 'Date' },
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
 function eventRowActions(e: MarketingEventResponse): DropdownMenuItem[][] {
     return [
+        [{ label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEditEvent(e) }],
         [
             {
                 label: 'Delete',
@@ -85,6 +107,19 @@ function eventRowActions(e: MarketingEventResponse): DropdownMenuItem[][] {
     ]
 }
 
+// ── Email templates (campaign lookup) ──────────────────────────────────────
+const { data: templates } = await useAsyncData<{ id: string; name: string }[]>(
+    'marketing-templates',
+    () =>
+        can('email-templates.view')
+            ? api<{ id: string; name: string }[]>('/api/settings/email-templates')
+            : Promise.resolve([])
+)
+const templateOptions = computed(() => [
+    { label: 'None', value: '' },
+    ...(templates.value?.map((t) => ({ label: t.name, value: t.id })) ?? []),
+])
+
 // ── Campaigns ─────────────────────────────────────────────────────────────
 const {
     data: campaigns,
@@ -94,48 +129,80 @@ const {
     api<MarketingCampaignResponse[]>('/api/settings/marketing/campaigns')
 )
 
-const createCampaignOpen = ref(false)
-const creatingCampaign = ref(false)
-const createCampaignForm = reactive({
+const campaignFormOpen = ref(false)
+const savingCampaign = ref(false)
+const editingCampaignId = ref<string | null>(null)
+const campaignForm = reactive({
     name: '',
     subject: '',
     description: '',
     eventId: '',
+    emailTemplateId: '',
 })
+const isCampaignEdit = computed(() => editingCampaignId.value !== null)
+
+const eventOptions = computed(() => [
+    { label: 'None', value: '' },
+    ...(events.value?.map((e) => ({ label: e.name, value: e.id })) ?? []),
+])
 
 function openCreateCampaign() {
-    Object.assign(createCampaignForm, { name: '', subject: '', description: '', eventId: '' })
-    createCampaignOpen.value = true
+    editingCampaignId.value = null
+    Object.assign(campaignForm, {
+        name: '',
+        subject: '',
+        description: '',
+        eventId: '',
+        emailTemplateId: '',
+    })
+    campaignFormOpen.value = true
 }
 
-const eventOptions = computed(
-    () => events.value?.map((e) => ({ label: e.name, value: e.id })) ?? []
-)
+function openEditCampaign(c: MarketingCampaignResponse) {
+    editingCampaignId.value = c.id
+    Object.assign(campaignForm, {
+        name: c.name,
+        subject: c.subject,
+        description: c.description ?? '',
+        eventId: c.eventId ?? '',
+        emailTemplateId: c.emailTemplateId ?? '',
+    })
+    campaignFormOpen.value = true
+}
 
-async function submitCreateCampaign() {
-    creatingCampaign.value = true
+async function submitCampaign() {
+    savingCampaign.value = true
     try {
-        await api('/api/settings/marketing/campaigns', {
-            method: 'POST',
-            body: {
-                name: createCampaignForm.name,
-                subject: createCampaignForm.subject,
-                description: createCampaignForm.description || undefined,
-                eventId: createCampaignForm.eventId || undefined,
-            },
+        await api(
+            isCampaignEdit.value
+                ? `/api/settings/marketing/campaigns/${editingCampaignId.value}`
+                : '/api/settings/marketing/campaigns',
+            {
+                method: isCampaignEdit.value ? 'PUT' : 'POST',
+                body: {
+                    name: campaignForm.name,
+                    subject: campaignForm.subject,
+                    description: campaignForm.description || undefined,
+                    eventId: campaignForm.eventId || undefined,
+                    emailTemplateId: campaignForm.emailTemplateId || undefined,
+                },
+            }
+        )
+        toast.add({
+            title: isCampaignEdit.value ? 'Campaign updated' : 'Campaign created',
+            color: 'success',
         })
-        toast.add({ title: 'Campaign created', color: 'success' })
-        createCampaignOpen.value = false
+        campaignFormOpen.value = false
         refreshCampaigns()
     } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
         toast.add({
-            title: 'Failed to create campaign',
+            title: 'Failed to save campaign',
             description: e?.data?.message,
             color: 'error',
         })
     } finally {
-        creatingCampaign.value = false
+        savingCampaign.value = false
     }
 }
 
@@ -151,6 +218,47 @@ const {
     onDeleted: refreshCampaigns,
 })
 
+// ── Execute campaign ────────────────────────────────────────────────────────
+const executeOpen = ref(false)
+const executing = ref(false)
+const executeTarget = shallowRef<MarketingCampaignResponse | null>(null)
+const recipientsText = ref('')
+
+const recipients = computed(() =>
+    recipientsText.value
+        .split(/[\s,;]+/)
+        .map((r) => r.trim())
+        .filter(Boolean)
+)
+
+function openExecute(c: MarketingCampaignResponse) {
+    executeTarget.value = c
+    recipientsText.value = ''
+    executeOpen.value = true
+}
+
+async function submitExecute() {
+    if (!executeTarget.value || !recipients.value.length) return
+    executing.value = true
+    try {
+        const res = await api<{ requested: number; sent: number; queued: number }>(
+            `/api/settings/marketing/campaigns/${executeTarget.value.id}/execute`,
+            { method: 'POST', body: { recipients: recipients.value } }
+        )
+        toast.add({
+            title: 'Campaign executed',
+            description: `${res.sent} sent · ${res.queued} queued of ${res.requested} requested`,
+            color: 'success',
+        })
+        executeOpen.value = false
+    } catch (err: unknown) {
+        const e = err as { data?: { message?: string } }
+        toast.add({ title: 'Failed to execute', description: e?.data?.message, color: 'error' })
+    } finally {
+        executing.value = false
+    }
+}
+
 const campaignColumns: TableColumn<MarketingCampaignResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'subject', header: 'Subject' },
@@ -161,6 +269,10 @@ const campaignColumns: TableColumn<MarketingCampaignResponse>[] = [
 
 function campaignRowActions(c: MarketingCampaignResponse): DropdownMenuItem[][] {
     return [
+        [
+            { label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEditCampaign(c) },
+            { label: 'Execute', icon: 'i-tabler-send', onSelect: () => openExecute(c) },
+        ],
         [
             {
                 label: 'Delete',
@@ -203,14 +315,13 @@ function eventNameById(id?: string) {
                 <template #description-cell="{ row }">
                     <span class="text-muted text-sm">{{ row.original.description ?? '—' }}</span>
                 </template>
-                <template #createdAt-cell="{ row }">
-                    <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
+                <template #eventDate-cell="{ row }">
+                    <span class="text-muted text-sm">{{
+                        row.original.eventDate ? formatDate(row.original.eventDate) : '—'
+                    }}</span>
                 </template>
                 <template #actions-cell="{ row }">
-                    <AppRowActions
-                        v-if="can('marketing.delete')"
-                        :items="eventRowActions(row.original)"
-                    />
+                    <AppRowActions v-if="canManage" :items="eventRowActions(row.original)" />
                 </template>
                 <template #empty>
                     <AppEmptyState
@@ -264,10 +375,7 @@ function eventNameById(id?: string) {
                     <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
                 </template>
                 <template #actions-cell="{ row }">
-                    <AppRowActions
-                        v-if="can('marketing.delete')"
-                        :items="campaignRowActions(row.original)"
-                    />
+                    <AppRowActions v-if="canManage" :items="campaignRowActions(row.original)" />
                 </template>
                 <template #empty>
                     <AppEmptyState icon="i-tabler-mail-bolt" message="No campaigns yet" />
@@ -275,29 +383,28 @@ function eventNameById(id?: string) {
             </AppListTable>
         </div>
 
-        <!-- Create event modal -->
+        <!-- Event create/edit modal -->
         <AppConfirmModal
-            v-model:open="createEventOpen"
-            title="Create Marketing Event"
-            confirm-label="Create"
-            :loading="creatingEvent"
-            :confirm-disabled="!createEventForm.name"
-            @confirm="submitCreateEvent"
+            v-model:open="eventFormOpen"
+            :title="isEventEdit ? 'Edit Event' : 'Create Marketing Event'"
+            :confirm-label="isEventEdit ? 'Save' : 'Create'"
+            :loading="savingEvent"
+            :confirm-disabled="!eventForm.name"
+            @confirm="submitEvent"
         >
-            <form class="space-y-3" @submit.prevent="submitCreateEvent">
+            <form class="space-y-3" @submit.prevent="submitEvent">
                 <UFormField label="Name" required>
                     <UInput
-                        v-model="createEventForm.name"
+                        v-model="eventForm.name"
                         placeholder="e.g. Trial Started"
                         class="w-full"
                     />
                 </UFormField>
                 <UFormField label="Description">
-                    <UInput
-                        v-model="createEventForm.description"
-                        placeholder="Optional"
-                        class="w-full"
-                    />
+                    <UInput v-model="eventForm.description" placeholder="Optional" class="w-full" />
+                </UFormField>
+                <UFormField label="Event date">
+                    <UInput v-model="eventForm.eventDate" type="date" class="w-full" />
                 </UFormField>
             </form>
         </AppConfirmModal>
@@ -317,42 +424,83 @@ function eventNameById(id?: string) {
             </p>
         </AppConfirmModal>
 
-        <!-- Create campaign modal -->
+        <!-- Campaign create/edit modal -->
         <AppConfirmModal
-            v-model:open="createCampaignOpen"
-            title="Create Campaign"
-            confirm-label="Create"
-            :loading="creatingCampaign"
-            :confirm-disabled="!createCampaignForm.name || !createCampaignForm.subject"
-            @confirm="submitCreateCampaign"
+            v-model:open="campaignFormOpen"
+            :title="isCampaignEdit ? 'Edit Campaign' : 'Create Campaign'"
+            :confirm-label="isCampaignEdit ? 'Save' : 'Create'"
+            :loading="savingCampaign"
+            :confirm-disabled="!campaignForm.name || !campaignForm.subject"
+            width-class="sm:max-w-2xl"
+            @confirm="submitCampaign"
         >
-            <form class="space-y-3" @submit.prevent="submitCreateCampaign">
+            <form class="space-y-3" @submit.prevent="submitCampaign">
                 <UFormField label="Name" required>
                     <UInput
-                        v-model="createCampaignForm.name"
+                        v-model="campaignForm.name"
                         placeholder="e.g. Welcome Email"
                         class="w-full"
                     />
                 </UFormField>
                 <UFormField label="Subject" required>
                     <UInput
-                        v-model="createCampaignForm.subject"
+                        v-model="campaignForm.subject"
                         placeholder="e.g. Welcome to Synoptic!"
                         class="w-full"
                     />
                 </UFormField>
                 <UFormField label="Description">
                     <UInput
-                        v-model="createCampaignForm.description"
+                        v-model="campaignForm.description"
                         placeholder="Optional"
                         class="w-full"
                     />
                 </UFormField>
-                <UFormField label="Marketing Event">
-                    <USelect
-                        v-model="createCampaignForm.eventId"
-                        :items="eventOptions"
-                        placeholder="Link to event (optional)"
+                <div class="grid grid-cols-2 gap-3">
+                    <UFormField label="Marketing event">
+                        <USelect
+                            v-model="campaignForm.eventId"
+                            :items="eventOptions"
+                            placeholder="Link to event"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Email template">
+                        <USelect
+                            v-model="campaignForm.emailTemplateId"
+                            :items="templateOptions"
+                            placeholder="Template"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+            </form>
+        </AppConfirmModal>
+
+        <!-- Execute campaign modal -->
+        <AppConfirmModal
+            v-model:open="executeOpen"
+            title="Execute Campaign"
+            confirm-label="Send"
+            :loading="executing"
+            :confirm-disabled="!recipients.length"
+            @confirm="submitExecute"
+        >
+            <form class="space-y-3" @submit.prevent="submitExecute">
+                <p class="text-muted text-sm">
+                    Send
+                    <strong class="text-highlighted">{{ executeTarget?.name }}</strong>
+                    to the recipients below.
+                </p>
+                <UFormField
+                    label="Recipients"
+                    :help="`${recipients.length} address(es) — separate with commas, spaces or new lines.`"
+                    required
+                >
+                    <UTextarea
+                        v-model="recipientsText"
+                        :rows="4"
+                        placeholder="alice@example.com, bob@example.com"
                         class="w-full"
                     />
                 </UFormField>

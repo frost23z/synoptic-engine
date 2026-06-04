@@ -191,6 +191,18 @@ const settingsNav = computed<NavigationMenuItem[]>(() =>
             to: '/settings/imports',
             permission: 'imports.view',
         },
+        {
+            label: 'System Config',
+            icon: 'i-tabler-settings',
+            to: '/settings/config',
+            permission: 'settings.view',
+        },
+        {
+            label: 'Tenants',
+            icon: 'i-tabler-building-community',
+            to: '/settings/tenants',
+            permission: 'tenants.view',
+        },
     ])
 )
 
