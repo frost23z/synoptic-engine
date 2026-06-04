@@ -1,4 +1,5 @@
 import type { PageResponse } from './api'
+import type { TagResponse } from './leads'
 
 export interface ProductResponse {
     id: string
@@ -19,6 +20,7 @@ export interface WarehouseResponse {
     contactEmail?: string
     contactPhone?: string
     contactAddress?: string
+    tags: TagResponse[]
     createdAt: string
     updatedAt: string
 }
@@ -48,7 +50,57 @@ export interface WarehouseProductEntry {
 export type ProductsPage = PageResponse<ProductResponse>
 export type WarehousesPage = PageResponse<WarehouseResponse>
 
-export interface WarehouseTagResponse {
+// ── Inventory movements / stock ────────────────────────────────────────────
+/** Per-location stock state for a product (`GET /api/inventory/stock`). */
+export interface StockStateResponse {
+    productId: string
+    locationId?: string | null
+    warehouseId: string
+    onHand: number
+    reserved: number
+    inTransit: number
+    damaged: number
+    available: number
+}
+
+/** A product at or below its reorder threshold (`GET /api/inventory/low-stock`). */
+export interface LowStockEntry {
+    productId: string
+    productName: string
+    sku?: string | null
+    reorderThreshold: number
+    currentStock: number
+}
+
+// ── Transfer orders ────────────────────────────────────────────────────────
+export type TransferStatus = 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED'
+
+type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
+
+export const TRANSFER_STATUS_LABEL: Record<TransferStatus, string> = {
+    PENDING: 'Pending',
+    IN_TRANSIT: 'In transit',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
+}
+
+export const TRANSFER_STATUS_COLOR: Record<TransferStatus, BadgeColor> = {
+    PENDING: 'neutral',
+    IN_TRANSIT: 'info',
+    COMPLETED: 'success',
+    CANCELLED: 'error',
+}
+
+export interface TransferOrderResponse {
     id: string
-    name: string
+    fromLocationId: string
+    toLocationId: string
+    productId: string
+    quantity: number
+    status: TransferStatus
+    outMovementId?: string | null
+    inMovementId?: string | null
+    notes?: string | null
+    createdAt?: string | null
+    updatedAt?: string | null
 }
