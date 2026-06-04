@@ -88,6 +88,24 @@ export interface StageOrderEntry {
     sortOrder: number
 }
 
+// ── System config ──────────────────────────────────────────────────────────
+export interface SystemConfigResponse {
+    code: string
+    /** Masked as `***` for secret items that have a value set. */
+    value?: string
+    groupName: string
+    label: string
+    /** `text` | `email` | `textarea` | `password` | `boolean` | `number` */
+    type: string
+    isSecret: boolean
+    sortOrder: number
+}
+
+export interface SystemConfigGroupResponse {
+    group: string
+    items: SystemConfigResponse[]
+}
+
 // ── Automation ───────────────────────────────────────────────────────────
 export interface WorkflowResponse {
     id: string

@@ -191,6 +191,12 @@ const settingsNav = computed<NavigationMenuItem[]>(() =>
             to: '/settings/imports',
             permission: 'imports.view',
         },
+        {
+            label: 'System Config',
+            icon: 'i-tabler-settings',
+            to: '/settings/config',
+            permission: 'settings.view',
+        },
     ])
 )
 
