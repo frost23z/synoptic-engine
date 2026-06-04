@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OrganizationResponse } from '~/types/contacts'
 import type { ActivityResponse } from '~/types/activities'
+import { email, required, url } from '~/utils/validators'
 
 definePageMeta({ title: 'Organization' })
 
@@ -33,7 +34,14 @@ const { data: orgActivities } = await useAsyncData<ActivityResponse[]>(`org-${id
 
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editing = ref(false)
-const saving = ref(false)
+const {
+    submitting: saving,
+    errors,
+    validate,
+    run,
+} = useFormSubmit({
+    failureTitle: 'Failed to save organization',
+})
 const editForm = reactive({ name: '', email: '', phone: '', website: '', address: '' })
 
 function openEdit() {
@@ -48,28 +56,32 @@ function openEdit() {
     editing.value = true
 }
 
-async function submitEdit() {
-    saving.value = true
-    try {
-        await api(`/api/contacts/organizations/${id}`, {
-            method: 'PUT',
-            body: {
-                name: editForm.name,
-                email: editForm.email || undefined,
-                phone: editForm.phone || undefined,
-                website: editForm.website || undefined,
-                address: editForm.address || undefined,
-            },
-        })
-        toast.add({ title: 'Saved', color: 'success' })
-        editing.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to save', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submitEdit() {
+    run({
+        validate: () =>
+            validate(editForm, {
+                name: [required('Name is required')],
+                email: [email()],
+                website: [url()],
+            }),
+        call: () =>
+            api(`/api/contacts/organizations/${id}`, {
+                method: 'PUT',
+                body: {
+                    name: editForm.name,
+                    email: editForm.email || undefined,
+                    phone: editForm.phone || undefined,
+                    website: editForm.website || undefined,
+                    address: editForm.address || undefined,
+                },
+            }),
+        fieldHints: ['email', 'name'],
+        onSuccess: () => {
+            toast.add({ title: 'Saved', color: 'success' })
+            editing.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -192,16 +204,16 @@ const {
             @confirm="submitEdit"
         >
             <form class="space-y-3" @submit.prevent="submitEdit">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="editForm.name" class="w-full" />
                 </UFormField>
-                <UFormField label="Email">
+                <UFormField label="Email" :error="errors.email">
                     <UInput v-model="editForm.email" type="email" class="w-full" />
                 </UFormField>
                 <UFormField label="Phone">
                     <UInput v-model="editForm.phone" class="w-full" />
                 </UFormField>
-                <UFormField label="Website">
+                <UFormField label="Website" :error="errors.website">
                     <UInput v-model="editForm.website" placeholder="https://..." class="w-full" />
                 </UFormField>
                 <UFormField label="Address">
