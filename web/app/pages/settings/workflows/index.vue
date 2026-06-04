@@ -92,17 +92,24 @@ const columns: TableColumn<WorkflowResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
+// Backend gates workflow update + delete on automations.edit.
+const canManage = computed(() => can('automations.edit'))
+
 function rowActions(w: WorkflowResponse): DropdownMenuItem[][] {
-    return [
-        [
+    const items: DropdownMenuItem[][] = [
+        [{ label: 'View', icon: 'i-tabler-eye', to: `/settings/workflows/${w.id}` }],
+    ]
+    if (canManage.value) {
+        items.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
                 color: 'error',
                 onSelect: () => promptDelete(w),
             },
-        ],
-    ]
+        ])
+    }
+    return items
 }
 </script>
 
@@ -122,7 +129,12 @@ function rowActions(w: WorkflowResponse): DropdownMenuItem[][] {
         <AppListTable :rows="workflows ?? []" :columns="columns" :loading="pending">
             <template #name-cell="{ row }">
                 <div>
-                    <p class="text-highlighted font-medium">{{ row.original.name }}</p>
+                    <NuxtLink
+                        :to="`/settings/workflows/${row.original.id}`"
+                        class="text-primary font-medium hover:underline"
+                    >
+                        {{ row.original.name }}
+                    </NuxtLink>
                     <p v-if="row.original.description" class="text-muted text-xs">
                         {{ row.original.description }}
                     </p>
@@ -133,8 +145,8 @@ function rowActions(w: WorkflowResponse): DropdownMenuItem[][] {
             </template>
             <template #status-cell="{ row }">
                 <UBadge
-                    :label="row.original.active ? 'Active' : 'Inactive'"
-                    :color="row.original.active ? 'success' : 'neutral'"
+                    :label="row.original.isActive ? 'Active' : 'Inactive'"
+                    :color="row.original.isActive ? 'success' : 'neutral'"
                     variant="soft"
                     size="sm"
                 />
@@ -148,7 +160,7 @@ function rowActions(w: WorkflowResponse): DropdownMenuItem[][] {
                 <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
             </template>
             <template #actions-cell="{ row }">
-                <AppRowActions v-if="can('automations.delete')" :items="rowActions(row.original)" />
+                <AppRowActions :items="rowActions(row.original)" />
             </template>
             <template #empty>
                 <AppEmptyState icon="i-tabler-git-branch" message="No workflows yet" />
