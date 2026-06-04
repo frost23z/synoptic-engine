@@ -58,27 +58,34 @@ export interface GroupResponse {
 }
 
 // ── Pipelines ────────────────────────────────────────────────────────────
-export interface PipelineResponse {
-    id: string
-    name: string
-    description?: string
-    rottenDays?: number
-    default: boolean
-    active: boolean
-    createdAt: string
-    updatedAt: string
-}
-
 export interface StageResponse {
     id: string
     pipelineId: string
     name: string
     sortOrder: number
     color?: string
-    probability?: number
-    code: string
-    createdAt: string
-    updatedAt: string
+    probability: number
+    code?: string
+    createdAt?: string
+    updatedAt?: string
+}
+
+export interface PipelineResponse {
+    id: string
+    name: string
+    description?: string
+    isActive: boolean
+    isDefault: boolean
+    rottenDays: number
+    stages: StageResponse[]
+    createdAt?: string
+    updatedAt?: string
+}
+
+/** `{ id, sortOrder }` entries for `PUT /pipelines/{id}/stages/reorder`. */
+export interface StageOrderEntry {
+    id: string
+    sortOrder: number
 }
 
 // ── Automation ───────────────────────────────────────────────────────────
