@@ -7,7 +7,25 @@ export interface UserResponse {
     firstName: string
     lastName: string
     fullName: string
-    active: boolean
+    isActive: boolean
+    createdAt: string
+    updatedAt: string
+}
+
+export type ViewPermission = 'ALL' | 'GLOBAL' | 'GROUP' | 'INDIVIDUAL'
+
+export interface UserDetailResponse {
+    id: string
+    email: string
+    firstName: string
+    lastName: string
+    fullName: string
+    phone?: string
+    isActive: boolean
+    viewPermission: ViewPermission
+    roles: string[]
+    /** Each entry is `{ id, name }`. */
+    groups: { id: string; name: string }[]
     createdAt: string
     updatedAt: string
 }
@@ -40,27 +58,99 @@ export interface GroupResponse {
 }
 
 // ── Pipelines ────────────────────────────────────────────────────────────
-export interface PipelineResponse {
-    id: string
-    name: string
-    description?: string
-    rottenDays?: number
-    default: boolean
-    active: boolean
-    createdAt: string
-    updatedAt: string
-}
-
 export interface StageResponse {
     id: string
     pipelineId: string
     name: string
     sortOrder: number
     color?: string
-    probability?: number
+    probability: number
+    code?: string
+    createdAt?: string
+    updatedAt?: string
+}
+
+export interface PipelineResponse {
+    id: string
+    name: string
+    description?: string
+    isActive: boolean
+    isDefault: boolean
+    rottenDays: number
+    stages: StageResponse[]
+    createdAt?: string
+    updatedAt?: string
+}
+
+/** `{ id, sortOrder }` entries for `PUT /pipelines/{id}/stages/reorder`. */
+export interface StageOrderEntry {
+    id: string
+    sortOrder: number
+}
+
+// ── Imports ──────────────────────────────────────────────────────────────
+export type ImportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+
+export interface DataImportResponse {
+    id: string
+    name: string
+    entityType: string
+    status: ImportStatus
+    errorCount: number
+    successCount: number
+    createdAt?: string
+    updatedAt?: string
+}
+
+export interface DataImportStatsResponse {
+    id: string
+    status: ImportStatus
+    errorCount: number
+    successCount: number
+    errors?: Record<string, string>[]
+}
+
+// ── Saved datagrid filters ───────────────────────────────────────────────
+export interface DataGridFilterResponse {
+    id: string
+    userId: string
+    name: string
+    /** The list/datagrid this filter belongs to, e.g. `leads`. */
+    src: string
+    applied: Record<string, unknown>
+    createdAt?: string
+    updatedAt?: string
+}
+
+// ── Tenants ──────────────────────────────────────────────────────────────
+export interface TenantResponse {
+    id: string
+    name: string
+    slug: string
+    status: string
+    legalName?: string
+    timezone?: string
+    locale?: string
+    createdAt?: string
+    updatedAt?: string
+}
+
+// ── System config ──────────────────────────────────────────────────────────
+export interface SystemConfigResponse {
     code: string
-    createdAt: string
-    updatedAt: string
+    /** Masked as `***` for secret items that have a value set. */
+    value?: string
+    groupName: string
+    label: string
+    /** `text` | `email` | `textarea` | `password` | `boolean` | `number` */
+    type: string
+    isSecret: boolean
+    sortOrder: number
+}
+
+export interface SystemConfigGroupResponse {
+    group: string
+    items: SystemConfigResponse[]
 }
 
 // ── Automation ───────────────────────────────────────────────────────────
@@ -69,21 +159,54 @@ export interface WorkflowResponse {
     name: string
     description?: string
     eventName: string
-    conditions: Record<string, string>[]
-    actions: Record<string, string>[]
-    active: boolean
-    createdAt: string
-    updatedAt: string
+    conditions: Record<string, unknown>[]
+    actions: Record<string, unknown>[]
+    /** `and` (default) or `or`. */
+    conditionType: string
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
+}
+
+/** A single action execution recorded by the workflow engine. */
+export interface WorkflowActionRunResponse {
+    id: string
+    workflowId: string
+    eventName: string
+    entityType: string
+    entityId: string
+    actionType: string
+    /** `SUCCESS` | `FAILED` | `SKIPPED` */
+    status: string
+    errorMessage?: string
+    payload?: Record<string, unknown>
+    createdAt?: string
 }
 
 export interface WebhookResponse {
     id: string
     name: string
     payloadUrl: string
+    hasSecret: boolean
     events: string[]
-    active: boolean
-    createdAt: string
-    updatedAt: string
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
+}
+
+/** A single webhook delivery attempt. */
+export interface WebhookDeliveryRunResponse {
+    id: string
+    webhookId: string
+    eventName: string
+    entityType: string
+    entityId: string
+    /** `SUCCESS` | `FAILED` */
+    status: string
+    responseCode?: number
+    responseBody?: string
+    errorMessage?: string
+    createdAt?: string
 }
 
 // ── Marketing ────────────────────────────────────────────────────────────
@@ -91,6 +214,8 @@ export interface MarketingEventResponse {
     id: string
     name: string
     description?: string
+    /** ISO date `YYYY-MM-DD`. */
+    eventDate?: string
     createdAt: string
     updatedAt: string
 }

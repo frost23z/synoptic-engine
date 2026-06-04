@@ -36,6 +36,18 @@ const {
     params: () => ({ pipelineId: selectedPipelineId.value }),
 })
 
+// ── Saved views (datagrid filters) ────────────────────────────────────────
+const appliedFilter = computed(() => ({
+    search: search.value || undefined,
+    pipelineId: selectedPipelineId.value,
+}))
+function applySavedFilter(applied: Record<string, unknown>) {
+    search.value = typeof applied.search === 'string' ? applied.search : ''
+    selectedPipelineId.value =
+        typeof applied.pipelineId === 'string' ? applied.pipelineId : undefined
+    page.value = 1
+}
+
 // ── Pipelines (kanban selector + default) ─────────────────────────────────
 const { data: pipelines } = await useAsyncData<PipelineResponse[]>('pipelines', () =>
     api<PipelineResponse[]>('/api/pipelines')
@@ -229,6 +241,7 @@ async function onDrop(toStageId: string) {
                 placeholder="Pipeline"
                 class="w-44"
             />
+            <AppSavedFilters src="leads" :applied="appliedFilter" @apply="applySavedFilter" />
         </div>
 
         <!-- LIST VIEW -->

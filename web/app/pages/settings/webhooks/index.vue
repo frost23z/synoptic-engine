@@ -50,7 +50,7 @@ async function submitCreate() {
                 name: createForm.name,
                 payloadUrl: createForm.payloadUrl,
                 events: createForm.events,
-                active: createForm.active,
+                isActive: createForm.active,
             },
         })
         toast.add({ title: 'Webhook created', color: 'success' })
@@ -90,17 +90,24 @@ const columns: TableColumn<WebhookResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
+// Backend gates webhook update + delete + test on automations.edit.
+const canManage = computed(() => can('automations.edit'))
+
 function rowActions(w: WebhookResponse): DropdownMenuItem[][] {
-    return [
-        [
+    const items: DropdownMenuItem[][] = [
+        [{ label: 'View', icon: 'i-tabler-eye', to: `/settings/webhooks/${w.id}` }],
+    ]
+    if (canManage.value) {
+        items.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
                 color: 'error',
                 onSelect: () => promptDelete(w),
             },
-        ],
-    ]
+        ])
+    }
+    return items
 }
 </script>
 
@@ -119,7 +126,12 @@ function rowActions(w: WebhookResponse): DropdownMenuItem[][] {
 
         <AppListTable :rows="webhooks ?? []" :columns="columns" :loading="pending">
             <template #name-cell="{ row }">
-                <span class="font-medium">{{ row.original.name }}</span>
+                <NuxtLink
+                    :to="`/settings/webhooks/${row.original.id}`"
+                    class="text-primary font-medium hover:underline"
+                >
+                    {{ row.original.name }}
+                </NuxtLink>
             </template>
             <template #payloadUrl-cell="{ row }">
                 <span class="text-muted max-w-xs truncate text-sm">{{
@@ -136,8 +148,8 @@ function rowActions(w: WebhookResponse): DropdownMenuItem[][] {
             </template>
             <template #status-cell="{ row }">
                 <UBadge
-                    :label="row.original.active ? 'Active' : 'Inactive'"
-                    :color="row.original.active ? 'success' : 'neutral'"
+                    :label="row.original.isActive ? 'Active' : 'Inactive'"
+                    :color="row.original.isActive ? 'success' : 'neutral'"
                     variant="soft"
                     size="sm"
                 />
@@ -146,7 +158,7 @@ function rowActions(w: WebhookResponse): DropdownMenuItem[][] {
                 <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
             </template>
             <template #actions-cell="{ row }">
-                <AppRowActions v-if="can('automations.delete')" :items="rowActions(row.original)" />
+                <AppRowActions :items="rowActions(row.original)" />
             </template>
             <template #empty>
                 <AppEmptyState icon="i-tabler-webhook" message="No webhooks yet" />

@@ -16,35 +16,45 @@ const {
     refresh,
 } = await useAsyncData<GroupResponse[]>('groups', () => api<GroupResponse[]>('/api/groups'))
 
-// ── Create ──────────────────────────────────────────────────────────────
-const createOpen = ref(false)
-const creating = ref(false)
-const createForm = reactive({ name: '', description: '' })
+// ── Create / Edit (shared modal) ────────────────────────────────────────────
+const formOpen = ref(false)
+const saving = ref(false)
+const editingId = ref<string | null>(null)
+const form = reactive({ name: '', description: '' })
+
+const isEdit = computed(() => editingId.value !== null)
 
 function openCreate() {
-    Object.assign(createForm, { name: '', description: '' })
-    createOpen.value = true
+    editingId.value = null
+    Object.assign(form, { name: '', description: '' })
+    formOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
+function openEdit(g: GroupResponse) {
+    editingId.value = g.id
+    Object.assign(form, { name: g.name, description: g.description ?? '' })
+    formOpen.value = true
+}
+
+async function submitForm() {
+    saving.value = true
     try {
-        await api('/api/groups', {
-            method: 'POST',
-            body: { name: createForm.name, description: createForm.description || undefined },
+        await api(isEdit.value ? `/api/groups/${editingId.value}` : '/api/groups', {
+            method: isEdit.value ? 'PUT' : 'POST',
+            body: { name: form.name, description: form.description || undefined },
         })
-        toast.add({ title: 'Group created', color: 'success' })
-        createOpen.value = false
+        toast.add({ title: isEdit.value ? 'Group updated' : 'Group created', color: 'success' })
+        formOpen.value = false
         refresh()
     } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
         toast.add({
-            title: 'Failed to create group',
+            title: isEdit.value ? 'Failed to update group' : 'Failed to create group',
             description: e?.data?.message,
             color: 'error',
         })
     } finally {
-        creating.value = false
+        saving.value = false
     }
 }
 
@@ -68,17 +78,25 @@ const columns: TableColumn<GroupResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
+const canEdit = computed(() => can('groups.edit'))
+const canDelete = computed(() => can('groups.delete'))
+
 function rowActions(g: GroupResponse): DropdownMenuItem[][] {
-    return [
-        [
+    const items: DropdownMenuItem[][] = []
+    if (canEdit.value) {
+        items.push([{ label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(g) }])
+    }
+    if (canDelete.value) {
+        items.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
                 color: 'error',
                 onSelect: () => promptDelete(g),
             },
-        ],
-    ]
+        ])
+    }
+    return items
 }
 </script>
 
@@ -106,7 +124,7 @@ function rowActions(g: GroupResponse): DropdownMenuItem[][] {
                 <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
             </template>
             <template #actions-cell="{ row }">
-                <AppRowActions v-if="can('groups.delete')" :items="rowActions(row.original)" />
+                <AppRowActions v-if="canEdit || canDelete" :items="rowActions(row.original)" />
             </template>
             <template #empty>
                 <AppEmptyState icon="i-tabler-users-group" message="No groups found" />
@@ -114,24 +132,20 @@ function rowActions(g: GroupResponse): DropdownMenuItem[][] {
         </AppListTable>
 
         <AppConfirmModal
-            v-model:open="createOpen"
-            title="Create Group"
-            confirm-label="Create"
-            :loading="creating"
-            :confirm-disabled="!createForm.name"
-            @confirm="submitCreate"
+            v-model:open="formOpen"
+            :title="isEdit ? 'Edit Group' : 'Create Group'"
+            :confirm-label="isEdit ? 'Save' : 'Create'"
+            :loading="saving"
+            :confirm-disabled="!form.name"
+            @confirm="submitForm"
         >
-            <form class="space-y-3" @submit.prevent="submitCreate">
+            <form class="space-y-3" @submit.prevent="submitForm">
                 <UFormField label="Name" required>
-                    <UInput
-                        v-model="createForm.name"
-                        placeholder="e.g. Sales Team"
-                        class="w-full"
-                    />
+                    <UInput v-model="form.name" placeholder="e.g. Sales Team" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
                     <UInput
-                        v-model="createForm.description"
+                        v-model="form.description"
                         placeholder="Optional description"
                         class="w-full"
                     />
