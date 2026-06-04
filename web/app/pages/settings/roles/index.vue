@@ -17,54 +17,82 @@ const {
     refresh,
 } = await useAsyncData<RoleResponse[]>('roles', () => api<RoleResponse[]>('/api/roles'))
 
-// ── All permissions (for create form) ──────────────────────────────────────
+// ── All permissions (for create/edit form) ──────────────────────────────────
 const { data: allPermissions } = await useAsyncData<PermissionResponse[]>('all-permissions', () =>
     api<PermissionResponse[]>('/api/roles/permissions')
 )
 
-// Group permissions by resource prefix for display
+// Group permissions by their top-level segment (keys are dot-delimited, e.g. `leads.view`).
 const permissionGroups = computed(() => {
     const groups: Record<string, string[]> = {}
     for (const p of allPermissions.value ?? []) {
-        const prefix = p.name.split(':')[0] ?? 'other'
+        const prefix = p.name.split('.')[0] ?? 'other'
         ;(groups[prefix] ??= []).push(p.name)
     }
     return groups
 })
 
-// ── Create ──────────────────────────────────────────────────────────────
-const createOpen = ref(false)
-const creating = ref(false)
-const createForm = reactive({
+function actionLabel(perm: string) {
+    return perm.split('.').slice(1).join('.') || perm
+}
+
+// ── Create / Edit (shared modal) ────────────────────────────────────────────
+const formOpen = ref(false)
+const saving = ref(false)
+const editingId = ref<string | null>(null)
+const form = reactive({
     name: '',
     description: '',
     permissions: [] as string[],
 })
 
-function openCreate() {
-    Object.assign(createForm, { name: '', description: '', permissions: [] })
-    createOpen.value = true
+const isEdit = computed(() => editingId.value !== null)
+
+function togglePermission(perm: string) {
+    const i = form.permissions.indexOf(perm)
+    if (i === -1) form.permissions.push(perm)
+    else form.permissions.splice(i, 1)
 }
 
-async function submitCreate() {
-    creating.value = true
+function openCreate() {
+    editingId.value = null
+    Object.assign(form, { name: '', description: '', permissions: [] })
+    formOpen.value = true
+}
+
+function openEdit(r: RoleResponse) {
+    editingId.value = r.id
+    Object.assign(form, {
+        name: r.name,
+        description: r.description ?? '',
+        permissions: [...r.permissions],
+    })
+    formOpen.value = true
+}
+
+async function submitForm() {
+    saving.value = true
     try {
-        await api('/api/roles', {
-            method: 'POST',
+        await api(isEdit.value ? `/api/roles/${editingId.value}` : '/api/roles', {
+            method: isEdit.value ? 'PUT' : 'POST',
             body: {
-                name: createForm.name,
-                description: createForm.description || undefined,
-                permissions: createForm.permissions,
+                name: form.name,
+                description: form.description || undefined,
+                permissions: form.permissions,
             },
         })
-        toast.add({ title: 'Role created', color: 'success' })
-        createOpen.value = false
+        toast.add({ title: isEdit.value ? 'Role updated' : 'Role created', color: 'success' })
+        formOpen.value = false
         refresh()
     } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create role', description: e?.data?.message, color: 'error' })
+        toast.add({
+            title: isEdit.value ? 'Failed to update role' : 'Failed to create role',
+            description: e?.data?.message,
+            color: 'error',
+        })
     } finally {
-        creating.value = false
+        saving.value = false
     }
 }
 
@@ -89,8 +117,12 @@ const columns: TableColumn<RoleResponse>[] = [
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
 
+// Backend gates role update AND delete on `roles.edit` (there is no `roles.delete` key).
+const canManage = computed(() => can('roles.edit'))
+
 function rowActions(r: RoleResponse): DropdownMenuItem[][] {
     return [
+        [{ label: 'Edit', icon: 'i-tabler-pencil', onSelect: () => openEdit(r) }],
         [
             {
                 label: 'Delete',
@@ -135,7 +167,7 @@ function rowActions(r: RoleResponse): DropdownMenuItem[][] {
                 <span class="text-muted text-sm">{{ formatDate(row.original.createdAt) }}</span>
             </template>
             <template #actions-cell="{ row }">
-                <AppRowActions v-if="can('roles.delete')" :items="rowActions(row.original)" />
+                <AppRowActions v-if="canManage" :items="rowActions(row.original)" />
             </template>
             <template #empty>
                 <AppEmptyState icon="i-tabler-shield-off" message="No roles found" />
@@ -143,20 +175,21 @@ function rowActions(r: RoleResponse): DropdownMenuItem[][] {
         </AppListTable>
 
         <AppConfirmModal
-            v-model:open="createOpen"
-            title="Create Role"
-            confirm-label="Create"
-            :loading="creating"
-            :confirm-disabled="!createForm.name"
-            @confirm="submitCreate"
+            v-model:open="formOpen"
+            :title="isEdit ? 'Edit Role' : 'Create Role'"
+            :confirm-label="isEdit ? 'Save' : 'Create'"
+            :loading="saving"
+            :confirm-disabled="!form.name"
+            width-class="sm:max-w-2xl"
+            @confirm="submitForm"
         >
-            <form class="space-y-3" @submit.prevent="submitCreate">
+            <form class="space-y-3" @submit.prevent="submitForm">
                 <UFormField label="Name" required>
-                    <UInput v-model="createForm.name" placeholder="e.g. MANAGER" class="w-full" />
+                    <UInput v-model="form.name" placeholder="e.g. MANAGER" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
                     <UInput
-                        v-model="createForm.description"
+                        v-model="form.description"
                         placeholder="Optional description"
                         class="w-full"
                     />
@@ -175,7 +208,7 @@ function rowActions(r: RoleResponse): DropdownMenuItem[][] {
                                     :key="perm"
                                     class="border-default hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
                                     :class="
-                                        createForm.permissions.includes(perm)
+                                        form.permissions.includes(perm)
                                             ? 'bg-primary/10 border-primary text-primary'
                                             : ''
                                     "
@@ -183,24 +216,15 @@ function rowActions(r: RoleResponse): DropdownMenuItem[][] {
                                     <input
                                         type="checkbox"
                                         class="hidden"
-                                        :checked="createForm.permissions.includes(perm)"
-                                        @change="
-                                            createForm.permissions.includes(perm)
-                                                ? createForm.permissions.splice(
-                                                      createForm.permissions.indexOf(perm),
-                                                      1
-                                                  )
-                                                : createForm.permissions.push(perm)
-                                        "
+                                        :checked="form.permissions.includes(perm)"
+                                        @change="togglePermission(perm)"
                                     />
-                                    {{ perm.split(':')[1] }}
+                                    {{ actionLabel(perm) }}
                                 </label>
                             </div>
                         </div>
                     </div>
-                    <p class="text-muted mt-1 text-xs">
-                        {{ createForm.permissions.length }} selected
-                    </p>
+                    <p class="text-muted mt-1 text-xs">{{ form.permissions.length }} selected</p>
                 </UFormField>
             </form>
         </AppConfirmModal>

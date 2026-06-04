@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import type { DataImportResponse, ImportStatus } from '~/types/settings'
 
 definePageMeta({ title: 'Imports' })
 useHead({ title: 'Imports — Synoptic' })
@@ -8,29 +9,13 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const { downloadBlob } = useDownload()
 
-interface DataImportResponse {
-    id: string
-    name: string
-    entityType: string
-    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
-    errorCount: number
-    successCount: number
-    createdAt: string
-    updatedAt: string
-}
-
-interface DataImportStatsResponse {
-    id: string
-    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
-    errorCount: number
-    successCount: number
-    errors: Record<string, unknown>[]
-}
+const canEdit = computed(() => can('imports.edit'))
 
 const ENTITY_TYPES = ['Person', 'Lead', 'Product']
 
-const STATUS_COLOR: Record<string, 'neutral' | 'warning' | 'success' | 'error'> = {
+const STATUS_COLOR: Record<ImportStatus, 'neutral' | 'warning' | 'success' | 'error'> = {
     PENDING: 'neutral',
     PROCESSING: 'warning',
     COMPLETED: 'success',
@@ -101,58 +86,13 @@ async function startImport(imp: DataImportResponse) {
     }
 }
 
-// ── Stats modal ───────────────────────────────────────────────────────────
-const statsOpen = ref(false)
-const statsData = ref<DataImportStatsResponse | null>(null)
-const statsPending = ref(false)
-
-async function openStats(imp: DataImportResponse) {
-    statsOpen.value = true
-    statsData.value = null
-    statsPending.value = true
-    try {
-        statsData.value = await api<DataImportStatsResponse>(
-            `/api/settings/imports/${imp.id}/stats`
-        )
-    } catch {
-        toast.add({ title: 'Failed to load stats', color: 'error' })
-        statsOpen.value = false
-    } finally {
-        statsPending.value = false
-    }
-}
-
-// ── Download errors ───────────────────────────────────────────────────────
-async function downloadErrors(imp: DataImportResponse) {
-    try {
-        const blob = await $fetch<Blob>(`/api/settings/imports/${imp.id}/download-errors`, {
-            headers: { Accept: 'text/csv' },
-            responseType: 'blob',
-        })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `import-errors-${imp.id}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
-    } catch {
-        toast.add({ title: 'Failed to download errors', color: 'error' })
-    }
-}
-
 // ── Download sample ───────────────────────────────────────────────────────
 async function downloadSample(entityType: string) {
     try {
-        const blob = await $fetch<Blob>(`/api/settings/imports/sample/${entityType}`, {
-            headers: { Accept: 'text/csv' },
-            responseType: 'blob',
-        })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `sample-${entityType.toLowerCase()}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
+        await downloadBlob(
+            `/api/settings/imports/sample/${entityType}`,
+            `sample-${entityType.toLowerCase()}.csv`
+        )
     } catch {
         toast.add({ title: 'Failed to download sample', color: 'error' })
     }
@@ -190,8 +130,10 @@ const sampleItems: DropdownMenuItem[][] = [
 ]
 
 function rowActions(imp: DataImportResponse): DropdownMenuItem[][] {
-    const primary: DropdownMenuItem[] = []
-    if (imp.status === 'PENDING') {
+    const primary: DropdownMenuItem[] = [
+        { label: 'Open', icon: 'i-tabler-eye', to: `/settings/imports/${imp.id}` },
+    ]
+    if (canEdit.value && imp.status === 'PENDING') {
         primary.push({
             label: 'Start Import',
             icon: 'i-tabler-player-play',
@@ -199,29 +141,18 @@ function rowActions(imp: DataImportResponse): DropdownMenuItem[][] {
             onSelect: () => startImport(imp),
         })
     }
-    primary.push({
-        label: 'View Stats',
-        icon: 'i-tabler-chart-bar',
-        onSelect: () => openStats(imp),
-    })
-    if (imp.errorCount > 0) {
-        primary.push({
-            label: 'Download Errors',
-            icon: 'i-tabler-download',
-            onSelect: () => downloadErrors(imp),
-        })
-    }
-    return [
-        primary,
-        [
+    const groups: DropdownMenuItem[][] = [primary]
+    if (canEdit.value) {
+        groups.push([
             {
                 label: 'Delete',
                 icon: 'i-tabler-trash',
                 color: 'error',
                 onSelect: () => promptDelete(imp),
             },
-        ],
-    ]
+        ])
+    }
+    return groups
 }
 </script>
 
@@ -251,7 +182,12 @@ function rowActions(imp: DataImportResponse): DropdownMenuItem[][] {
 
         <AppListTable :rows="imports ?? []" :columns="columns" :loading="pending">
             <template #name-cell="{ row }">
-                <span class="font-medium">{{ row.original.name }}</span>
+                <NuxtLink
+                    :to="`/settings/imports/${row.original.id}`"
+                    class="text-primary font-medium hover:underline"
+                >
+                    {{ row.original.name }}
+                </NuxtLink>
             </template>
             <template #entityType-cell="{ row }">
                 <UBadge :label="row.original.entityType" color="neutral" variant="soft" size="sm" />
@@ -322,75 +258,6 @@ function rowActions(imp: DataImportResponse): DropdownMenuItem[][] {
                 </UFormField>
             </div>
         </AppConfirmModal>
-
-        <!-- Stats modal (view-only) -->
-        <UModal v-model:open="statsOpen">
-            <template #content>
-                <UCard>
-                    <template #header>
-                        <p class="text-highlighted font-semibold">Import Stats</p>
-                    </template>
-                    <div v-if="statsPending" class="space-y-3 py-4">
-                        <USkeleton class="h-4 w-3/4" />
-                        <USkeleton class="h-4 w-1/2" />
-                    </div>
-                    <template v-else-if="statsData">
-                        <div class="grid grid-cols-3 gap-3">
-                            <div class="border-default rounded-lg border p-3 text-center">
-                                <p class="text-muted text-xs">Status</p>
-                                <UBadge
-                                    :label="statsData.status"
-                                    :color="STATUS_COLOR[statsData.status]"
-                                    variant="soft"
-                                    size="sm"
-                                    class="mt-1"
-                                />
-                            </div>
-                            <div class="border-default rounded-lg border p-3 text-center">
-                                <p class="text-muted text-xs">Succeeded</p>
-                                <p class="text-success mt-1 text-xl font-semibold">
-                                    {{ statsData.successCount }}
-                                </p>
-                            </div>
-                            <div class="border-default rounded-lg border p-3 text-center">
-                                <p class="text-muted text-xs">Failed</p>
-                                <p class="text-error mt-1 text-xl font-semibold">
-                                    {{ statsData.errorCount }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div
-                            v-if="statsData.errors && statsData.errors.length > 0"
-                            class="mt-4 space-y-2"
-                        >
-                            <p class="text-muted text-xs font-semibold uppercase">
-                                Errors (first {{ Math.min(statsData.errors.length, 10) }})
-                            </p>
-                            <div class="border-default max-h-48 overflow-y-auto rounded-lg border">
-                                <div
-                                    v-for="(err, idx) in statsData.errors.slice(0, 10)"
-                                    :key="idx"
-                                    class="border-default border-b px-3 py-2 font-mono text-xs last:border-0"
-                                >
-                                    {{ JSON.stringify(err) }}
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                    <template #footer>
-                        <div class="flex justify-end">
-                            <UButton
-                                color="neutral"
-                                variant="outline"
-                                label="Close"
-                                @click="statsOpen = false"
-                            />
-                        </div>
-                    </template>
-                </UCard>
-            </template>
-        </UModal>
 
         <!-- Delete modal -->
         <AppConfirmModal
