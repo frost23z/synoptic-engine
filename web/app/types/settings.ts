@@ -88,6 +88,28 @@ export interface StageOrderEntry {
     sortOrder: number
 }
 
+// ── Imports ──────────────────────────────────────────────────────────────
+export type ImportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+
+export interface DataImportResponse {
+    id: string
+    name: string
+    entityType: string
+    status: ImportStatus
+    errorCount: number
+    successCount: number
+    createdAt?: string
+    updatedAt?: string
+}
+
+export interface DataImportStatsResponse {
+    id: string
+    status: ImportStatus
+    errorCount: number
+    successCount: number
+    errors?: Record<string, string>[]
+}
+
 // ── Saved datagrid filters ───────────────────────────────────────────────
 export interface DataGridFilterResponse {
     id: string
