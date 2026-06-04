@@ -41,9 +41,11 @@
 - [x] **`useDomainLookups`** — shared `useState` cache for pipelines (with embedded stages), lead
       sources, lead types, users; idempotent loaders + `nuxtApp`-scoped in-flight de-dupe;
       `*Options` / `defaultPipeline` / `userName`. Wired into leads create + leads detail.
-- [x] **Validation rollout** — `useFormSubmit` + `validators` on leads/products/warehouses/quotes
+- [x] **Validation rollout** — `useFormSubmit` + `validators` on: leads/products/warehouses/quotes
       **create**; persons/orgs/products/warehouses/leads **detail edits**; the quote **send-mail**
-      modal; settings **sources/types**. All map ProblemDetail → fields (no generic toast).
+      modal; settings **sources / types / tags / pipelines / users (create+edit+password) / roles /
+      groups**; and the sharing USP forms **`ShareRecordModal`** (share+reshare) + **relationships**
+      request. All map ProblemDetail → fields (no generic toast).
 - [x] **Contract fixes** (verified vs `api-docs.json`): `PageResponse` `.content` on leads/persons/
       orgs/products selects; stages from `pipeline.stages` (not the POST-only `/stages` 405);
       `ProductResponse.isActive` drift (badge + edit key); default pipeline via `isDefault`;
@@ -162,13 +164,12 @@ jobs:
 
 ### Validation (F3)
 
-- `useFormSubmit` + `validators` is now on every entity create/edit form (leads/products/
-  warehouses/quotes create; persons/orgs/products/warehouses/leads detail edits; quote send-mail;
-  settings sources/types). The codebase has **no `<UForm>` pages** — everything is a plain `<form>`
-  binding `errors[field]` to `UFormField :error`, so follow the create-page references when
-  finishing the long tail (settings tags/pipelines/users/roles/groups/web-forms/email-templates/
-  marketing/workflows/webhooks/imports/config/tenants/attributes, sharing relationships,
-  `ShareRecordModal`, inventory stock/transfers).
+- `useFormSubmit` + `validators` is now on every entity create/edit form plus the identity admin
+  (users/roles/groups), lead config (sources/types/tags/pipelines) and sharing USP forms
+  (`ShareRecordModal`, relationships). The codebase has **no `<UForm>` pages** — everything is a
+  plain `<form>` binding `errors[field]` to `UFormField :error`, so follow those references when
+  finishing the long tail (settings web-forms/email-templates/marketing/workflows/webhooks/imports/
+  config/tenants/attributes, `pipelines/[id]` stage modals, inventory stock/transfers).
 - For a single shared `errors` across two mutually-exclusive modals on one page (create + edit),
   reuse one `useFormSubmit` and call `clearErrors()` in each `open*` (see `settings/sources`).
 - Backend error contract (`shared/web/GlobalExceptionHandler.kt`): 422 → ProblemDetail with an
@@ -207,12 +208,13 @@ jobs:
 
 ## Remaining
 
-- **Validation long tail:** roll `useFormSubmit` onto the remaining create/edit forms not yet
-  converted — settings `tags`, `pipelines` (+stage modals on `[id]`), `users`, `roles`, `groups`,
-  `web-forms`, `email-templates`, `marketing`, `workflows` (+`[id]`), `webhooks` (+`[id]`),
-  `imports`, `config`, `tenants`, `attributes`; `sharing/relationships` request modal +
-  `ShareRecordModal`; inventory `stock` + `transfers`. Same plain-`<form>` + `:error` pattern as the
-  entity pages; reuse one `useFormSubmit` with `clearErrors()` for paired create/edit modals.
+- **Validation long tail:** the remaining create/edit forms not yet converted — settings
+  `pipelines/[id]` (add/edit-stage + edit-pipeline modals), `web-forms`, `email-templates`,
+  `marketing`, `workflows` (+`[id]`), `webhooks` (+`[id]`), `imports`, `config`, `tenants`,
+  `attributes`; inventory `stock` + `transfers`; `quotes/[id]` line-item edit. Same plain-`<form>` +
+  `:error` pattern as the converted pages; reuse one `useFormSubmit` with `clearErrors()` for paired
+  create/edit modals (see `settings/groups`/`roles`), or several scoped instances when a page has
+  multiple independent forms (see `settings/users`).
 - **CI:** land `.github/workflows/ci.yml` (YAML above) — blocked on the `workflow`/`workflows` scope
   from web sessions; add it from a local checkout or grant the scope. Then watch the first run (the
   `api · testClasses` job needs Temurin **JDK 25**; no foojay resolver, so `setup-java` must supply it).
