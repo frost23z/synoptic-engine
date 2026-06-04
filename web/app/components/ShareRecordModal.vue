@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AccessLevel, RecordShareResponse } from '~/types/sharing'
 import { ACCESS_LEVEL_COLOR, ACCESS_LEVEL_LABEL, GRANTABLE_ACCESS_LEVELS } from '~/types/sharing'
+import { required } from '~/utils/validators'
 
 /**
  * Manage cross-tenant sharing for a single record.
@@ -38,7 +39,13 @@ const title = computed(() => {
 
 const shares = ref<RecordShareResponse[]>([])
 const loading = ref(false)
-const adding = ref(false)
+const {
+    submitting: adding,
+    errors,
+    validate,
+    run,
+    clearErrors,
+} = useFormSubmit({ failureTitle: 'Could not share the record' })
 
 const form = reactive<{
     consumerTenantId: string
@@ -79,6 +86,7 @@ watch(
     () => props.open,
     (isOpen) => {
         if (!isOpen) return
+        clearErrors()
         resetForm()
         // The current-shares list is owner-scoped (`records.share`); skip it when
         // resharing as a consumer.
@@ -86,38 +94,34 @@ watch(
     }
 )
 
-async function submit() {
-    adding.value = true
-    try {
-        await api(isReshare.value ? '/api/records/reshare' : '/api/records/share', {
-            method: 'POST',
-            body: {
-                consumerTenantId: form.consumerTenantId,
-                resourceType: props.resourceType,
-                resourceId: props.resourceId,
-                accessLevel: form.accessLevel,
-                expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
-                note: form.note || undefined,
-            },
-        })
-        toast.add({
-            title: isReshare.value ? 'Record reshared' : 'Record shared',
-            color: 'success',
-        })
-        resetForm()
-        // No owner-scoped list to refresh when resharing — just close.
-        if (isReshare.value) emit('update:open', false)
-        else loadShares()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({
-            title: isReshare.value ? 'Failed to reshare' : 'Failed to share',
-            description: e?.data?.message,
-            color: 'error',
-        })
-    } finally {
-        adding.value = false
-    }
+function submit() {
+    run({
+        validate: () =>
+            validate(form, { consumerTenantId: [required('Select a tenant to share with')] }),
+        call: () =>
+            api(isReshare.value ? '/api/records/reshare' : '/api/records/share', {
+                method: 'POST',
+                body: {
+                    consumerTenantId: form.consumerTenantId,
+                    resourceType: props.resourceType,
+                    resourceId: props.resourceId,
+                    accessLevel: form.accessLevel,
+                    expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
+                    note: form.note || undefined,
+                },
+            }),
+        fieldHints: ['consumerTenantId', 'tenant'],
+        onSuccess: () => {
+            toast.add({
+                title: isReshare.value ? 'Record reshared' : 'Record shared',
+                color: 'success',
+            })
+            resetForm()
+            // No owner-scoped list to refresh when resharing — just close.
+            if (isReshare.value) emit('update:open', false)
+            else loadShares()
+        },
+    })
 }
 
 async function revokeShare(share: RecordShareResponse) {
@@ -196,7 +200,7 @@ async function revokeShare(share: RecordShareResponse) {
                     {{ isReshare ? 'Reshare with a tenant' : 'Share with a tenant' }}
                 </p>
                 <div class="grid grid-cols-2 gap-3">
-                    <UFormField label="Tenant" required>
+                    <UFormField label="Tenant" required :error="errors.consumerTenantId">
                         <USelect
                             v-if="hasTenantList"
                             v-model="form.consumerTenantId"
