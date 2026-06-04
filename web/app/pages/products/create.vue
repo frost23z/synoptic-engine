@@ -1,35 +1,39 @@
 <script setup lang="ts">
+import { required } from '~/utils/validators'
+
 definePageMeta({ title: 'New Product' })
 useHead({ title: 'New Product — Synoptic' })
 
 const api = useApi()
 const toast = useToast()
 const router = useRouter()
+const { submitting, errors, validate, run } = useFormSubmit({
+    failureTitle: 'Failed to create product',
+})
 
-const saving = ref(false)
-const form = reactive({ name: '', description: '', price: 0, sku: '', active: true })
+const form = reactive({ name: '', description: '', price: 0, sku: '', isActive: true, reorder: 0 })
 
-async function submit() {
-    saving.value = true
-    try {
-        const product = await api<{ id: string }>('/api/products', {
-            method: 'POST',
-            body: {
-                name: form.name,
-                description: form.description || undefined,
-                price: form.price || undefined,
-                sku: form.sku || undefined,
-                active: form.active,
-            },
-        })
-        toast.add({ title: 'Product created', color: 'success' })
-        router.push(`/products/${product.id}`)
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submit() {
+    run({
+        validate: () => validate(form, { name: [required('Name is required')] }),
+        call: () =>
+            api<{ id: string }>('/api/products', {
+                method: 'POST',
+                body: {
+                    name: form.name,
+                    description: form.description || undefined,
+                    price: form.price,
+                    sku: form.sku || undefined,
+                    isActive: form.isActive,
+                    reorderThreshold: form.reorder || undefined,
+                },
+            }),
+        fieldHints: ['sku', 'name'],
+        onSuccess: (product) => {
+            toast.add({ title: 'Product created', color: 'success' })
+            router.push(`/products/${product.id}`)
+        },
+    })
 }
 </script>
 
@@ -37,13 +41,13 @@ async function submit() {
     <AppDetailLayout to="/products" title="New Product" root-class="mx-auto max-w-xl space-y-6">
         <UCard>
             <form class="space-y-4" @submit.prevent="submit">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="form.name" placeholder="e.g. CRM License" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
                     <UTextarea v-model="form.description" :rows="3" class="w-full" />
                 </UFormField>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-3 gap-4">
                     <UFormField label="Price">
                         <UInput
                             v-model.number="form.price"
@@ -53,16 +57,25 @@ async function submit() {
                             class="w-full"
                         />
                     </UFormField>
-                    <UFormField label="SKU">
+                    <UFormField label="SKU" :error="errors.sku">
                         <UInput v-model="form.sku" placeholder="SKU-001" class="w-full" />
                     </UFormField>
+                    <UFormField label="Reorder at" hint="Low-stock alert">
+                        <UInput
+                            v-model.number="form.reorder"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            class="w-full"
+                        />
+                    </UFormField>
                 </div>
-                <USwitch v-model="form.active" label="Active" />
+                <USwitch v-model="form.isActive" label="Active" />
                 <div class="flex justify-end gap-2 pt-2">
                     <UButton color="neutral" variant="outline" label="Cancel" to="/products" />
                     <UButton
                         label="Create Product"
-                        :loading="saving"
+                        :loading="submitting"
                         :disabled="!form.name"
                         @click="submit"
                     />
