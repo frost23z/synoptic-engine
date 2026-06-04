@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { PermissionResponse, RoleResponse } from '~/types/settings'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Roles' })
 useHead({ title: 'Roles — Synoptic' })
@@ -9,6 +10,13 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const {
+    submitting: saving,
+    errors,
+    validate,
+    run,
+    clearErrors,
+} = useFormSubmit({ failureTitle: 'Failed to save role' })
 
 // ── Roles list ────────────────────────────────────────────────────────────
 const {
@@ -38,7 +46,6 @@ function actionLabel(perm: string) {
 
 // ── Create / Edit (shared modal) ────────────────────────────────────────────
 const formOpen = ref(false)
-const saving = ref(false)
 const editingId = ref<string | null>(null)
 const form = reactive({
     name: '',
@@ -55,12 +62,14 @@ function togglePermission(perm: string) {
 }
 
 function openCreate() {
+    clearErrors()
     editingId.value = null
     Object.assign(form, { name: '', description: '', permissions: [] })
     formOpen.value = true
 }
 
 function openEdit(r: RoleResponse) {
+    clearErrors()
     editingId.value = r.id
     Object.assign(form, {
         name: r.name,
@@ -70,30 +79,25 @@ function openEdit(r: RoleResponse) {
     formOpen.value = true
 }
 
-async function submitForm() {
-    saving.value = true
-    try {
-        await api(isEdit.value ? `/api/roles/${editingId.value}` : '/api/roles', {
-            method: isEdit.value ? 'PUT' : 'POST',
-            body: {
-                name: form.name,
-                description: form.description || undefined,
-                permissions: form.permissions,
-            },
-        })
-        toast.add({ title: isEdit.value ? 'Role updated' : 'Role created', color: 'success' })
-        formOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({
-            title: isEdit.value ? 'Failed to update role' : 'Failed to create role',
-            description: e?.data?.message,
-            color: 'error',
-        })
-    } finally {
-        saving.value = false
-    }
+function submitForm() {
+    run({
+        validate: () => validate(form, { name: [required('Name is required')] }),
+        call: () =>
+            api(isEdit.value ? `/api/roles/${editingId.value}` : '/api/roles', {
+                method: isEdit.value ? 'PUT' : 'POST',
+                body: {
+                    name: form.name,
+                    description: form.description || undefined,
+                    permissions: form.permissions,
+                },
+            }),
+        fieldHints: ['name'],
+        onSuccess: () => {
+            toast.add({ title: isEdit.value ? 'Role updated' : 'Role created', color: 'success' })
+            formOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -184,7 +188,7 @@ function rowActions(r: RoleResponse): DropdownMenuItem[][] {
             @confirm="submitForm"
         >
             <form class="space-y-3" @submit.prevent="submitForm">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="form.name" placeholder="e.g. MANAGER" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
