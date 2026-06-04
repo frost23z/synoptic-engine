@@ -330,7 +330,16 @@ const userMenuItems = computed(() => [
             </header>
             <!-- Main area -->
             <UMain class="p-4">
-                <slot />
+                <NuxtErrorBoundary>
+                    <slot />
+                    <template #error="{ error, clearError }">
+                        <AppErrorState
+                            title="Something went wrong on this page"
+                            :message="error.message"
+                            @retry="clearError"
+                        />
+                    </template>
+                </NuxtErrorBoundary>
             </UMain>
         </div>
     </div>
