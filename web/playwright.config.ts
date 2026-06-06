@@ -4,7 +4,7 @@ export default defineConfig({
     testDir: './tests/e2e',
     timeout: 30000,
     use: {
-        baseURL: process.env.E2E_BASE_URL ?? 'http://192.168.0.124:3000',
+        baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000',
         screenshot: 'only-on-failure',
     },
     reporter: [['html', { open: 'never' }]],
