@@ -73,6 +73,52 @@ export interface LowStockEntry {
     currentStock: number
 }
 
+// ── Movement ledger ────────────────────────────────────────────────────────
+export type MovementType =
+    | 'RECEIPT'
+    | 'ISSUE'
+    | 'ADJUST'
+    | 'TRANSFER_IN'
+    | 'TRANSFER_OUT'
+    | 'RESERVE'
+    | 'RELEASE'
+
+export const MOVEMENT_TYPE_LABEL: Record<MovementType, string> = {
+    RECEIPT: 'Receipt',
+    ISSUE: 'Issue',
+    ADJUST: 'Adjustment',
+    TRANSFER_IN: 'Transfer in',
+    TRANSFER_OUT: 'Transfer out',
+    RESERVE: 'Reserved',
+    RELEASE: 'Released',
+}
+
+export const MOVEMENT_TYPE_COLOR: Record<MovementType, BadgeColor> = {
+    RECEIPT: 'success',
+    ISSUE: 'warning',
+    ADJUST: 'neutral',
+    TRANSFER_IN: 'info',
+    TRANSFER_OUT: 'info',
+    RESERVE: 'secondary',
+    RELEASE: 'primary',
+}
+
+/** An append-only ledger entry (`GET /api/inventory/movements`). */
+export interface MovementResponse {
+    id: string
+    productId: string
+    movementType: MovementType
+    fromLocationId?: string | null
+    toLocationId?: string | null
+    quantity: number
+    unitCost?: number | null
+    refDocType?: string | null
+    refDocId?: string | null
+    actorId?: string | null
+    notes?: string | null
+    createdAt?: string | null
+}
+
 // ── Transfer orders ────────────────────────────────────────────────────────
 export type TransferStatus = 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED'
 
