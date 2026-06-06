@@ -5,7 +5,7 @@ test.describe('Dashboard', () => {
     test('renders the header and KPI tiles for admin', async ({ page }) => {
         await login(page)
         await page.goto('/')
-        await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
+        await expect(page.getByRole('heading', { name: 'Dashboard' }).first()).toBeVisible({
             timeout: 10000,
         })
         // KPI tiles (over-all + revenue-stats) render their labels immediately.
@@ -26,14 +26,16 @@ test.describe('Dashboard', () => {
     test('shows the live recent + upcoming activity panels', async ({ page }) => {
         await login(page)
         await page.goto('/')
-        await expect(page.getByText('Recent Activities')).toBeVisible({ timeout: 10000 })
+        await expect(page.getByText('Recent Activities', { exact: true })).toBeVisible({
+            timeout: 10000,
+        })
         await expect(page.getByText('Upcoming Activities')).toBeVisible()
     })
 
     test('exposes the date-range controls', async ({ page }) => {
         await login(page)
         await page.goto('/')
-        await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
+        await expect(page.getByRole('heading', { name: 'Dashboard' }).first()).toBeVisible({
             timeout: 10000,
         })
         // Two native date inputs (start / end) back the custom range.
