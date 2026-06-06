@@ -4,6 +4,7 @@ import com.synopticengine.api.inventory.movement.domain.InventoryMovement
 import com.synopticengine.api.inventory.movement.domain.MovementType
 import com.synopticengine.api.inventory.movement.repo.InventoryMovementRepository
 import com.synopticengine.api.inventory.movement.web.LowStockEntry
+import com.synopticengine.api.inventory.movement.web.MovementResponse
 import com.synopticengine.api.inventory.movement.web.StockStateResponse
 import com.synopticengine.api.inventory.product.repo.ProductRepository
 import com.synopticengine.api.inventory.warehouse.domain.ProductInventory
@@ -42,6 +43,10 @@ class InventoryMovementService(
             }
         return entries.map { it.toStockStateResponse() }
     }
+
+    /** Append-only movement ledger for a product, newest first (tenant-filtered via @Filter). */
+    fun getMovements(productId: UUID): List<MovementResponse> =
+        movementRepository.findAllByProductId(productId).map { it.toMovementResponse() }
 
     fun getLowStock(): List<LowStockEntry> =
         productRepository
@@ -157,6 +162,22 @@ class InventoryMovementService(
         inv.onHand = newOnHand
     }
 }
+
+private fun com.synopticengine.api.inventory.movement.domain.InventoryMovement.toMovementResponse() =
+    MovementResponse(
+        id = id!!,
+        productId = productId,
+        movementType = movementType,
+        fromLocationId = fromLocationId,
+        toLocationId = toLocationId,
+        quantity = quantity,
+        unitCost = unitCost,
+        refDocType = refDocType,
+        refDocId = refDocId,
+        actorId = actorId,
+        notes = notes,
+        createdAt = createdAt,
+    )
 
 private fun ProductInventory.toStockStateResponse() =
     StockStateResponse(

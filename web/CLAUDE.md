@@ -84,6 +84,11 @@ page duplication). Components are auto-imported.
 - `useDeleteResource<T>({ endpoint, successMessage, onDeleted })` — returns
   `{ open, target, deleting, prompt, confirm }`; pair with `AppConfirmModal`.
 - `useMassSelect`, `useApi`, `usePermissions`, `useFormatters`, `useDownload`, `useTheme`.
+- `useFormSubmit({ failureTitle })` — tracks `submitting`, maps backend ProblemDetail (422
+  field errors / 409 `fieldHints`) onto `errors`, and validates forms. `validate(state, schema)`
+  accepts **either a Zod schema** (preferred for new forms — `z.object({ … })`) or the legacy
+  `Record<string, Validator[]>` map from `~/utils/validators`. Bind `errors[field]` to
+  `UFormField :error`. Reference: `settings/groups/index.vue`, `settings/roles/index.vue`.
 
 Reference implementations: `app/pages/leads/index.vue`, `contacts/persons/index.vue`,
 `quotes/index.vue`. Shared constants (`PAGE_SIZE`, …) in `app/utils/constants.ts`.
