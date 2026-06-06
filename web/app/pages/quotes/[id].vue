@@ -2,6 +2,7 @@
 import type { QuoteResponse, QuoteStatus } from '~/types/quotes'
 import type { ProductResponse } from '~/types/inventory'
 import { QUOTE_STATUS_COLOR, QUOTE_STATUS_LABEL } from '~/types/quotes'
+import { email, required } from '~/utils/validators'
 
 definePageMeta({ title: 'Quote' })
 
@@ -54,7 +55,12 @@ async function changeStatus(status: string) {
 
 // ── Send mail ─────────────────────────────────────────────────────────────
 const sendMailOpen = ref(false)
-const sending = ref(false)
+const {
+    submitting: sending,
+    errors: mailErrors,
+    validate: validateMail,
+    run: runSendMail,
+} = useFormSubmit({ failureTitle: 'Failed to send quote' })
 const mailForm = reactive({ to: '', subject: '', message: '' })
 
 function openSendMail() {
@@ -62,22 +68,22 @@ function openSendMail() {
     sendMailOpen.value = true
 }
 
-async function submitSendMail() {
-    sending.value = true
-    try {
-        await api(`/api/quotes/${id}/send-mail`, {
-            method: 'POST',
-            body: { to: mailForm.to, subject: mailForm.subject, message: mailForm.message },
-        })
-        toast.add({ title: 'Quote sent', color: 'success' })
-        sendMailOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to send', description: e?.data?.message, color: 'error' })
-    } finally {
-        sending.value = false
-    }
+function submitSendMail() {
+    runSendMail({
+        validate: () =>
+            validateMail(mailForm, { to: [required('A recipient is required'), email()] }),
+        call: () =>
+            api(`/api/quotes/${id}/send-mail`, {
+                method: 'POST',
+                body: { to: mailForm.to, subject: mailForm.subject, message: mailForm.message },
+            }),
+        fieldHints: ['to'],
+        onSuccess: () => {
+            toast.add({ title: 'Quote sent', color: 'success' })
+            sendMailOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── PDF download ──────────────────────────────────────────────────────────
@@ -300,7 +306,7 @@ const {
             @confirm="submitSendMail"
         >
             <form class="space-y-3" @submit.prevent="submitSendMail">
-                <UFormField label="To" required>
+                <UFormField label="To" required :error="mailErrors.to">
                     <UInput
                         v-model="mailForm.to"
                         type="email"

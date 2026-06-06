@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import type { PageResponse } from '~/types/api'
 import type { TagResponse } from '~/types/leads'
 import type { OrganizationResponse, PersonResponse } from '~/types/contacts'
+import { email, required } from '~/utils/validators'
 
 definePageMeta({ title: 'Person' })
 
@@ -26,14 +28,21 @@ const pageTitle = computed(() =>
 useHead({ title: pageTitle })
 
 const { data: orgs } = await useAsyncData<OrganizationResponse[]>('orgs-lookup', () =>
-    api<OrganizationResponse[]>('/api/contacts/organizations')
+    api<PageResponse<OrganizationResponse>>('/api/contacts/organizations', {
+        params: { size: 500 },
+    }).then((p) => p.content)
 )
 const orgOptions = computed(() => orgs.value?.map((o) => ({ label: o.name, value: o.id })) ?? [])
 const orgName = computed(() => orgs.value?.find((o) => o.id === person.value?.organizationId)?.name)
 
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editing = ref(false)
-const saving = ref(false)
+const {
+    submitting: saving,
+    errors,
+    validate,
+    run,
+} = useFormSubmit({ failureTitle: 'Failed to save person' })
 const editForm = reactive({
     firstName: '',
     lastName: '',
@@ -56,29 +65,33 @@ function openEdit() {
     editing.value = true
 }
 
-async function submitEdit() {
-    saving.value = true
-    try {
-        await api(`/api/contacts/persons/${id}`, {
-            method: 'PUT',
-            body: {
-                firstName: editForm.firstName,
-                lastName: editForm.lastName,
-                email: editForm.email || undefined,
-                phone: editForm.phone || undefined,
-                jobTitle: editForm.jobTitle || undefined,
-                organizationId: editForm.organizationId || undefined,
-            },
-        })
-        toast.add({ title: 'Saved', color: 'success' })
-        editing.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to save', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submitEdit() {
+    run({
+        validate: () =>
+            validate(editForm, {
+                firstName: [required('First name is required')],
+                lastName: [required('Last name is required')],
+                email: [email()],
+            }),
+        call: () =>
+            api(`/api/contacts/persons/${id}`, {
+                method: 'PUT',
+                body: {
+                    firstName: editForm.firstName,
+                    lastName: editForm.lastName,
+                    email: editForm.email || undefined,
+                    phone: editForm.phone || undefined,
+                    jobTitle: editForm.jobTitle || undefined,
+                    organizationId: editForm.organizationId || undefined,
+                },
+            }),
+        fieldHints: ['email'],
+        onSuccess: () => {
+            toast.add({ title: 'Saved', color: 'success' })
+            editing.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -185,14 +198,14 @@ const { data: allTags } = await useAsyncData<TagResponse[]>('tags-lookup', () =>
         >
             <form class="space-y-3" @submit.prevent="submitEdit">
                 <div class="grid grid-cols-2 gap-3">
-                    <UFormField label="First name" required>
+                    <UFormField label="First name" required :error="errors.firstName">
                         <UInput v-model="editForm.firstName" class="w-full" />
                     </UFormField>
-                    <UFormField label="Last name" required>
+                    <UFormField label="Last name" required :error="errors.lastName">
                         <UInput v-model="editForm.lastName" class="w-full" />
                     </UFormField>
                 </div>
-                <UFormField label="Email">
+                <UFormField label="Email" :error="errors.email">
                     <UInput v-model="editForm.email" type="email" class="w-full" />
                 </UFormField>
                 <UFormField label="Phone">

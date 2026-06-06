@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { PipelineResponse } from '~/types/settings'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Pipelines' })
 useHead({ title: 'Pipelines — Synoptic' })
@@ -9,6 +10,17 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+// Keep the shared lookup cache coherent after create/delete.
+const { invalidate } = useDomainLookups()
+const {
+    submitting: creating,
+    errors,
+    validate,
+    run,
+    clearErrors,
+} = useFormSubmit({
+    failureTitle: 'Failed to create pipeline',
+})
 
 const {
     data: pipelines,
@@ -24,39 +36,35 @@ const canManage = computed(() => can('leads.edit'))
 
 // ── Create pipeline ────────────────────────────────────────────────────────
 const createOpen = ref(false)
-const creating = ref(false)
 const createForm = reactive({ name: '', description: '', rottenDays: 30, isActive: true })
 
 function openCreate() {
+    clearErrors()
     Object.assign(createForm, { name: '', description: '', rottenDays: 30, isActive: true })
     createOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
-    try {
-        await api('/api/pipelines', {
-            method: 'POST',
-            body: {
-                name: createForm.name,
-                description: createForm.description || undefined,
-                isActive: createForm.isActive,
-                rottenDays: createForm.rottenDays,
-            },
-        })
-        toast.add({ title: 'Pipeline created', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({
-            title: 'Failed to create pipeline',
-            description: e?.data?.message,
-            color: 'error',
-        })
-    } finally {
-        creating.value = false
-    }
+function submitCreate() {
+    run({
+        validate: () => validate(createForm, { name: [required('Name is required')] }),
+        call: () =>
+            api('/api/pipelines', {
+                method: 'POST',
+                body: {
+                    name: createForm.name,
+                    description: createForm.description || undefined,
+                    isActive: createForm.isActive,
+                    rottenDays: createForm.rottenDays,
+                },
+            }),
+        fieldHints: ['name'],
+        onSuccess: () => {
+            toast.add({ title: 'Pipeline created', color: 'success' })
+            createOpen.value = false
+            invalidate('pipelines')
+            refresh()
+        },
+    })
 }
 
 // ── Delete pipeline ────────────────────────────────────────────────────────
@@ -69,7 +77,10 @@ const {
 } = useDeleteResource<PipelineResponse>({
     endpoint: (p) => `/api/pipelines/${p.id}`,
     successMessage: 'Pipeline deleted',
-    onDeleted: refresh,
+    onDeleted: () => {
+        invalidate('pipelines')
+        refresh()
+    },
 })
 
 const columns: TableColumn<PipelineResponse>[] = [
@@ -176,7 +187,7 @@ function rowActions(p: PipelineResponse): DropdownMenuItem[][] {
             @confirm="submitCreate"
         >
             <form class="space-y-3" @submit.prevent="submitCreate">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput
                         v-model="createForm.name"
                         placeholder="e.g. Sales Pipeline"

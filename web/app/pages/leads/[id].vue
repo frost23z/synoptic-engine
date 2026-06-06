@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import type { LeadResponse, TagResponse, StageResponse } from '~/types/leads'
+import type { PageResponse } from '~/types/api'
+import type { LeadResponse, TagResponse } from '~/types/leads'
 import type { PersonResponse, OrganizationResponse } from '~/types/contacts'
 import type { ActivityResponse } from '~/types/activities'
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL } from '~/types/leads'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Lead' })
 
@@ -25,65 +27,54 @@ const pageTitle = computed(() =>
 useHead({ title: pageTitle })
 
 // ── Lookup data ───────────────────────────────────────────────────────────
-const { data: pipelines } = await useAsyncData('pipelines-lookup', () =>
-    api<{ id: string; name: string; stages?: StageResponse[] }[]>('/api/pipelines')
-)
+// Pipelines (with embedded stages), sources and types come from the shared cache.
+const { pipelines, pipelineOptions, sourceOptions, typeOptions, loadLeadLookups } =
+    useDomainLookups()
+await loadLeadLookups()
+
+// Contacts/orgs are paginated (PageResponse) — pull a generous page for the selects.
 const { data: persons } = await useAsyncData<PersonResponse[]>('persons-lookup', () =>
-    api<PersonResponse[]>('/api/contacts/persons')
+    api<PageResponse<PersonResponse>>('/api/contacts/persons', { params: { size: 500 } }).then(
+        (p) => p.content
+    )
 )
 const { data: orgs } = await useAsyncData<OrganizationResponse[]>('orgs-lookup2', () =>
-    api<OrganizationResponse[]>('/api/contacts/organizations')
+    api<PageResponse<OrganizationResponse>>('/api/contacts/organizations', {
+        params: { size: 500 },
+    }).then((p) => p.content)
 )
 const { data: allTags } = await useAsyncData<TagResponse[]>('tags-lookup2', () =>
     api<TagResponse[]>('/api/tags')
 )
-const { data: leadSources } = await useAsyncData<{ id: string; name: string }[]>(
-    'sources-lookup',
-    () => api<{ id: string; name: string }[]>('/api/lead-sources')
-)
-const { data: leadTypesList } = await useAsyncData<{ id: string; name: string }[]>(
-    'types-lookup',
-    () => api<{ id: string; name: string }[]>('/api/lead-types')
-)
 
-const pipelineOptions = computed(
-    () => pipelines.value?.map((p) => ({ label: p.name, value: p.id })) ?? []
-)
 const personOptions = computed(
     () => persons.value?.map((p) => ({ label: p.fullName, value: p.id })) ?? []
 )
 const orgOptions = computed(() => orgs.value?.map((o) => ({ label: o.name, value: o.id })) ?? [])
-const sourceOptions = computed(
-    () => leadSources.value?.map((s) => ({ label: s.name, value: s.id })) ?? []
-)
-const typeOptions = computed(
-    () => leadTypesList.value?.map((t) => ({ label: t.name, value: t.id })) ?? []
-)
 
 const pipelineName = computed(
-    () => pipelines.value?.find((p) => p.id === lead.value?.pipelineId)?.name
+    () => pipelines.value.find((p) => p.id === lead.value?.pipelineId)?.name
 )
 const personName = computed(
     () => persons.value?.find((p) => p.id === lead.value?.personId)?.fullName
 )
 const orgName = computed(() => orgs.value?.find((o) => o.id === lead.value?.organizationId)?.name)
 
-// Load stages when pipeline is known
-const { data: stages, refresh: refreshStages } = await useAsyncData<StageResponse[]>(
-    `lead-${id}-stages`,
-    () =>
-        lead.value?.pipelineId
-            ? api<StageResponse[]>(`/api/pipelines/${lead.value.pipelineId}/stages`)
-            : Promise.resolve([])
-)
-const stageName = computed(() => stages.value?.find((s) => s.id === lead.value?.stageId)?.name)
-const stageOptions = computed(
-    () => stages.value?.map((s) => ({ label: s.name, value: s.id })) ?? []
+// Stages are embedded in each pipeline from the list endpoint — no extra call.
+const stagesFor = (pipelineId?: string | null) =>
+    pipelines.value.find((p) => p.id === pipelineId)?.stages ?? []
+const stageName = computed(
+    () => stagesFor(lead.value?.pipelineId).find((s) => s.id === lead.value?.stageId)?.name
 )
 
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editing = ref(false)
-const saving = ref(false)
+const {
+    submitting: saving,
+    errors,
+    validate,
+    run,
+} = useFormSubmit({ failureTitle: 'Failed to save lead' })
 const editForm = reactive({
     title: '',
     description: '',
@@ -98,6 +89,9 @@ const editForm = reactive({
     leadSourceId: '',
     leadTypeId: '',
 })
+const stageOptions = computed(() =>
+    stagesFor(editForm.pipelineId).map((s) => ({ label: s.name, value: s.id }))
+)
 
 function openEdit() {
     if (!lead.value) return
@@ -120,48 +114,43 @@ function openEdit() {
     editing.value = true
 }
 
+// Reset the stage when switching to a different pipeline than the lead's own.
 watch(
     () => editForm.pipelineId,
     (pid) => {
         if (pid && pid !== lead.value?.pipelineId) {
-            api<StageResponse[]>(`/api/pipelines/${pid}/stages`).then((s) => {
-                stages.value = s
-                editForm.stageId = s[0]?.id ?? ''
-            })
+            editForm.stageId = stagesFor(pid)[0]?.id ?? ''
         }
     }
 )
 
-async function submitEdit() {
-    saving.value = true
-    try {
-        await api(`/api/leads/${id}`, {
-            method: 'PUT',
-            body: {
-                title: editForm.title,
-                description: editForm.description || undefined,
-                amount: editForm.amount || undefined,
-                expectedCloseDate: editForm.expectedCloseDate || undefined,
-                pipelineId: editForm.pipelineId || undefined,
-                stageId: editForm.stageId || undefined,
-                personId: editForm.personId || undefined,
-                organizationId: editForm.organizationId || undefined,
-                status: editForm.status,
-                lostReason: editForm.lostReason || undefined,
-                leadSourceId: editForm.leadSourceId || undefined,
-                leadTypeId: editForm.leadTypeId || undefined,
-            },
-        })
-        toast.add({ title: 'Saved', color: 'success' })
-        editing.value = false
-        refresh()
-        refreshStages()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to save', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submitEdit() {
+    run({
+        validate: () => validate(editForm, { title: [required('Title is required')] }),
+        call: () =>
+            api(`/api/leads/${id}`, {
+                method: 'PUT',
+                body: {
+                    title: editForm.title,
+                    description: editForm.description || undefined,
+                    amount: editForm.amount || undefined,
+                    expectedCloseDate: editForm.expectedCloseDate || undefined,
+                    pipelineId: editForm.pipelineId || undefined,
+                    stageId: editForm.stageId || undefined,
+                    personId: editForm.personId || undefined,
+                    organizationId: editForm.organizationId || undefined,
+                    status: editForm.status,
+                    lostReason: editForm.lostReason || undefined,
+                    leadSourceId: editForm.leadSourceId || undefined,
+                    leadTypeId: editForm.leadTypeId || undefined,
+                },
+            }),
+        onSuccess: () => {
+            toast.add({ title: 'Saved', color: 'success' })
+            editing.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -421,7 +410,7 @@ const LEAD_STATUS_OPTIONS = [
             @confirm="submitEdit"
         >
             <form class="space-y-3" @submit.prevent="submitEdit">
-                <UFormField label="Title" required>
+                <UFormField label="Title" required :error="errors.title">
                     <UInput v-model="editForm.title" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
