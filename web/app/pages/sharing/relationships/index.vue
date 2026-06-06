@@ -6,6 +6,7 @@ import {
     RELATIONSHIP_STATUS_LABEL,
     RELATIONSHIP_TYPE_LABEL,
 } from '~/types/sharing'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Relationships' })
 useHead({ title: 'Relationships — Synoptic' })
@@ -16,6 +17,13 @@ const router = useRouter()
 const { can } = usePermissions()
 const { formatDate } = useFormatters()
 const { tenantName, tenantOptions, hasTenantList, isSelf } = useTenantNames()
+const {
+    submitting: creating,
+    errors,
+    validate,
+    run,
+    clearErrors,
+} = useFormSubmit({ failureTitle: 'Failed to request relationship' })
 
 /** Our side of a relationship is shown as "You"; the badge reads the direction. */
 function sideLabel(id: string): string {
@@ -41,7 +49,6 @@ const rows = computed(() => relationships.value ?? [])
 
 // ── Request relationship ───────────────────────────────────────────────────
 const createOpen = ref(false)
-const creating = ref(false)
 const form = reactive<{ targetTenantId: string; type: RelationshipType; note: string }>({
     targetTenantId: '',
     type: 'PARTNER',
@@ -54,30 +61,30 @@ const typeOptions = (Object.keys(RELATIONSHIP_TYPE_LABEL) as RelationshipType[])
 }))
 
 function openCreate() {
+    clearErrors()
     Object.assign(form, { targetTenantId: '', type: 'PARTNER', note: '' })
     createOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
-    try {
-        await api('/api/relationships', {
-            method: 'POST',
-            body: {
-                targetTenantId: form.targetTenantId,
-                type: form.type,
-                note: form.note || undefined,
-            },
-        })
-        toast.add({ title: 'Relationship requested', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to request', description: e?.data?.message, color: 'error' })
-    } finally {
-        creating.value = false
-    }
+function submitCreate() {
+    run({
+        validate: () => validate(form, { targetTenantId: [required('Select a tenant')] }),
+        call: () =>
+            api('/api/relationships', {
+                method: 'POST',
+                body: {
+                    targetTenantId: form.targetTenantId,
+                    type: form.type,
+                    note: form.note || undefined,
+                },
+            }),
+        fieldHints: ['targetTenantId', 'tenant'],
+        onSuccess: () => {
+            toast.add({ title: 'Relationship requested', color: 'success' })
+            createOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Table ───────────────────────────────────────────────────────────────────
@@ -187,7 +194,7 @@ function rowActions(rel: RelationshipResponse): DropdownMenuItem[][] {
             @confirm="submitCreate"
         >
             <form class="space-y-3" @submit.prevent="submitCreate">
-                <UFormField label="Target tenant" required>
+                <UFormField label="Target tenant" required :error="errors.targetTenantId">
                     <USelect
                         v-if="hasTenantList"
                         v-model="form.targetTenantId"

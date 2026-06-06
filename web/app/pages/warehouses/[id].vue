@@ -6,6 +6,7 @@ import type {
     WarehouseProductEntry,
     WarehouseResponse,
 } from '~/types/inventory'
+import { email, required } from '~/utils/validators'
 
 definePageMeta({ title: 'Warehouse' })
 
@@ -141,7 +142,12 @@ const { data: allTags } = await useAsyncData<TagResponse[]>(`warehouse-tags-all`
 
 // ── Edit ────────────────────────────────────────────────────────────────────
 const editing = ref(false)
-const saving = ref(false)
+const {
+    submitting: saving,
+    errors,
+    validate,
+    run,
+} = useFormSubmit({ failureTitle: 'Failed to save warehouse' })
 const editForm = reactive({
     name: '',
     description: '',
@@ -164,29 +170,32 @@ function openEdit() {
     editing.value = true
 }
 
-async function submitEdit() {
-    saving.value = true
-    try {
-        await api(`/api/warehouses/${id}`, {
-            method: 'PUT',
-            body: {
-                name: editForm.name,
-                description: editForm.description || undefined,
-                contactName: editForm.contactName || undefined,
-                contactEmail: editForm.contactEmail || undefined,
-                contactPhone: editForm.contactPhone || undefined,
-                contactAddress: editForm.contactAddress || undefined,
-            },
-        })
-        toast.add({ title: 'Saved', color: 'success' })
-        editing.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to save', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submitEdit() {
+    run({
+        validate: () =>
+            validate(editForm, {
+                name: [required('Name is required')],
+                contactEmail: [email()],
+            }),
+        call: () =>
+            api(`/api/warehouses/${id}`, {
+                method: 'PUT',
+                body: {
+                    name: editForm.name,
+                    description: editForm.description || undefined,
+                    contactName: editForm.contactName || undefined,
+                    contactEmail: editForm.contactEmail || undefined,
+                    contactPhone: editForm.contactPhone || undefined,
+                    contactAddress: editForm.contactAddress || undefined,
+                },
+            }),
+        fieldHints: ['name', 'contactEmail'],
+        onSuccess: () => {
+            toast.add({ title: 'Saved', color: 'success' })
+            editing.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────────
@@ -400,7 +409,7 @@ onMounted(() => {
             @confirm="submitEdit"
         >
             <form class="space-y-3" @submit.prevent="submitEdit">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="editForm.name" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
@@ -410,7 +419,7 @@ onMounted(() => {
                     <UFormField label="Contact name">
                         <UInput v-model="editForm.contactName" class="w-full" />
                     </UFormField>
-                    <UFormField label="Contact email">
+                    <UFormField label="Contact email" :error="errors.contactEmail">
                         <UInput v-model="editForm.contactEmail" type="email" class="w-full" />
                     </UFormField>
                     <UFormField label="Contact phone">

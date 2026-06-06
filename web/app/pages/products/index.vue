@@ -54,7 +54,7 @@ const columns: TableColumn<ProductResponse>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'sku', header: 'SKU' },
     { accessorKey: 'price', header: 'Price' },
-    { accessorKey: 'active', header: 'Status' },
+    { accessorKey: 'isActive', header: 'Status' },
     { accessorKey: 'createdAt', header: 'Created' },
     { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'w-10' } } },
 ]
@@ -131,10 +131,10 @@ function rowActions(p: ProductResponse): DropdownMenuItem[][] {
             <template #price-cell="{ row }">
                 <span class="font-semibold">{{ formatCurrency(row.original.price) }}</span>
             </template>
-            <template #active-cell="{ row }">
+            <template #isActive-cell="{ row }">
                 <UBadge
-                    :label="row.original.active ? 'Active' : 'Inactive'"
-                    :color="row.original.active ? 'success' : 'neutral'"
+                    :label="row.original.isActive ? 'Active' : 'Inactive'"
+                    :color="row.original.isActive ? 'success' : 'neutral'"
                     variant="soft"
                     size="sm"
                 />
