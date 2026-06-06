@@ -71,6 +71,12 @@ const inventoryNav = computed<NavigationMenuItem[]>(() =>
             permission: 'inventory.movements.view',
         },
         {
+            label: 'Movements',
+            icon: 'i-tabler-list-details',
+            to: '/inventory/movements',
+            permission: 'inventory.movements.view',
+        },
+        {
             label: 'Reorder',
             icon: 'i-tabler-alert-triangle',
             to: '/inventory/reorder',

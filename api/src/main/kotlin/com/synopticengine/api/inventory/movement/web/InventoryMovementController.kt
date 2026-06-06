@@ -60,6 +60,12 @@ class InventoryMovementController(
         return ResponseEntity.noContent().build()
     }
 
+    @GetMapping("/movements")
+    @PreAuthorize("hasAuthority('inventory.movements.view')")
+    fun getMovements(
+        @RequestParam productId: UUID,
+    ): ResponseEntity<List<MovementResponse>> = ResponseEntity.ok(movementService.getMovements(productId))
+
     @GetMapping("/low-stock")
     @PreAuthorize("hasAuthority('inventory.reorder.view')")
     fun getLowStock(): ResponseEntity<List<LowStockEntry>> = ResponseEntity.ok(movementService.getLowStock())

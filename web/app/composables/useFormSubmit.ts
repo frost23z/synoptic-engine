@@ -1,4 +1,12 @@
+import type { ZodType } from 'zod'
 import type { Validator } from '~/utils/validators'
+
+/** A field→validators map (legacy) or a Zod schema; both accepted by `validate`. */
+type FormSchema = Record<string, Validator[]> | ZodType
+
+function isZodSchema(schema: FormSchema): schema is ZodType {
+    return typeof (schema as { safeParse?: unknown }).safeParse === 'function'
+}
 
 /** RFC-7807 ProblemDetail as returned by the backend GlobalExceptionHandler. */
 interface ProblemDetail {
@@ -47,12 +55,23 @@ export function useFormSubmit(options: FormSubmitOptions = {}) {
         errors.value = {}
     }
 
-    /** Run a field→validators schema against `state`; fills `errors`, returns validity. */
-    function validate(
-        state: Record<string, unknown>,
-        schema: Record<string, Validator[]>
-    ): boolean {
+    /**
+     * Validate `state` against either a Zod schema or a field→validators map;
+     * fills `errors` (keyed by field) and returns validity. Prefer Zod schemas
+     * for new forms; the validator-map form is kept for backward compatibility.
+     */
+    function validate(state: Record<string, unknown>, schema: FormSchema): boolean {
         clearErrors()
+        if (isZodSchema(schema)) {
+            const result = schema.safeParse(state)
+            if (result.success) return true
+            for (const issue of result.error.issues) {
+                const field = issue.path[0]
+                if (typeof field === 'string' && !errors.value[field])
+                    errors.value[field] = issue.message
+            }
+            return false
+        }
         let valid = true
         for (const [field, validators] of Object.entries(schema)) {
             for (const validator of validators) {
