@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { PageResponse } from '~/types/api'
 import type { OrganizationResponse } from '~/types/contacts'
 import type { ActivityResponse } from '~/types/activities'
 import { email, required, url } from '~/utils/validators'
@@ -29,7 +30,9 @@ useHead({ title: pageTitle })
 const activeTab = ref<'details' | 'activities'>('details')
 
 const { data: orgActivities } = await useAsyncData<ActivityResponse[]>(`org-${id}-activities`, () =>
-    api<ActivityResponse[]>(`/api/contacts/organizations/${id}/activities`)
+    api<PageResponse<ActivityResponse>>(`/api/contacts/organizations/${id}/activities`).then(
+        (p) => p.content
+    )
 )
 
 // ── Edit ──────────────────────────────────────────────────────────────────

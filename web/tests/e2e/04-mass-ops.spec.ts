@@ -10,8 +10,10 @@ async function checkMassOpsBar(
     await page.goto(listUrl)
     const checkboxes = page.getByRole('checkbox')
     const checkboxCount = await checkboxes.count()
-    if (checkboxCount === 0) {
-        // No rows in DB — skip gracefully
+    // An empty selectable table still renders the header "select-all" checkbox
+    // (index 0); a data row only exists at index >= 1. Skip when there are no rows.
+    if (checkboxCount <= 1) {
+        // No data rows in DB — skip gracefully
         test.skip()
         return
     }

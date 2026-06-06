@@ -8,7 +8,7 @@ test.describe('Navigation visibility', () => {
         await expect(page.getByRole('link', { name: 'Persons' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Quotes' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Activities' })).toBeVisible()
-        await expect(page.getByRole('link', { name: 'Mail' })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Mail', exact: true })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Products' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Warehouses' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Users' })).toBeVisible()

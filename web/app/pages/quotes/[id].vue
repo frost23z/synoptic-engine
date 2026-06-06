@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { PageResponse } from '~/types/api'
 import type { QuoteResponse, QuoteStatus } from '~/types/quotes'
 import type { ProductResponse } from '~/types/inventory'
 import { QUOTE_STATUS_COLOR, QUOTE_STATUS_LABEL } from '~/types/quotes'
@@ -26,7 +27,7 @@ const pageTitle = computed(() =>
 useHead({ title: pageTitle })
 
 const { data: products } = await useAsyncData<ProductResponse[]>('quote-products', () =>
-    api<ProductResponse[]>('/api/products')
+    api<PageResponse<ProductResponse>>('/api/products').then((p) => p.content)
 )
 const productMap = computed(() => Object.fromEntries((products.value ?? []).map((p) => [p.id, p])))
 

@@ -5,7 +5,7 @@ test.describe('Cross-tenant Sharing', () => {
     test('Relationships page loads', async ({ page }) => {
         await login(page)
         await page.goto('/sharing/relationships')
-        await expect(page.getByRole('heading', { name: 'Relationships' })).toBeVisible({
+        await expect(page.getByRole('heading', { name: 'Relationships' }).first()).toBeVisible({
             timeout: 10000,
         })
     })
@@ -21,9 +21,11 @@ test.describe('Cross-tenant Sharing', () => {
     test('Cross-tenant Audit page loads', async ({ page }) => {
         await login(page)
         await page.goto('/sharing/audit')
-        await expect(page.getByRole('heading', { name: 'Cross-tenant Audit' })).toBeVisible({
-            timeout: 10000,
-        })
+        await expect(page.getByRole('heading', { name: 'Cross-tenant Audit' }).first()).toBeVisible(
+            {
+                timeout: 10000,
+            }
+        )
     })
 
     test('a record detail can open the Share dialog', async ({ page }) => {

@@ -34,6 +34,34 @@
     — add it manually or grant the scope.
   - remaining create/edit forms still on the old toast pattern (long tail) — see Remaining.
 
+## 2026-06-06 — first real e2e run (devcontainer) + bug fixes
+
+Moved off the web session into the devcontainer, which can actually run the stack
+(docker postgres/mailpit + `./gradlew bootRun` on :8090 + `node .output/server` on :3000).
+**Important: the Playwright suite only works against the built output (`pnpm build` →
+`node .output/server/index.mjs`), not `pnpm dev`.** Run with `E2E_PASSWORD=…` matching
+`api/.env`'s `SYNOPTIC_ADMIN_PASSWORD` (admin user is `admin@synoptic.dev`).
+
+First run was **18 failed / 14 passed**. Root causes + fixes (commit `242a57b`):
+
+- **4 real SSR 500s** — detail/create pages fetched paginated endpoints (`PageResponse
+  { content }`) but typed/consumed them as arrays, so `.map`/`.find` threw on the wrapper
+  object and crashed SSR render. Fixed by reading `.content` (the bug class #57 thought it had
+  cleared): `contacts/persons/create.vue` (organizations), `contacts/organizations/[id].vue`
+  (`/{id}/activities`), `leads/[id].vue` (`/api/activities`), `quotes/[id].vue` (`/api/products`).
+  Verified by rendering the pages with a real token (persons/create + a seeded org both render).
+- **e2e defects** (the suite had never been executed): top-bar `<h1>` route title collides with
+  each page's `<h2>` header → strict-mode violations (fixed with `.first()`/`exact`); mass-ops
+  skip guard must be `<= 1` (empty selectable table still renders the header checkbox);
+  quote/org "find a detail link" selectors matched CTA links → scoped to `table a[href^="/…/"]`.
+
+Now **green: 27 passed / 9 skipped / 0 failed** (skips are honest — empty seed DB has no
+leads/persons/quotes rows, so the data-dependent mass-ops/detail tests skip).
+`pnpm typecheck && pnpm lint && pnpm format:check && pnpm build` all clean.
+
+> Note: this devcontainer has `commit.gpgsign=true` but no gpg-agent, so commits here need
+> `--no-gpg-sign` (or re-sign on push).
+
 ## Current phase: F3 hardening — core done on PR #57 (long tail + CI remain)
 
 ### Checklist — F3 finish (PR #57)
