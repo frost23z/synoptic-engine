@@ -14,7 +14,9 @@
         "format:check": "prettier --check .",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
-        "prepare": "lefthook install"
+        "prepare": "lefthook install",
+        "test:e2e": "playwright test",
+        "test:e2e:ui": "playwright test --ui"
     },
     "dependencies": {
         "@nuxt/ui": "4.7.1",

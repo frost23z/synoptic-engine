@@ -1,0 +1,62 @@
+{
+	"name": "Synoptic Engine",
+	"image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:3": {
+			"moby": false
+		},
+		"ghcr.io/devcontainers/features/java:1": {
+			"version": "25",
+			"jdkDistro": "open"
+		},
+		"ghcr.io/devcontainers/features/node:2": {
+			"version": "lts",
+			"nodeGypDependencies": false,
+			"pnpmVersion": "latest"
+		},
+		"ghcr.io/devcontainers/features/common-utils:2": {},
+		"ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+	},
+
+	"mounts": [
+  		"source=claude-code-config,target=/home/zayed/.claude,type=volume"
+	],
+
+	"forwardPorts": [
+		3000,
+		8090,
+		5432,
+		8025
+	],
+	"portsAttributes": {
+		"3000": { "label": "Nuxt Dev" },
+		"8090": { "label": "Spring Boot API" },
+		"5432": { "label": "Postgres" },
+		"8025": { "label": "Mailpit UI" }
+	},
+
+	"postCreateCommand": "bash .devcontainer/setup.sh",
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"fwcd.kotlin",
+				"vscjava.vscode-java-pack",
+				"vmware.vscode-spring-boot",
+				"Vue.volar",
+				"dbaeumer.vscode-eslint",
+				"esbenp.prettier-vscode",
+				"ms-playwright.playwright"
+			],
+			"settings": {
+				"editor.formatOnSave": true,
+				"editor.defaultFormatter": "esbenp.prettier-vscode",
+				"[kotlin]": {
+					"editor.defaultFormatter": "fwcd.kotlin"
+				},
+				"java.jdt.ls.java.home": "/usr/local/sdkman/candidates/java/current"
+			}
+		}
+	}
+}
