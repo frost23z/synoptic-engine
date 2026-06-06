@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { PageResponse } from '~/types/api'
 import type { OrganizationResponse } from '~/types/contacts'
 import { email, required } from '~/utils/validators'
 
@@ -13,7 +14,7 @@ const { submitting, errors, validate, run } = useFormSubmit({
 })
 
 const { data: orgs } = await useAsyncData<OrganizationResponse[]>('orgs-for-person', () =>
-    api<OrganizationResponse[]>('/api/contacts/organizations')
+    api<PageResponse<OrganizationResponse>>('/api/contacts/organizations').then((p) => p.content)
 )
 const orgOptions = computed(() => orgs.value?.map((o) => ({ label: o.name, value: o.id })) ?? [])
 
