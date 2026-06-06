@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { WarehouseResponse } from '~/types/inventory'
+import { email, required } from '~/utils/validators'
 
 definePageMeta({ title: 'New Warehouse' })
 useHead({ title: 'New Warehouse — Synoptic' })
@@ -7,8 +8,10 @@ useHead({ title: 'New Warehouse — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const router = useRouter()
+const { submitting, errors, validate, run } = useFormSubmit({
+    failureTitle: 'Failed to create warehouse',
+})
 
-const saving = ref(false)
 const form = reactive({
     name: '',
     description: '',
@@ -18,29 +21,31 @@ const form = reactive({
     contactAddress: '',
 })
 
-async function submit() {
-    if (!form.name.trim()) return
-    saving.value = true
-    try {
-        const warehouse = await api<WarehouseResponse>('/api/warehouses', {
-            method: 'POST',
-            body: {
-                name: form.name,
-                description: form.description || undefined,
-                contactName: form.contactName || undefined,
-                contactEmail: form.contactEmail || undefined,
-                contactPhone: form.contactPhone || undefined,
-                contactAddress: form.contactAddress || undefined,
-            },
-        })
-        toast.add({ title: 'Warehouse created', color: 'success' })
-        router.push(`/warehouses/${warehouse.id}`)
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submit() {
+    run({
+        validate: () =>
+            validate(form, {
+                name: [required('Name is required')],
+                contactEmail: [email()],
+            }),
+        call: () =>
+            api<WarehouseResponse>('/api/warehouses', {
+                method: 'POST',
+                body: {
+                    name: form.name,
+                    description: form.description || undefined,
+                    contactName: form.contactName || undefined,
+                    contactEmail: form.contactEmail || undefined,
+                    contactPhone: form.contactPhone || undefined,
+                    contactAddress: form.contactAddress || undefined,
+                },
+            }),
+        fieldHints: ['name', 'contactEmail'],
+        onSuccess: (warehouse) => {
+            toast.add({ title: 'Warehouse created', color: 'success' })
+            router.push(`/warehouses/${warehouse.id}`)
+        },
+    })
 }
 </script>
 
@@ -48,7 +53,7 @@ async function submit() {
     <AppDetailLayout to="/warehouses" title="New Warehouse" root-class="mx-auto max-w-xl space-y-6">
         <UCard>
             <form class="space-y-4" @submit.prevent="submit">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput
                         v-model="form.name"
                         placeholder="e.g. Main Distribution Center"
@@ -62,7 +67,7 @@ async function submit() {
                     <UFormField label="Contact name">
                         <UInput v-model="form.contactName" placeholder="Jane Doe" class="w-full" />
                     </UFormField>
-                    <UFormField label="Contact email">
+                    <UFormField label="Contact email" :error="errors.contactEmail">
                         <UInput
                             v-model="form.contactEmail"
                             type="email"
@@ -89,7 +94,7 @@ async function submit() {
                     <UButton color="neutral" variant="outline" label="Cancel" to="/warehouses" />
                     <UButton
                         label="Create Warehouse"
-                        :loading="saving"
+                        :loading="submitting"
                         :disabled="!form.name.trim()"
                         @click="submit"
                     />

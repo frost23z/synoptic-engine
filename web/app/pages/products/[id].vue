@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ProductResponse } from '~/types/inventory'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Product' })
 
@@ -27,8 +28,20 @@ useHead({ title: pageTitle })
 
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editing = ref(false)
-const saving = ref(false)
-const editForm = reactive({ name: '', description: '', price: 0, sku: '', active: true })
+const {
+    submitting: saving,
+    errors,
+    validate,
+    run,
+} = useFormSubmit({ failureTitle: 'Failed to save product' })
+const editForm = reactive({
+    name: '',
+    description: '',
+    price: 0,
+    sku: '',
+    isActive: true,
+    reorder: 0,
+})
 
 function openEdit() {
     if (!product.value) return
@@ -37,33 +50,34 @@ function openEdit() {
         description: product.value.description ?? '',
         price: product.value.price ?? 0,
         sku: product.value.sku ?? '',
-        active: product.value.active,
+        isActive: product.value.isActive,
+        reorder: product.value.reorderThreshold ?? 0,
     })
     editing.value = true
 }
 
-async function submitEdit() {
-    saving.value = true
-    try {
-        await api(`/api/products/${id}`, {
-            method: 'PUT',
-            body: {
-                name: editForm.name,
-                description: editForm.description || undefined,
-                price: editForm.price,
-                sku: editForm.sku || undefined,
-                active: editForm.active,
-            },
-        })
-        toast.add({ title: 'Saved', color: 'success' })
-        editing.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to save', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submitEdit() {
+    run({
+        validate: () => validate(editForm, { name: [required('Name is required')] }),
+        call: () =>
+            api(`/api/products/${id}`, {
+                method: 'PUT',
+                body: {
+                    name: editForm.name,
+                    description: editForm.description || undefined,
+                    price: editForm.price,
+                    sku: editForm.sku || undefined,
+                    isActive: editForm.isActive,
+                    reorderThreshold: editForm.reorder || undefined,
+                },
+            }),
+        fieldHints: ['sku', 'name'],
+        onSuccess: () => {
+            toast.add({ title: 'Saved', color: 'success' })
+            editing.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -131,8 +145,8 @@ const {
                             <dt class="text-muted">Status</dt>
                             <dd class="mt-0.5">
                                 <UBadge
-                                    :label="product.active ? 'Active' : 'Inactive'"
-                                    :color="product.active ? 'success' : 'neutral'"
+                                    :label="product.isActive ? 'Active' : 'Inactive'"
+                                    :color="product.isActive ? 'success' : 'neutral'"
                                     variant="soft"
                                     size="sm"
                                 />
@@ -165,13 +179,13 @@ const {
             @confirm="submitEdit"
         >
             <form class="space-y-3" @submit.prevent="submitEdit">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="editForm.name" class="w-full" />
                 </UFormField>
                 <UFormField label="Description">
                     <UTextarea v-model="editForm.description" :rows="3" class="w-full" />
                 </UFormField>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-3 gap-3">
                     <UFormField label="Price">
                         <UInput
                             v-model.number="editForm.price"
@@ -180,11 +194,19 @@ const {
                             class="w-full"
                         />
                     </UFormField>
-                    <UFormField label="SKU">
+                    <UFormField label="SKU" :error="errors.sku">
                         <UInput v-model="editForm.sku" class="w-full" />
                     </UFormField>
+                    <UFormField label="Reorder at">
+                        <UInput
+                            v-model.number="editForm.reorder"
+                            type="number"
+                            min="0"
+                            class="w-full"
+                        />
+                    </UFormField>
                 </div>
-                <USwitch v-model="editForm.active" label="Active" />
+                <USwitch v-model="editForm.isActive" label="Active" />
             </form>
         </AppConfirmModal>
 

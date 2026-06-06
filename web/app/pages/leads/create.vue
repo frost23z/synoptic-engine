@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import type { PageResponse } from '~/types/api'
 import type { PersonResponse, OrganizationResponse } from '~/types/contacts'
-import type { StageResponse } from '~/types/leads'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'New Lead' })
 useHead({ title: 'New Lead — Synoptic' })
@@ -8,41 +9,32 @@ useHead({ title: 'New Lead — Synoptic' })
 const api = useApi()
 const toast = useToast()
 const router = useRouter()
+const { submitting, errors, validate, run } = useFormSubmit({
+    failureTitle: 'Failed to create lead',
+})
 
-const { data: pipelines } = await useAsyncData('create-pipelines', () =>
-    api<{ id: string; name: string }[]>('/api/pipelines')
-)
+// Pipelines / sources / types come from the shared domain cache (fetched once).
+const { pipelines, pipelineOptions, sourceOptions, typeOptions, defaultPipeline, loadLeadLookups } =
+    useDomainLookups()
+await loadLeadLookups()
+
+// Contacts/orgs are paginated (PageResponse) — pull a generous page for the selects.
 const { data: persons } = await useAsyncData<PersonResponse[]>('create-persons', () =>
-    api<PersonResponse[]>('/api/contacts/persons')
+    api<PageResponse<PersonResponse>>('/api/contacts/persons', { params: { size: 500 } }).then(
+        (p) => p.content
+    )
 )
 const { data: orgs } = await useAsyncData<OrganizationResponse[]>('create-orgs', () =>
-    api<OrganizationResponse[]>('/api/contacts/organizations')
-)
-const { data: sources } = await useAsyncData<{ id: string; name: string }[]>('create-sources', () =>
-    api<{ id: string; name: string }[]>('/api/lead-sources')
-)
-const { data: leadTypes } = await useAsyncData<{ id: string; name: string }[]>('create-types', () =>
-    api<{ id: string; name: string }[]>('/api/lead-types')
+    api<PageResponse<OrganizationResponse>>('/api/contacts/organizations', {
+        params: { size: 500 },
+    }).then((p) => p.content)
 )
 
-const pipelineOptions = computed(
-    () => pipelines.value?.map((p) => ({ label: p.name, value: p.id })) ?? []
-)
 const personOptions = computed(
     () => persons.value?.map((p) => ({ label: p.fullName, value: p.id })) ?? []
 )
 const orgOptions = computed(() => orgs.value?.map((o) => ({ label: o.name, value: o.id })) ?? [])
-const sourceOptions = computed(
-    () => sources.value?.map((s) => ({ label: s.name, value: s.id })) ?? []
-)
-const typeOptions = computed(
-    () => leadTypes.value?.map((t) => ({ label: t.name, value: t.id })) ?? []
-)
 
-const stages = ref<StageResponse[]>([])
-const stageOptions = computed(() => stages.value.map((s) => ({ label: s.name, value: s.id })))
-
-const saving = ref(false)
 const form = reactive({
     title: '',
     description: '',
@@ -56,59 +48,53 @@ const form = reactive({
     leadTypeId: '',
 })
 
+// Stages are embedded in each pipeline from the list endpoint — no extra call.
+const stageOptions = computed(() => {
+    const pipeline = pipelines.value.find((p) => p.id === form.pipelineId)
+    return (pipeline?.stages ?? []).map((s) => ({ label: s.name, value: s.id }))
+})
+
 watch(
     () => form.pipelineId,
-    async (pid) => {
-        if (!pid) {
-            stages.value = []
-            form.stageId = ''
-            return
-        }
-        const s = await api<StageResponse[]>(`/api/pipelines/${pid}/stages`)
-        stages.value = s
-        form.stageId = s[0]?.id ?? ''
+    (pid) => {
+        const pipeline = pipelines.value.find((p) => p.id === pid)
+        form.stageId = pipeline?.stages?.[0]?.id ?? ''
     }
 )
 
-// Auto-select default pipeline on load
+// Pre-select the tenant's default (or first) pipeline once lookups are loaded.
 watch(
-    pipelines,
-    (ps) => {
-        if (ps?.length && !form.pipelineId) {
-            const def =
-                ps.find((p: { id: string; name: string; default?: boolean }) => p.default) ?? ps[0]
-            if (def) form.pipelineId = def.id
-        }
+    defaultPipeline,
+    (def) => {
+        if (def && !form.pipelineId) form.pipelineId = def.id
     },
     { immediate: true }
 )
 
-async function submit() {
-    saving.value = true
-    try {
-        const lead = await api<{ id: string }>('/api/leads', {
-            method: 'POST',
-            body: {
-                title: form.title,
-                description: form.description || undefined,
-                amount: form.amount ? Number(form.amount) : undefined,
-                expectedCloseDate: form.expectedCloseDate || undefined,
-                pipelineId: form.pipelineId || undefined,
-                stageId: form.stageId || undefined,
-                personId: form.personId || undefined,
-                organizationId: form.organizationId || undefined,
-                leadSourceId: form.leadSourceId || undefined,
-                leadTypeId: form.leadTypeId || undefined,
-            },
-        })
-        toast.add({ title: 'Lead created', color: 'success' })
-        router.push(`/leads/${lead.id}`)
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submit() {
+    run({
+        validate: () => validate(form, { title: [required('Title is required')] }),
+        call: () =>
+            api<{ id: string }>('/api/leads', {
+                method: 'POST',
+                body: {
+                    title: form.title,
+                    description: form.description || undefined,
+                    amount: form.amount ? Number(form.amount) : undefined,
+                    expectedCloseDate: form.expectedCloseDate || undefined,
+                    pipelineId: form.pipelineId || undefined,
+                    stageId: form.stageId || undefined,
+                    personId: form.personId || undefined,
+                    organizationId: form.organizationId || undefined,
+                    leadSourceId: form.leadSourceId || undefined,
+                    leadTypeId: form.leadTypeId || undefined,
+                },
+            }),
+        onSuccess: (lead) => {
+            toast.add({ title: 'Lead created', color: 'success' })
+            router.push(`/leads/${lead.id}`)
+        },
+    })
 }
 </script>
 
@@ -116,7 +102,7 @@ async function submit() {
     <AppDetailLayout to="/leads" title="New Lead" root-class="mx-auto max-w-xl space-y-6">
         <UCard>
             <form class="space-y-4" @submit.prevent="submit">
-                <UFormField label="Title" required>
+                <UFormField label="Title" required :error="errors.title">
                     <UInput
                         v-model="form.title"
                         placeholder="e.g. ACME Corp Expansion"
@@ -154,7 +140,7 @@ async function submit() {
                             v-model="form.stageId"
                             :items="stageOptions"
                             placeholder="Select stage"
-                            :disabled="!stages.length"
+                            :disabled="!stageOptions.length"
                             class="w-full"
                         />
                     </UFormField>
@@ -197,7 +183,7 @@ async function submit() {
                     <UButton color="neutral" variant="outline" label="Cancel" to="/leads" />
                     <UButton
                         label="Create Lead"
-                        :loading="saving"
+                        :loading="submitting"
                         :disabled="!form.title"
                         @click="submit"
                     />

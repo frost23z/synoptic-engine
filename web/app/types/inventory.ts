@@ -7,7 +7,8 @@ export interface ProductResponse {
     description?: string
     price: number
     sku?: string
-    active: boolean
+    isActive: boolean
+    reorderThreshold?: number
     createdAt: string
     updatedAt: string
 }

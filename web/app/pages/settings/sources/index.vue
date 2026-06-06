@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Lead Sources' })
 useHead({ title: 'Lead Sources — Synoptic' })
@@ -8,6 +9,9 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const { submitting, errors, validate, run, clearErrors } = useFormSubmit({
+    failureTitle: 'Failed to save source',
+})
 
 interface LeadSourceResponse {
     id: string
@@ -25,58 +29,57 @@ const {
 
 // ── Create ────────────────────────────────────────────────────────────────
 const createOpen = ref(false)
-const creating = ref(false)
 const createName = ref('')
 
 function openCreate() {
+    clearErrors()
     createName.value = ''
     createOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
-    try {
-        await api('/api/lead-sources', { method: 'POST', body: { name: createName.value } })
-        toast.add({ title: 'Source created', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        creating.value = false
-    }
+function submitCreate() {
+    run({
+        validate: () =>
+            validate({ name: createName.value }, { name: [required('Name is required')] }),
+        call: () => api('/api/lead-sources', { method: 'POST', body: { name: createName.value } }),
+        fieldHints: ['name'],
+        onSuccess: () => {
+            toast.add({ title: 'Source created', color: 'success' })
+            createOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editOpen = ref(false)
-const saving = ref(false)
 const editTarget = shallowRef<LeadSourceResponse | null>(null)
 const editName = ref('')
 
 function openEdit(s: LeadSourceResponse) {
+    clearErrors()
     editTarget.value = s
     editName.value = s.name
     editOpen.value = true
 }
 
-async function submitEdit() {
+function submitEdit() {
     if (!editTarget.value) return
-    saving.value = true
-    try {
-        await api(`/api/lead-sources/${editTarget.value.id}`, {
-            method: 'PUT',
-            body: { name: editName.value },
-        })
-        toast.add({ title: 'Source updated', color: 'success' })
-        editOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to update', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+    run({
+        validate: () =>
+            validate({ name: editName.value }, { name: [required('Name is required')] }),
+        call: () =>
+            api(`/api/lead-sources/${editTarget.value!.id}`, {
+                method: 'PUT',
+                body: { name: editName.value },
+            }),
+        fieldHints: ['name'],
+        onSuccess: () => {
+            toast.add({ title: 'Source updated', color: 'success' })
+            editOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -148,11 +151,11 @@ function rowActions(s: LeadSourceResponse): DropdownMenuItem[][] {
             v-model:open="createOpen"
             title="New Lead Source"
             confirm-label="Create"
-            :loading="creating"
+            :loading="submitting"
             :confirm-disabled="!createName.trim()"
             @confirm="submitCreate"
         >
-            <UFormField label="Name" required>
+            <UFormField label="Name" required :error="errors.name">
                 <UInput
                     v-model="createName"
                     placeholder="e.g. Website, Cold Call, Referral"
@@ -166,11 +169,11 @@ function rowActions(s: LeadSourceResponse): DropdownMenuItem[][] {
             v-model:open="editOpen"
             title="Edit Lead Source"
             confirm-label="Save"
-            :loading="saving"
+            :loading="submitting"
             :confirm-disabled="!editName.trim()"
             @confirm="submitEdit"
         >
-            <UFormField label="Name" required>
+            <UFormField label="Name" required :error="errors.name">
                 <UInput v-model="editName" class="w-full" @keydown.enter="submitEdit" />
             </UFormField>
         </AppConfirmModal>
