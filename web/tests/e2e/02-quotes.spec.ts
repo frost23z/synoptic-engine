@@ -5,7 +5,8 @@ test.describe('Quote actions', () => {
     test('quote detail page shows Download PDF button', async ({ page }) => {
         await login(page)
         await page.goto('/quotes')
-        const firstLink = page.getByRole('link').filter({ hasText: /quote/i }).first()
+        const firstLink = page.locator('table a[href^="/quotes/"]').first()
+        await firstLink.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
         if ((await firstLink.count()) === 0) {
             test.skip()
             return
@@ -17,7 +18,8 @@ test.describe('Quote actions', () => {
     test('quote detail page shows Send button', async ({ page }) => {
         await login(page)
         await page.goto('/quotes')
-        const firstLink = page.getByRole('link').filter({ hasText: /quote/i }).first()
+        const firstLink = page.locator('table a[href^="/quotes/"]').first()
+        await firstLink.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
         if ((await firstLink.count()) === 0) {
             test.skip()
             return

@@ -173,7 +173,10 @@ const shareOpen = ref(false)
 // ── Activities ────────────────────────────────────────────────────────────
 const { data: activities, refresh: refreshActivities } = await useAsyncData<ActivityResponse[]>(
     `lead-${id}-activities`,
-    () => api<ActivityResponse[]>('/api/activities', { params: { leadId: id, size: 50 } })
+    () =>
+        api<PageResponse<ActivityResponse>>('/api/activities', {
+            params: { leadId: id, size: 50 },
+        }).then((p) => p.content)
 )
 
 const addActivityOpen = ref(false)
