@@ -7,8 +7,11 @@ import type {
     UserResponse,
     ViewPermission,
 } from '~/types/settings'
+import { email, minLength, required } from '~/utils/validators'
 
 definePageMeta({ title: 'Users' })
+
+const PASSWORD_MIN = minLength(8, 'Password must be at least 8 characters')
 useHead({ title: 'Users — Synoptic' })
 
 const api = useApi()
@@ -49,7 +52,13 @@ const VIEW_PERMISSIONS: { label: string; value: ViewPermission }[] = [
 
 // ── Create ────────────────────────────────────────────────────────────────
 const createOpen = ref(false)
-const creating = ref(false)
+const {
+    submitting: creating,
+    errors: createErrors,
+    validate: validateCreate,
+    run: runCreate,
+    clearErrors: clearCreate,
+} = useFormSubmit({ failureTitle: 'Failed to create user' })
 const createForm = reactive({
     email: '',
     password: '',
@@ -59,6 +68,7 @@ const createForm = reactive({
 })
 
 function openCreate() {
+    clearCreate()
     Object.assign(createForm, {
         email: '',
         password: '',
@@ -69,35 +79,46 @@ function openCreate() {
     createOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
-    try {
-        await api('/api/users', {
-            method: 'POST',
-            body: {
-                email: createForm.email,
-                password: createForm.password,
-                firstName: createForm.firstName,
-                lastName: createForm.lastName,
-                roles: createForm.roles,
-            },
-        })
-        toast.add({ title: 'User created', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create user', description: e?.data?.message, color: 'error' })
-    } finally {
-        creating.value = false
-    }
+function submitCreate() {
+    runCreate({
+        validate: () =>
+            validateCreate(createForm, {
+                firstName: [required('First name is required')],
+                lastName: [required('Last name is required')],
+                email: [required('Email is required'), email()],
+                password: [required('Password is required'), PASSWORD_MIN],
+            }),
+        call: () =>
+            api('/api/users', {
+                method: 'POST',
+                body: {
+                    email: createForm.email,
+                    password: createForm.password,
+                    firstName: createForm.firstName,
+                    lastName: createForm.lastName,
+                    roles: createForm.roles,
+                },
+            }),
+        fieldHints: ['email', 'password'],
+        onSuccess: () => {
+            toast.add({ title: 'User created', color: 'success' })
+            createOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Edit ────────────────────────────────────────────────────────────────
 const editOpen = ref(false)
-const saving = ref(false)
 const loadingDetail = ref(false)
 const editId = ref<string | null>(null)
+const {
+    submitting: saving,
+    errors: editErrors,
+    validate: validateEdit,
+    run: runEdit,
+    clearErrors: clearEdit,
+} = useFormSubmit({ failureTitle: 'Failed to update user' })
 const editForm = reactive({
     firstName: '',
     lastName: '',
@@ -108,6 +129,7 @@ const editForm = reactive({
 })
 
 async function openEdit(u: UserResponse) {
+    clearEdit()
     editId.value = u.id
     editOpen.value = true
     loadingDetail.value = true
@@ -129,66 +151,76 @@ async function openEdit(u: UserResponse) {
     }
 }
 
-async function submitEdit() {
-    if (!editId.value) return
-    saving.value = true
-    try {
-        await api(`/api/users/${editId.value}`, {
-            method: 'PUT',
-            body: {
-                firstName: editForm.firstName,
-                lastName: editForm.lastName,
-                phone: editForm.phone || undefined,
-                roles: editForm.roles,
-                groups: editForm.groups,
-                viewPermission: editForm.viewPermission,
-            },
-        })
-        toast.add({ title: 'User updated', color: 'success' })
-        editOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to update user', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submitEdit() {
+    const uid = editId.value
+    if (!uid) return
+    runEdit({
+        validate: () =>
+            validateEdit(editForm, {
+                firstName: [required('First name is required')],
+                lastName: [required('Last name is required')],
+            }),
+        call: () =>
+            api(`/api/users/${uid}`, {
+                method: 'PUT',
+                body: {
+                    firstName: editForm.firstName,
+                    lastName: editForm.lastName,
+                    phone: editForm.phone || undefined,
+                    roles: editForm.roles,
+                    groups: editForm.groups,
+                    viewPermission: editForm.viewPermission,
+                },
+            }),
+        onSuccess: () => {
+            toast.add({ title: 'User updated', color: 'success' })
+            editOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Set password ──────────────────────────────────────────────────────────
 const passwordOpen = ref(false)
-const savingPassword = ref(false)
 const passwordId = ref<string | null>(null)
 const passwordName = ref('')
 const newPassword = ref('')
+const {
+    submitting: savingPassword,
+    errors: pwErrors,
+    validate: validatePw,
+    run: runPw,
+    clearErrors: clearPw,
+} = useFormSubmit({ failureTitle: 'Failed to set password' })
 
 function openPassword(u: UserResponse) {
+    clearPw()
     passwordId.value = u.id
     passwordName.value = u.fullName
     newPassword.value = ''
     passwordOpen.value = true
 }
 
-async function submitPassword() {
-    if (!passwordId.value) return
-    savingPassword.value = true
-    try {
-        await api(`/api/users/${passwordId.value}/password`, {
-            method: 'PUT',
-            body: { password: newPassword.value },
-        })
-        toast.add({ title: 'Password updated', color: 'success' })
-        passwordOpen.value = false
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({
-            title: 'Failed to set password',
-            description: e?.data?.message,
-            color: 'error',
-        })
-    } finally {
-        savingPassword.value = false
-    }
+function submitPassword() {
+    const uid = passwordId.value
+    if (!uid) return
+    runPw({
+        validate: () =>
+            validatePw(
+                { password: newPassword.value },
+                { password: [required('Password is required'), PASSWORD_MIN] }
+            ),
+        call: () =>
+            api(`/api/users/${uid}/password`, {
+                method: 'PUT',
+                body: { password: newPassword.value },
+            }),
+        fieldHints: ['password'],
+        onSuccess: () => {
+            toast.add({ title: 'Password updated', color: 'success' })
+            passwordOpen.value = false
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -295,14 +327,14 @@ function rowActions(u: UserResponse): DropdownMenuItem[][] {
         >
             <form class="space-y-3" @submit.prevent="submitCreate">
                 <div class="grid grid-cols-2 gap-3">
-                    <UFormField label="First name" required>
+                    <UFormField label="First name" required :error="createErrors.firstName">
                         <UInput v-model="createForm.firstName" placeholder="John" class="w-full" />
                     </UFormField>
-                    <UFormField label="Last name" required>
+                    <UFormField label="Last name" required :error="createErrors.lastName">
                         <UInput v-model="createForm.lastName" placeholder="Doe" class="w-full" />
                     </UFormField>
                 </div>
-                <UFormField label="Email" required>
+                <UFormField label="Email" required :error="createErrors.email">
                     <UInput
                         v-model="createForm.email"
                         type="email"
@@ -310,7 +342,7 @@ function rowActions(u: UserResponse): DropdownMenuItem[][] {
                         class="w-full"
                     />
                 </UFormField>
-                <UFormField label="Password" required>
+                <UFormField label="Password" required :error="createErrors.password">
                     <UInput
                         v-model="createForm.password"
                         type="password"
@@ -346,10 +378,10 @@ function rowActions(u: UserResponse): DropdownMenuItem[][] {
             </div>
             <form v-else class="space-y-3" @submit.prevent="submitEdit">
                 <div class="grid grid-cols-2 gap-3">
-                    <UFormField label="First name" required>
+                    <UFormField label="First name" required :error="editErrors.firstName">
                         <UInput v-model="editForm.firstName" class="w-full" />
                     </UFormField>
-                    <UFormField label="Last name" required>
+                    <UFormField label="Last name" required :error="editErrors.lastName">
                         <UInput v-model="editForm.lastName" class="w-full" />
                     </UFormField>
                 </div>
@@ -399,7 +431,7 @@ function rowActions(u: UserResponse): DropdownMenuItem[][] {
                     <strong class="text-highlighted">{{ passwordName }}</strong
                     >.
                 </p>
-                <UFormField label="New password" required>
+                <UFormField label="New password" required :error="pwErrors.password">
                     <UInput
                         v-model="newPassword"
                         type="password"

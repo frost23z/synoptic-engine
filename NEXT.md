@@ -17,18 +17,43 @@
 - **F2-P3 settings/admin** — ✅ done, merged (#55) (see notes below).
 - **F2-P4 dashboard** — ✅ done on `claude/zealous-gauss-ZoY6r` / **PR #56**: full Krayin-parity
   dashboard (the 8 stat types + recent activity), gated `reports.view`.
-- **F3 hardening** — in progress (all on PR #56 unless noted):
+- **F3 hardening** — mostly done (mechanism on #56; rollout + cache + e2e + CI on **PR #57**):
   - single-flight token refresh ✅ (#52)
-  - error boundary + fallback error page ✅
-  - mobile/stacked tables ✅ (AppListTable auto-collapses under `md`)
-  - form validation + server-error mapping ✅ (mechanism + Person/Org create as reference pages)
-  - Playwright coverage raised ✅ (dashboard + form-validation specs)
-  - **CI workflow** — written, still NOT pushable from web sessions (OAuth lacks `workflow`
-    scope; the remote rejects `.github/workflows/*`). YAML preserved below — add it manually or
-    grant the scope.
-  - light domain caching for hot lookups — still TODO.
+  - error boundary + fallback error page ✅ (#56)
+  - mobile/stacked tables ✅ (#56, AppListTable auto-collapses under `md`)
+  - form validation + server-error mapping ✅ — mechanism (#56) + **rolled out to all entity
+    create/edit forms** (#57): leads/products/warehouses/quotes create, the persons/orgs/products/
+    warehouses/leads detail edit modals, the quote send-mail modal, and settings sources/types.
+  - light domain cache for hot lookups ✅ (#57) — `useDomainLookups` (pipelines/sources/types/users
+    in shared `useState`, fetched once); consumed by leads create + leads detail.
+  - Playwright coverage raised ✅ — dashboard + form specs (#56) + **auth / leads CRUD / quote send /
+    sharing** (#57).
+  - **CI workflow** — written (web checks + `api · testClasses`), still NOT pushable from web
+    sessions (OAuth **and** the GitHub App token lack `workflow`/`workflows` perms; both `git push`
+    and the contents/git-data APIs reject `.github/workflows/*` → 404). Updated YAML preserved below
+    — add it manually or grant the scope.
+  - remaining create/edit forms still on the old toast pattern (long tail) — see Remaining.
 
-## Current phase: F2-P4 (dashboard) ✅ COMPLETE + F3 hardening (in progress) — PR #56
+## Current phase: F3 hardening — core done on PR #57 (long tail + CI remain)
+
+### Checklist — F3 finish (PR #57)
+
+- [x] **`useDomainLookups`** — shared `useState` cache for pipelines (with embedded stages), lead
+      sources, lead types, users; idempotent loaders + `nuxtApp`-scoped in-flight de-dupe;
+      `*Options` / `defaultPipeline` / `userName`. Wired into leads create + leads detail.
+- [x] **Validation rollout** — `useFormSubmit` + `validators` on: leads/products/warehouses/quotes
+      **create**; persons/orgs/products/warehouses/leads **detail edits**; the quote **send-mail**
+      modal; settings **sources / types / tags / pipelines / users (create+edit+password) / roles /
+      groups**; and the sharing USP forms **`ShareRecordModal`** (share+reshare) + **relationships**
+      request. All map ProblemDetail → fields (no generic toast).
+- [x] **Contract fixes** (verified vs `api-docs.json`): `PageResponse` `.content` on leads/persons/
+      orgs/products selects; stages from `pipeline.stages` (not the POST-only `/stages` 405);
+      `ProductResponse.isActive` drift (badge + edit key); default pipeline via `isDefault`;
+      quote `discount`/`tax`/`adjustment` always sent (all required).
+- [x] **Playwright** — `07-auth`, `08-leads-crud`, `09-quote-send`, `10-sharing` (live-API, resilient).
+- [ ] **CI** — `.github/workflows/ci.yml` written (web + `api · testClasses`) but **un-pushable**
+      this session (no `workflow`/`workflows` scope on either OAuth push or the App API). YAML below.
+- [ ] **Long tail** — remaining settings/sharing/inventory create-edit forms (see Remaining).
 
 ### Checklist — F2-P4 dashboard (PR #56)
 
@@ -67,6 +92,11 @@
 
 ### CI workflow (paste to `/.github/workflows/ci.yml` — needs `workflow` scope to push)
 
+> Tried to land it from this session both ways and both were rejected: `git push`
+> (`refusing to allow an OAuth App to create or update workflow … without workflow scope`)
+> and the GitHub MCP contents/git-data APIs (`404` — the App installation token lacks
+> `workflows: write`). Add this file from a local checkout, or grant the scope.
+
 ```yaml
 name: CI
 
@@ -102,6 +132,22 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm build
+
+  api:
+    name: api · compile + test classes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      # Compiles main + test sources (no DB/containers needed) for a fast signal.
+      - run: ./gradlew --no-daemon testClasses
 ```
 
 ## Notes for the next dev
@@ -118,12 +164,32 @@ jobs:
 
 ### Validation (F3)
 
-- Roll `useFormSubmit` + `validators` out to the **remaining create/edit forms** (only Person/Org
-  create are done as references). For pages already using `UForm`, call `applyError(err, …)` then map
-  `errors.value` onto `form.setErrors(...)` instead of binding `:error` manually.
+- `useFormSubmit` + `validators` is now on every entity create/edit form plus the identity admin
+  (users/roles/groups), lead config (sources/types/tags/pipelines) and sharing USP forms
+  (`ShareRecordModal`, relationships). The codebase has **no `<UForm>` pages** — everything is a
+  plain `<form>` binding `errors[field]` to `UFormField :error`, so follow those references when
+  finishing the long tail (settings web-forms/email-templates/marketing/workflows/webhooks/imports/
+  config/tenants/attributes, `pipelines/[id]` stage modals, inventory stock/transfers).
+- For a single shared `errors` across two mutually-exclusive modals on one page (create + edit),
+  reuse one `useFormSubmit` and call `clearErrors()` in each `open*` (see `settings/sources`).
 - Backend error contract (`shared/web/GlobalExceptionHandler.kt`): 422 → ProblemDetail with an
   `errors` **map** (`field → message`, not `string[]`); 409/400 carry `detail` only (no field), hence
   `fieldHints` keyword-matching for things like duplicate-email.
+
+### Domain cache (F3) — `useDomainLookups`
+
+- Shared `useState`-backed cache for the hot lookups (pipelines **with embedded stages**, lead
+  sources, lead types, users). Loaders are idempotent + de-duped via a `nuxtApp`-scoped in-flight
+  map; `invalidate(...keys)` drops a list after a mutation. Exposes `*Options`, `defaultPipeline`,
+  `userName(id)`. `loadUsers()` is gated by `users.view` — only call it behind a `can()` check.
+- **Contract fixes shipped alongside the rollout (verified against `api-docs.json`):**
+  `/api/leads`, `/api/products`, `/api/contacts/persons`, `/api/contacts/organizations` all return
+  **`PageResponse`** (`{ content }`) — the create/detail pages cast them as arrays and got empty
+  selects; now read `.content`. Lead stages read from the embedded `pipeline.stages` (the
+  `/api/pipelines` list includes them) — `GET /api/pipelines/{id}/stages` is **POST-only (405)**.
+  `ProductResponse.active` was drifted → the real field is **`isActive`** (the Active badge was
+  always wrong and product edits sent the wrong key); product create/edit now send `isActive`
+  (+ optional `reorderThreshold`). Default pipeline keys off `isDefault`, not the legacy `default`.
 
 ### Settings/admin (F2-P3, still relevant)
 
@@ -133,41 +199,51 @@ jobs:
   not just `*Permissions.kt`.
 - **Kotlin/Jackson dual-boolean:** response DTOs use `isActive`/`isDefault`/`isDone` (the `required`
   keys in the OpenAPI spec). Old hand-written types used `active`/`default`/`done` — align to the spec.
-- **Pre-existing, out of scope (spotted, not fixed):**
-  - `leads/index.vue`, `leads/[id].vue`, `leads/create.vue` call `GET /api/pipelines/{id}/stages`,
-    but the custom `PipelineController` only exposes `POST` there → likely 405. Read stages from
-    `GET /api/pipelines/{id}` (`.stages`) like the pipeline detail page does.
-  - `leads/create.vue` reads `p.default` off `/api/pipelines` — use `isDefault`.
-  - `quotes/create.vue` casts `/api/products` and `/api/leads` as arrays but both return
-    `PageResponse` (`{ content }`) → selects likely empty.
-  - `web-forms/index.vue` still uses `active`/`predefined` field names — verify against the WebForm DTO.
+- **Pre-existing contract bugs — FIXED in #57:** the `GET /api/pipelines/{id}/stages` 405 (now read
+  the embedded `pipeline.stages`) in `leads/create|[id]`; `leads/create` `p.default` → `isDefault`;
+  the `PageResponse`-as-array empty selects in `leads/create`, `leads/[id]`, `persons/[id]`,
+  `quotes/create`; and the `ProductResponse.active` → `isActive` drift on products list/detail/create.
+  - Still **not** verified: `leads/index.vue` stage usage (didn't touch the kanban path this PR);
+    `web-forms/index.vue` `active`/`predefined` field names — check against the WebForm DTO.
 
 ## Remaining
 
-- **F3 finish:** roll validation out across the rest of the create/edit forms; add light domain
-  caching for hot lookups (pipelines/sources/types/users); raise Playwright coverage further (auth,
-  leads CRUD, quote send, sharing); **activate the CI workflow** (grant `workflow` scope or add the
-  YAML above manually — consider adding a backend `./gradlew testClasses` job too).
+- **Validation long tail:** the remaining create/edit forms not yet converted — settings
+  `pipelines/[id]` (add/edit-stage + edit-pipeline modals), `web-forms`, `email-templates`,
+  `marketing`, `workflows` (+`[id]`), `webhooks` (+`[id]`), `imports`, `config`, `tenants`,
+  `attributes`; inventory `stock` + `transfers`; `quotes/[id]` line-item edit. Same plain-`<form>` +
+  `:error` pattern as the converted pages; reuse one `useFormSubmit` with `clearErrors()` for paired
+  create/edit modals (see `settings/groups`/`roles`), or several scoped instances when a page has
+  multiple independent forms (see `settings/users`).
+- **CI:** land `.github/workflows/ci.yml` (YAML above) — blocked on the `workflow`/`workflows` scope
+  from web sessions; add it from a local checkout or grant the scope. Then watch the first run (the
+  `api · testClasses` job needs Temurin **JDK 25**; no foojay resolver, so `setup-java` must supply it).
+- **Domain cache adoption:** more pages can drop their bespoke pipeline/source/type/user fetches onto
+  `useDomainLookups` (e.g. `leads/index` filters, `quotes`/owner reassignment) — left as follow-up.
 - **Deferred for MVP** (per FRONTEND_PLAN): i18n, heavy global caching, all agentic/AI surfaces.
 
 ## Ready-to-paste prompt for the next session
 
 > Continue the Synoptic Engine frontend. Read `web/CLAUDE.md`, `FRONTEND_PLAN.md`, and `NEXT.md`
-> first. F2-P4 (dashboard) and most of F3 hardening (error boundary, mobile tables, validation +
-> server-error mapping, dashboard/form Playwright specs) shipped on PR #56 — once it's merged, sync
-> `main` and branch from it. **Finish F3:** (1) roll `useFormSubmit` + `app/utils/validators.ts`
-> out to the remaining create/edit forms (only `contacts/persons|organizations/create.vue` are done
-> as references; for `UForm`-based pages call `applyError` then map `errors.value` onto
-> `form.setErrors`); (2) add a light domain cache (Pinia or `useState`) for hot lookups —
-> pipelines/sources/types/users — fetched once and shared across pages; (3) raise Playwright
-> coverage on critical paths (auth, leads CRUD, quote send, sharing) following
-> `tests/e2e/helpers/auth.ts` + `getByText`/`pressSequentially` patterns; (4) **activate CI** — the
-> workflow YAML is in NEXT.md under "CI workflow"; it can't be pushed from web sessions (OAuth lacks
-> `workflow` scope), so add `.github/workflows/ci.yml` manually or grant the scope, and consider a
-> backend `./gradlew testClasses` job. Verify the exact backend contract against the OpenAPI spec
-> (`api-docs.json` / `/v3/api-docs`) rather than guessing; permission-gate with a verified backend
-> key (`grep -rhoE 'const val [A-Z_]+ = "[^"]+"' api/src/main/kotlin --include='*Permissions.kt'`,
-> and grep the controller for the real `@PreAuthorize`); dropdown items use `onSelect` not `click`.
-> Verify green (`pnpm typecheck && pnpm lint && pnpm format:check && pnpm build`) before committing
-> one page/component per commit. Open ONE draft PR after first push, keep going to completion, and
+> first. The F3 core shipped on **PR #57** (merge it, then sync `main` and branch from it):
+> `useFormSubmit`+`validators` is on every entity create/edit form, `useDomainLookups` is the shared
+> hot-lookup cache (pipelines-with-stages/sources/types/users), e2e covers auth/leads-CRUD/quote-
+> send/sharing, and several real contract bugs are fixed (see "Domain cache" notes). **Finish the
+> long tail:** (1) roll `useFormSubmit` onto the remaining create/edit forms listed under
+> "Remaining" (settings tags/pipelines/users/roles/groups/web-forms/email-templates/marketing/
+> workflows/webhooks/imports/config/tenants/attributes, sharing relationships + `ShareRecordModal`,
+> inventory stock/transfers) — plain `<form>` + `UFormField :error`, reusing one `useFormSubmit`
+> with `clearErrors()` for paired create/edit modals (see `settings/sources` as the reference);
+> (2) **land CI** — `.github/workflows/ci.yml` (full YAML in NEXT.md "CI workflow") could NOT be
+> pushed this session (OAuth `git push` AND the GitHub App contents/git-data APIs both reject
+> workflow files for lack of the `workflow`/`workflows` scope) — add it from a local checkout or
+> grant the scope, then confirm the `api · testClasses` job gets Temurin JDK 25; (3) optionally
+> adopt `useDomainLookups` on more pages (leads/index filters, owner reassignment). Verify the exact
+> backend contract against `api-docs.json` (`PageResponse` vs array; `isActive`/`isDefault` not
+> `active`/`default`; stages live on `pipeline.stages`, `/pipelines/{id}/stages` is POST-only) rather
+> than guessing; permission-gate with a verified backend key (`grep -rhoE 'const val [A-Z_]+ =
+> "[^"]+"' api/src/main/kotlin --include='*Permissions.kt'`, and grep the controller for the real
+> `@PreAuthorize`); dropdown items use `onSelect` not `click`. Verify green (`pnpm typecheck && pnpm
+> lint && pnpm format:check && pnpm build` — run serially, not alongside a background build) before
+> committing one page/component per commit. Open ONE draft PR after first push, keep going, and
 > update NEXT.md's checklist + handoff prompt at the end.

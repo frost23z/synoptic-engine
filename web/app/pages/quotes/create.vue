@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import type { PageResponse } from '~/types/api'
 import type { LeadResponse } from '~/types/leads'
 import type { ProductResponse } from '~/types/inventory'
 import type { LeadProductResponse } from '~/types/quotes'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'New Quote' })
 useHead({ title: 'New Quote — Synoptic' })
@@ -11,12 +13,18 @@ const toast = useToast()
 const router = useRouter()
 const route = useRoute()
 const { formatCurrency } = useFormatters()
+const { submitting, errors, validate, run } = useFormSubmit({
+    failureTitle: 'Failed to create quote',
+})
 
+// Leads + products are paginated (PageResponse) — pull a generous page for the selects.
 const { data: leads } = await useAsyncData<LeadResponse[]>('quotes-leads', () =>
-    api<LeadResponse[]>('/api/leads')
+    api<PageResponse<LeadResponse>>('/api/leads', { params: { size: 500 } }).then((p) => p.content)
 )
 const { data: products } = await useAsyncData<ProductResponse[]>('quotes-products', () =>
-    api<ProductResponse[]>('/api/products')
+    api<PageResponse<ProductResponse>>('/api/products', { params: { size: 500 } }).then(
+        (p) => p.content
+    )
 )
 
 const leadOptions = computed(() => leads.value?.map((l) => ({ label: l.title, value: l.id })) ?? [])
@@ -24,7 +32,6 @@ const productOptions = computed(
     () => products.value?.map((p) => ({ label: p.name, value: p.id })) ?? []
 )
 
-const saving = ref(false)
 const loadingLeadProducts = ref(false)
 
 async function onLeadSelect(leadId: string) {
@@ -55,6 +62,7 @@ const form = reactive({
     title: '',
     discount: 0,
     tax: 0,
+    adjustment: 0,
     terms: '',
     expiredAt: '',
 })
@@ -86,38 +94,44 @@ function lineTotal(item: LineItem) {
 }
 
 const subTotal = computed(() => items.value.reduce((s, it) => s + lineTotal(it), 0))
-const grandTotal = computed(() => subTotal.value * (1 - form.discount / 100) * (1 + form.tax / 100))
+const grandTotal = computed(
+    () => subTotal.value * (1 - form.discount / 100) * (1 + form.tax / 100) + form.adjustment
+)
 
-async function submit() {
-    saving.value = true
-    try {
-        const quote = await api<{ id: string }>('/api/quotes', {
-            method: 'POST',
-            body: {
-                leadId: form.leadId,
-                title: form.title,
-                discount: form.discount || undefined,
-                tax: form.tax || undefined,
-                terms: form.terms || undefined,
-                expiredAt: form.expiredAt || undefined,
-                items: items.value
-                    .filter((it) => it.productId)
-                    .map((it) => ({
-                        productId: it.productId,
-                        quantity: it.quantity,
-                        unitPrice: it.unitPrice,
-                        discount: it.discount || undefined,
-                    })),
-            },
-        })
-        toast.add({ title: 'Quote created', color: 'success' })
-        router.push(`/quotes/${quote.id}`)
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+function submit() {
+    run({
+        validate: () =>
+            validate(form, {
+                leadId: [required('Select a lead')],
+                title: [required('Title is required')],
+            }),
+        // discount / tax / adjustment are required by the backend — always send them.
+        call: () =>
+            api<{ id: string }>('/api/quotes', {
+                method: 'POST',
+                body: {
+                    leadId: form.leadId,
+                    title: form.title,
+                    discount: form.discount,
+                    tax: form.tax,
+                    adjustment: form.adjustment,
+                    terms: form.terms || undefined,
+                    expiredAt: form.expiredAt || undefined,
+                    items: items.value
+                        .filter((it) => it.productId)
+                        .map((it) => ({
+                            productId: it.productId,
+                            quantity: it.quantity,
+                            unitPrice: it.unitPrice,
+                            discount: it.discount,
+                        })),
+                },
+            }),
+        onSuccess: (quote) => {
+            toast.add({ title: 'Quote created', color: 'success' })
+            router.push(`/quotes/${quote.id}`)
+        },
+    })
 }
 </script>
 
@@ -126,7 +140,7 @@ async function submit() {
         <UCard>
             <form class="space-y-4" @submit.prevent="submit">
                 <div class="grid grid-cols-2 gap-4">
-                    <UFormField label="Lead" required>
+                    <UFormField label="Lead" required :error="errors.leadId">
                         <USelect
                             v-model="form.leadId"
                             :items="leadOptions"
@@ -135,7 +149,7 @@ async function submit() {
                             @update:model-value="onLeadSelect"
                         />
                     </UFormField>
-                    <UFormField label="Title" required>
+                    <UFormField label="Title" required :error="errors.title">
                         <UInput
                             v-model="form.title"
                             placeholder="e.g. Proposal Q1"
@@ -143,7 +157,7 @@ async function submit() {
                         />
                     </UFormField>
                 </div>
-                <div class="grid grid-cols-3 gap-4">
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <UFormField label="Discount (%)">
                         <UInput
                             v-model.number="form.discount"
@@ -159,7 +173,16 @@ async function submit() {
                             v-model.number="form.tax"
                             type="number"
                             min="0"
+                            max="100"
                             step="0.1"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Adjustment" hint="+/− amount">
+                        <UInput
+                            v-model.number="form.adjustment"
+                            type="number"
+                            step="0.01"
                             class="w-full"
                         />
                     </UFormField>
@@ -268,6 +291,12 @@ async function submit() {
                             }}</span
                         >
                     </div>
+                    <div v-if="form.adjustment" class="flex justify-between text-sm">
+                        <span class="text-muted">Adjustment</span>
+                        <span :class="form.adjustment < 0 ? 'text-error' : 'text-highlighted'">{{
+                            formatCurrency(form.adjustment)
+                        }}</span>
+                    </div>
                     <div class="border-default mt-2 flex justify-between border-t pt-2">
                         <span class="text-highlighted font-semibold">Total</span>
                         <span class="text-highlighted font-bold">{{
@@ -280,7 +309,7 @@ async function submit() {
                     <UButton color="neutral" variant="outline" label="Cancel" to="/quotes" />
                     <UButton
                         label="Create Quote"
-                        :loading="saving"
+                        :loading="submitting"
                         :disabled="!form.leadId || !form.title"
                         @click="submit"
                     />
