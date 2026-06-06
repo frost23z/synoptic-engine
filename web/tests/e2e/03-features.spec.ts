@@ -20,16 +20,16 @@ test('reset-password page shows error when no token provided', async ({ page }) 
 test('pipeline settings page is accessible', async ({ page }) => {
     await login(page)
     await page.goto('/settings/pipelines')
-    await expect(page.getByText('Pipelines')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Pipelines' }).first()).toBeVisible()
 })
 
 test('organization detail page has Activities tab', async ({ page }) => {
     await login(page)
     await page.goto('/contacts/organizations')
-    // Find a link to an org detail page (not sidebar nav links)
-    const orgLink = page.locator('table a, [data-testid="org-link"]').first()
-    const count = await orgLink.count()
-    if (count === 0) {
+    // Find a link to an org detail page (a data-row link, not nav/CTA links)
+    const orgLink = page.locator('table a[href^="/contacts/organizations/"]').first()
+    await orgLink.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+    if ((await orgLink.count()) === 0) {
         test.skip()
         return
     }
@@ -41,5 +41,5 @@ test('mail detail page loads without errors', async ({ page }) => {
     await login(page)
     await page.goto('/mail')
     // Page loads — attachment download is present if mail with attachments exists
-    await expect(page.getByText('Mail')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Mail' }).first()).toBeVisible()
 })
