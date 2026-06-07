@@ -27,5 +27,6 @@ logs
 test-results
 playwright-report
 
-# Generated API types (regenerate with: pnpm openapi:types)
-app/types/api.gen.ts
+# Generated API artifacts — types + Zod schemas derived from ../api-docs.json
+# (regenerate with: pnpm openapi:gen; runs automatically on install)
+app/api/
