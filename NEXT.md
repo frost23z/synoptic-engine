@@ -62,6 +62,63 @@ leads/persons/quotes rows, so the data-dependent mass-ops/detail tests skip).
 > Note: this devcontainer has `commit.gpgsign=true` but no gpg-agent, so commits here need
 > `--no-gpg-sign` (or re-sign on push).
 
+## 2026-06-07 — full re-verification (backend + frontend + e2e)
+
+End-to-end audit of both stacks against the MVP target (Krayin parity + cross-tenant resource
+sharing). Everything green; one stale backend test fixed; two stray scratch files removed.
+
+- **Backend full suite (Testcontainers):** `./gradlew test` → **700 tests, 0 failures.** One fix
+  needed: `TenantScopingIntegrationTest` used pre-`/api`-prefix paths (`/leads`, `/persons`) that
+  500'd on the catch-all handler; corrected to `/api/leads` + `/api/contacts/persons`. The test
+  predated `api.base-path: /api` and had never run (the full Docker suite hadn't been executed
+  before); the endpoints were always correct (the per-module integration tests prove it).
+- **Frontend:** `pnpm typecheck` clean · `pnpm lint` clean (5 `vue/require-default-prop` **warnings**,
+  0 errors) · `pnpm format:check` clean · `pnpm build` clean (14.3 MB, 2.77 MB gzip).
+- **Removed two Copilot scratch files** (`web/openapi-mapping-report.json`,
+  `web/openapi-path-mapping.json`) — they were breaking `pnpm format:check` and are throwaway
+  analysis dumps. (Their "all operationIds unmatched" finding is a non-issue: the frontend
+  deliberately calls through `useApi()` with raw paths, not a generated SDK, so operationIds aren't
+  referenced by design.)
+- **e2e (live stack: docker postgres/mailpit + `bootRun` :8090 + `node .output/server` :3000,
+  `E2E_PASSWORD=1234`):** **31 passed / 11 skipped / 0 failed** (12 specs). Skips remain honest
+  (empty seed DB). The default e2e password in `tests/e2e/helpers/auth.ts` was corrected to `1234`
+  to match `api/.env`'s `SYNOPTIC_ADMIN_PASSWORD`, and `11-inventory-movements.spec.ts` was updated
+  for the `USelectMenu` combobox (role-based selector instead of native `<select>`).
+- **Still no CI:** confirmed `.github/workflows/` does **not** exist. The drift *test* passes and
+  `api-docs.json` is in sync, but the Actions workflow (YAML below) is still unlanded — the
+  documented top remaining item.
+
+## 2026-06-07 (later) — tenant self-serve signup + 404 fix + validation long-tail
+
+Three follow-ups landed and verified end-to-end:
+
+- **Tenant self-serve signup (backend + frontend).** New public `POST /auth/register` →
+  `AuthService.register()` (rate-limited, password-policy, dup-email 409) →
+  `TenantApi.registerSelfService()` (unique slug from company name) → auto-login. New `/register`
+  page (auth layout, `useFormSubmit` validation, links to/from `/login`); `register` added to the
+  auth store + the public-route allowlist in `auth.global.ts`. This is how a company onboards with
+  no pre-existing admin. Backend `RegistrationIntegrationTest` (6 cases) green; e2e
+  `13-register.spec.ts` (3 cases) green. **Email verification + plan selection deferred.**
+- **Unmapped routes → 404.** `GlobalExceptionHandler` gained a `NoResourceFoundException` handler
+  so unknown paths no longer hit the catch-all 500. Covered by
+  `TenantScopingIntegrationTest.unmapped route returns 404 not 500`.
+- **Validation long-tail rollout.** `useFormSubmit` + `validators` (with ProblemDetail→field
+  mapping) rolled onto: inventory **stock** (reserve/release qty) and **transfers** (create — incl.
+  cross-field "source ≠ destination" + url-less validators), settings **email-templates** (create
+  +edit), **web-forms** (create/edit), and **webhooks** (create, incl. URL validation). Pattern is
+  the `settings/sources` reference (one `useFormSubmit`, `clearErrors()` per open).
+  - Gotcha fixed during e2e: a page must use **one** `useFormSubmit` instance — the template binds
+    that instance's `errors`, so `validate` has to come from the same instance (a second
+    `useFormSubmit()` writes to a different `errors` and client errors silently never render).
+- **Still remaining long-tail forms:** settings `marketing`, `workflows`(+`[id]`),
+  `webhooks/[id]`, `imports`, `config` (bulk save — left as-is), `tenants`, `attributes`,
+  `pipelines/[id]` stage modals; `quotes/[id]` line-item edit.
+
+> Note (devcontainer): this box has ~8 GB RAM shared with the VS Code Java language servers + the
+> API JVM. Running `pnpm build` while `bootRun` is up OOM-kills the build (exit 137), and the
+> Playwright default parallel workers thrash and time out under memory pressure. Build with the API
+> stopped, and run e2e with `--workers=1` for a reliable signal.
+
 ## Current phase: F3 hardening — core done on PR #57 (long tail + CI remain)
 
 ### Checklist — F3 finish (PR #57)

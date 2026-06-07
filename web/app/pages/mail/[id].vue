@@ -24,8 +24,10 @@ useHead({ title: pageTitle })
 
 // Mark as read on open
 onMounted(async () => {
-    if (email.value && !email.value.read && can('mail.edit')) {
-        await api(`/api/mail/${id}/read`, { method: 'PATCH', body: { read: true } }).catch(() => {})
+    if (email.value && !email.value.isRead && can('mail.edit')) {
+        await api(`/api/mail/${id}/read`, { method: 'PATCH', body: { isRead: true } }).catch(
+            () => {}
+        )
     }
 })
 
@@ -57,8 +59,11 @@ async function toggleRead() {
     if (!email.value) return
     toggling.value = true
     try {
-        await api(`/api/mail/${id}/read`, { method: 'PATCH', body: { read: !email.value.read } })
-        email.value.read = !email.value.read
+        await api(`/api/mail/${id}/read`, {
+            method: 'PATCH',
+            body: { isRead: !email.value.isRead },
+        })
+        email.value.isRead = !email.value.isRead
     } catch {
         toast.add({ title: 'Failed to update', color: 'error' })
     } finally {
@@ -148,8 +153,8 @@ async function downloadAttachment(attachment: { id: string; name: string }) {
         <template #actions>
             <UButton
                 v-if="can('mail.edit')"
-                :icon="email?.read ? 'i-tabler-mail' : 'i-tabler-mail-opened'"
-                :label="email?.read ? 'Mark unread' : 'Mark read'"
+                :icon="email?.isRead ? 'i-tabler-mail' : 'i-tabler-mail-opened'"
+                :label="email?.isRead ? 'Mark unread' : 'Mark read'"
                 color="neutral"
                 variant="outline"
                 size="sm"

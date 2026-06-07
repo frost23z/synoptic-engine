@@ -234,7 +234,8 @@ async function submitActivity() {
 
 async function toggleActivityDone(act: ActivityResponse) {
     try {
-        await api(`/api/activities/${act.id}/done`, { method: 'PATCH', body: { done: !act.done } })
+        // `/done` is a bodyless server-side toggle.
+        await api(`/api/activities/${act.id}/done`, { method: 'PATCH' })
         refreshActivities()
     } catch {
         toast.add({ title: 'Failed to update', color: 'error' })
