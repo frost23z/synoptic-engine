@@ -30,7 +30,9 @@ export interface ActivityResponse {
     comment?: string
     scheduleFrom: string
     scheduleTo: string
-    done: boolean
+    // Backend DTO field is `isDone` (Kotlin `val isDone`); was previously mis-typed
+    // as `done`, so the done/pending state silently never reflected.
+    isDone: boolean
     leadId?: string
     userId?: string
     personId?: string
@@ -50,8 +52,11 @@ export interface ActivityFileResponse {
     createdAt: string
 }
 
+// Backend returns participant identity only (`userId`/`personId`); the display
+// name/email are resolved client-side from the users lookup. (Previously typed
+// with `fullName`/`email` the backend never sends, so participants rendered blank.)
 export interface ActivityParticipantResponse {
     id: string
-    fullName: string
-    email: string
+    userId?: string
+    personId?: string
 }

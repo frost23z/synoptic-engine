@@ -62,6 +62,35 @@ internal class TenantProvisioningService(
     }
 
     @Transactional
+    override fun registerSelfService(
+        name: String,
+        adminEmail: String,
+        adminPassword: String,
+    ): TenantSummary = provision(name, generateUniqueSlug(name), adminEmail, adminPassword)
+
+    /**
+     * Slugify [name] (lowercase, non-alphanumeric → hyphen, trimmed/collapsed) and guarantee
+     * uniqueness against existing tenants by appending a short random suffix on collision.
+     */
+    private fun generateUniqueSlug(name: String): String {
+        val base =
+            name
+                .lowercase()
+                .replace(Regex("[^a-z0-9]+"), "-")
+                .trim('-')
+                .replace(Regex("-{2,}"), "-")
+                .take(40)
+                .trim('-')
+                .ifBlank { "tenant" }
+        if (!tenantRepository.existsBySlug(base)) return base
+        repeat(50) {
+            val candidate = "$base-${UUID.randomUUID().toString().take(6)}"
+            if (!tenantRepository.existsBySlug(candidate)) return candidate
+        }
+        return "$base-${UUID.randomUUID()}"
+    }
+
+    @Transactional
     override fun seedTenantDefaults(
         tenantId: UUID,
         adminEmail: String?,

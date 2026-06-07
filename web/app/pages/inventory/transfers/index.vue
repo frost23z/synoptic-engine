@@ -2,6 +2,7 @@
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { TransferOrderResponse } from '~/types/inventory'
 import { TRANSFER_STATUS_COLOR, TRANSFER_STATUS_LABEL } from '~/types/inventory'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Transfers' })
 useHead({ title: 'Transfers — Synoptic' })
@@ -22,6 +23,13 @@ const {
 } = useInventoryLookups()
 
 const canManage = can('inventory.transfers.manage')
+const {
+    submitting: saving,
+    errors,
+    run: runCreate,
+    validate: validateCreate,
+    clearErrors: clearCreateErrors,
+} = useFormSubmit({ failureTitle: 'Failed to create transfer' })
 
 const {
     data: transfers,
@@ -112,7 +120,6 @@ function rowActions(t: TransferOrderResponse): DropdownMenuItem[][] {
 
 // ── Create ──────────────────────────────────────────────────────────────────
 const createOpen = ref(false)
-const saving = ref(false)
 const form = reactive({
     fromWarehouseId: '',
     fromLocationId: '',
@@ -151,6 +158,7 @@ const createValid = computed(
 )
 
 function openCreate() {
+    clearCreateErrors()
     Object.assign(form, {
         fromWarehouseId: '',
         fromLocationId: '',
@@ -163,29 +171,38 @@ function openCreate() {
     createOpen.value = true
 }
 
-async function submitCreate() {
-    if (!createValid.value) return
-    saving.value = true
-    try {
-        await api('/api/inventory/transfers', {
-            method: 'POST',
-            body: {
-                fromLocationId: form.fromLocationId,
-                toLocationId: form.toLocationId,
-                productId: form.productId,
-                quantity: form.quantity,
-                notes: form.notes || undefined,
-            },
-        })
-        toast.add({ title: 'Transfer created', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+const differentLocation = (v: unknown) =>
+    v && v === form.fromLocationId ? 'Destination must differ from source' : undefined
+const qtyAtLeastOne = (v: unknown) =>
+    typeof v !== 'number' || Number.isNaN(v) || v < 1 ? 'Enter a quantity of at least 1' : undefined
+
+function submitCreate() {
+    runCreate({
+        validate: () =>
+            validateCreate(form, {
+                productId: [required('Select a product')],
+                fromLocationId: [required('Select a source location')],
+                toLocationId: [required('Select a destination location'), differentLocation],
+                quantity: [qtyAtLeastOne],
+            }),
+        call: () =>
+            api('/api/inventory/transfers', {
+                method: 'POST',
+                body: {
+                    fromLocationId: form.fromLocationId,
+                    toLocationId: form.toLocationId,
+                    productId: form.productId,
+                    quantity: form.quantity,
+                    notes: form.notes || undefined,
+                },
+            }),
+        fieldHints: ['productId', 'fromLocationId', 'toLocationId', 'quantity'],
+        onSuccess: () => {
+            toast.add({ title: 'Transfer created', color: 'success' })
+            createOpen.value = false
+            refresh()
+        },
+    })
 }
 
 onMounted(() => {
@@ -263,7 +280,7 @@ onMounted(() => {
             @confirm="submitCreate"
         >
             <form class="space-y-3" @submit.prevent="submitCreate">
-                <UFormField label="Product" required>
+                <UFormField label="Product" required :error="errors.productId">
                     <USelect
                         v-model="form.productId"
                         :items="productOptions"
@@ -282,7 +299,7 @@ onMounted(() => {
                                 class="w-full"
                             />
                         </UFormField>
-                        <UFormField label="Location" required>
+                        <UFormField label="Location" required :error="errors.fromLocationId">
                             <USelect
                                 v-model="form.fromLocationId"
                                 :items="fromLocationOptions"
@@ -302,7 +319,7 @@ onMounted(() => {
                                 class="w-full"
                             />
                         </UFormField>
-                        <UFormField label="Location" required>
+                        <UFormField label="Location" required :error="errors.toLocationId">
                             <USelect
                                 v-model="form.toLocationId"
                                 :items="toLocationOptions"
@@ -324,7 +341,7 @@ onMounted(() => {
                     Source and destination locations must be different.
                 </p>
                 <div class="grid grid-cols-2 gap-4">
-                    <UFormField label="Quantity" required>
+                    <UFormField label="Quantity" required :error="errors.quantity">
                         <UInput
                             v-model.number="form.quantity"
                             type="number"

@@ -35,7 +35,9 @@ export interface EmailResponse {
     parentId?: string
     leadId?: string
     attachments?: EmailAttachment[]
-    read: boolean
+    // Backend DTO field is `isRead` (Kotlin `val isRead`); was previously mis-typed
+    // as `read`, so read-state and the read/unread toggle never reflected.
+    isRead: boolean
     createdAt: string
     updatedAt: string
 }

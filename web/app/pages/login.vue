@@ -104,10 +104,16 @@ async function submitForgot() {
             </form>
         </UCard>
 
-        <div class="text-center">
+        <div class="space-y-2 text-center">
             <button class="text-muted hover:text-highlighted text-sm" @click="forgotOpen = true">
                 Forgot password?
             </button>
+            <div>
+                <span class="text-muted text-sm">New here?</span>
+                <ULink to="/register" class="text-primary ml-1 text-sm font-medium">
+                    Create a workspace
+                </ULink>
+            </div>
         </div>
 
         <UModal v-model:open="forgotOpen">

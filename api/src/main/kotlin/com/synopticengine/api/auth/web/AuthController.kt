@@ -42,6 +42,22 @@ class AuthController(
         @Valid @RequestBody request: RefreshRequest,
     ): ResponseEntity<TokenResponse> = ResponseEntity.ok(authService.refresh(request.refreshToken))
 
+    // Public self-serve signup: creates a new company (tenant) + its first admin, then
+    // returns tokens (auto-login). Permit-listed in SecurityConfig; rate-limited per (email, IP).
+    @PostMapping("/register")
+    fun register(
+        @Valid @RequestBody request: RegisterRequest,
+        httpRequest: HttpServletRequest,
+    ): ResponseEntity<TokenResponse> =
+        ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(
+            authService.register(
+                companyName = request.companyName,
+                email = request.email,
+                password = request.password,
+                clientIp = clientIp(httpRequest),
+            ),
+        )
+
     @GetMapping("/me")
     fun me(
         @AuthenticationPrincipal principal: UserPrincipal,

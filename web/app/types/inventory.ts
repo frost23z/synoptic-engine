@@ -1,49 +1,25 @@
+import type { ProductResponse, WarehouseResponse } from '~/api/types.gen'
 import type { PageResponse } from './api'
-import type { TagResponse } from './leads'
 
 // ── Generated DTOs (source of truth, from OpenAPI `../api-docs.json`) ────────
 // Re-exported under this module path so existing `~/types/inventory` imports
 // keep working while the underlying shapes now flow from the backend spec.
+// `ProductResponse`/`WarehouseResponse` are now bridged too: the embedded
+// `tags: TagDto[]` they carry is consumed by `AppTagManager`, whose props were
+// widened to the minimal `TagDto` shape (Tag-type unification, drift item #1).
 export type {
     InventoryEntryResponse,
     LowStockEntry,
     MovementResponse,
+    ProductResponse,
     StockStateResponse,
     TransferOrderResponse,
     WarehouseLocationResponse,
     WarehouseProductEntry,
+    WarehouseResponse,
 } from '~/api/types.gen'
 
 type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
-
-// ── Still hand-written, pending Tag-type unification ────────────────────────
-// Generated `ProductResponse`/`WarehouseResponse` carry `tags: TagDto[]`
-// (color optional, no createdAt), but our tag UI (`AppTagManager`) consumes the
-// richer `TagResponse`. Unify TagDto↔TagResponse before bridging these two.
-export interface ProductResponse {
-    id: string
-    name: string
-    description?: string
-    price: number
-    sku?: string
-    isActive: boolean
-    reorderThreshold?: number
-    createdAt: string
-    updatedAt: string
-}
-
-export interface WarehouseResponse {
-    id: string
-    name: string
-    description?: string
-    contactName?: string
-    contactEmail?: string
-    contactPhone?: string
-    contactAddress?: string
-    tags: TagResponse[]
-    createdAt: string
-    updatedAt: string
-}
 
 export type ProductsPage = PageResponse<ProductResponse>
 export type WarehousesPage = PageResponse<WarehouseResponse>

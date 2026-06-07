@@ -10,7 +10,7 @@ export async function login(page: Page) {
     await page.locator('input[type="password"]').click()
     await page
         .locator('input[type="password"]')
-        .pressSequentially(process.env.E2E_PASSWORD ?? 'Admin@123')
+        .pressSequentially(process.env.E2E_PASSWORD ?? '1234')
     await page.getByRole('button', { name: 'Sign in' }).click()
     await page.waitForURL(/^(?!.*\/login)/)
 }
