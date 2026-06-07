@@ -1,3 +1,4 @@
+import type { TagResponse } from '~/api/types.gen'
 import type { PageResponse } from './api'
 
 export type LeadStatus = 'open' | 'won' | 'lost' | 'abandoned'
@@ -16,12 +17,12 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
     abandoned: 'Abandoned',
 }
 
-export interface TagResponse {
-    id: string
-    name: string
-    color: string
-    createdAt: string
-}
+// ── Tag types: generated source of truth (OpenAPI) ──────────────────────────
+// `TagResponse` is the full catalogue shape (GET /api/tags); `TagDto` is the
+// minimal embedded shape carried by Lead/Person/Org/Product/Warehouse. TagDto
+// is a structural subset of TagResponse, so a TagResponse[] flows wherever a
+// TagDto[] is expected — that's the unification the inventory bridge relied on.
+export type { TagDto, TagResponse } from '~/api/types.gen'
 
 export interface LeadResponse {
     id: string

@@ -40,6 +40,17 @@ export const useAuthStore = defineStore('auth', () => {
         setSession(data)
     }
 
+    // Self-serve signup: creates a new company (tenant) + first admin, then logs in (the
+    // backend returns tokens directly, so we set the session straight away).
+    async function register(companyName: string, email: string, password: string) {
+        const data = await $fetch<TokenResponse>('/auth/register', {
+            baseURL: config.public.apiBase,
+            method: 'POST',
+            body: { companyName, email, password },
+        })
+        setSession(data)
+    }
+
     // Single-flight refresh: concurrent 401s share one in-flight call instead
     // of each firing its own /auth/refresh (which races and storms the server).
     // Kept inside the store setup so it stays per-instance (SSR-safe).
@@ -95,6 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
         user,
         isAuthenticated,
         login,
+        register,
         refresh,
         fetchMe,
         logout,

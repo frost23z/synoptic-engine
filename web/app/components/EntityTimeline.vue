@@ -28,7 +28,7 @@ const { formatRelativeDate } = useFormatters()
             v-for="act in activities"
             :key="act.id"
             class="flex items-start gap-3 py-3"
-            :class="act.done ? 'opacity-60' : ''"
+            :class="act.isDone ? 'opacity-60' : ''"
         >
             <div class="bg-muted mt-0.5 shrink-0 rounded-full p-1.5">
                 <UIcon
@@ -37,7 +37,10 @@ const { formatRelativeDate } = useFormatters()
                 />
             </div>
             <div class="min-w-0 flex-1">
-                <p class="text-default text-sm font-medium" :class="act.done ? 'line-through' : ''">
+                <p
+                    class="text-default text-sm font-medium"
+                    :class="act.isDone ? 'line-through' : ''"
+                >
                     {{ act.title }}
                 </p>
                 <p v-if="act.comment" class="text-muted mt-0.5 text-xs">{{ act.comment }}</p>
@@ -45,8 +48,8 @@ const { formatRelativeDate } = useFormatters()
             </div>
             <UButton
                 v-if="canToggle"
-                :icon="act.done ? 'i-tabler-circle-check-filled' : 'i-tabler-circle'"
-                :color="act.done ? 'success' : 'neutral'"
+                :icon="act.isDone ? 'i-tabler-circle-check-filled' : 'i-tabler-circle'"
+                :color="act.isDone ? 'success' : 'neutral'"
                 variant="ghost"
                 size="xs"
                 @click="emit('toggleDone', act)"

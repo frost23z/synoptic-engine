@@ -20,8 +20,9 @@ cd api
 ./gradlew bootRun              # start server on :8090
 ```
 
-New Flyway migrations: next file is `V024__…` — always pair a new migration with entity
-changes in the **same commit** (`ddl-auto=validate` will fail otherwise).
+New Flyway migrations: next file is `V027__…` (highest applied is `V026__mfa.sql`) — always
+pair a new migration with entity changes in the **same commit** (`ddl-auto=validate` will fail
+otherwise).
 
 ## Architecture rules
 

@@ -13,15 +13,18 @@ test('movements ledger loads after selecting a product', async ({ page }) => {
     await login(page)
     await page.goto('/inventory/movements')
 
-    const select = page.locator('select').first()
+    const select = page.getByRole('combobox', { name: 'Product*' })
     await select.waitFor({ state: 'visible', timeout: 10000 })
-    const optionCount = await select.locator('option').count()
+    await select.click()
+
+    const options = page.getByRole('option')
+    const optionCount = await options.count()
     // Needs at least one real product option beyond the placeholder.
     if (optionCount <= 1) {
         test.skip()
         return
     }
-    await select.selectOption({ index: 1 })
+    await options.nth(1).click()
 
     // Either ledger rows render or the empty-state for that product appears —
     // both prove the query ran without the initial prompt.

@@ -20,6 +20,17 @@ data class RefreshRequest(
     val refreshToken: String,
 )
 
+data class RegisterRequest(
+    @field:NotBlank(message = "Company name is required")
+    @field:Size(max = 255, message = "Company name must not exceed 255 characters")
+    val companyName: String,
+    @field:Email(message = "Valid email required")
+    @field:NotBlank(message = "Email is required")
+    val email: String,
+    @field:Size(min = 8, max = 1000, message = "Password must be 8–1000 characters")
+    val password: String,
+)
+
 data class TokenResponse(
     val accessToken: String,
     val refreshToken: String,
