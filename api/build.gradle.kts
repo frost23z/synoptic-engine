@@ -126,7 +126,6 @@ fun FormatExtension.commonFormatSteps() {
     endWithNewline()
 }
 
-
 configurations.all {
     exclude(group = "io.swagger.core.v3", module = "swagger-annotations")
 }
