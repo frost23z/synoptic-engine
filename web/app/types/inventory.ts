@@ -1,6 +1,24 @@
 import type { PageResponse } from './api'
 import type { TagResponse } from './leads'
 
+// ── Generated DTOs (source of truth, from OpenAPI `../api-docs.json`) ────────
+// Re-exported under this module path so existing `~/types/inventory` imports
+// keep working while the underlying shapes now flow from the backend spec.
+export type {
+    InventoryEntryResponse,
+    LowStockEntry,
+    StockStateResponse,
+    TransferOrderResponse,
+    WarehouseLocationResponse,
+    WarehouseProductEntry,
+} from '~/api/types.gen'
+
+type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
+
+// ── Still hand-written, pending Tag-type unification ────────────────────────
+// Generated `ProductResponse`/`WarehouseResponse` carry `tags: TagDto[]`
+// (color optional, no createdAt), but our tag UI (`AppTagManager`) consumes the
+// richer `TagResponse`. Unify TagDto↔TagResponse before bridging these two.
 export interface ProductResponse {
     id: string
     name: string
@@ -26,54 +44,30 @@ export interface WarehouseResponse {
     updatedAt: string
 }
 
-export interface WarehouseLocationResponse {
-    id: string
-    warehouseId: string
-    name: string
-    createdAt: string
-    updatedAt: string
-}
-
-export interface InventoryEntryResponse {
-    id: string
-    productId: string
-    warehouseId: string
-    warehouseLocationId?: string
-    quantity: number
-}
-
-export interface WarehouseProductEntry {
-    productId: string
-    warehouseLocationId?: string
-    quantity: number
-}
-
 export type ProductsPage = PageResponse<ProductResponse>
 export type WarehousesPage = PageResponse<WarehouseResponse>
 
-// ── Inventory movements / stock ────────────────────────────────────────────
-/** Per-location stock state for a product (`GET /api/inventory/stock`). */
-export interface StockStateResponse {
-    productId: string
-    locationId?: string | null
-    warehouseId: string
-    onHand: number
-    reserved: number
-    inTransit: number
-    damaged: number
-    available: number
+// ── Transfer order status (UI label/colour maps — presentation, not in spec) ─
+export type TransferStatus = 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED'
+
+export const TRANSFER_STATUS_LABEL: Record<TransferStatus, string> = {
+    PENDING: 'Pending',
+    IN_TRANSIT: 'In transit',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
 }
 
-/** A product at or below its reorder threshold (`GET /api/inventory/low-stock`). */
-export interface LowStockEntry {
-    productId: string
-    productName: string
-    sku?: string | null
-    reorderThreshold: number
-    currentStock: number
+export const TRANSFER_STATUS_COLOR: Record<TransferStatus, BadgeColor> = {
+    PENDING: 'neutral',
+    IN_TRANSIT: 'info',
+    COMPLETED: 'success',
+    CANCELLED: 'error',
 }
 
-// ── Movement ledger ────────────────────────────────────────────────────────
+// ── Movement ledger ─────────────────────────────────────────────────────────
+// TEMP hand-written: the `GET /api/inventory/movements` endpoint is not yet in
+// the committed `api-docs.json` snapshot. Once the spec is regenerated from the
+// backend, drop this block and re-export `MovementResponse` from `~/api/types.gen`.
 export type MovementType =
     | 'RECEIPT'
     | 'ISSUE'
@@ -103,7 +97,6 @@ export const MOVEMENT_TYPE_COLOR: Record<MovementType, BadgeColor> = {
     RELEASE: 'primary',
 }
 
-/** An append-only ledger entry (`GET /api/inventory/movements`). */
 export interface MovementResponse {
     id: string
     productId: string
@@ -117,37 +110,4 @@ export interface MovementResponse {
     actorId?: string | null
     notes?: string | null
     createdAt?: string | null
-}
-
-// ── Transfer orders ────────────────────────────────────────────────────────
-export type TransferStatus = 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED'
-
-type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
-
-export const TRANSFER_STATUS_LABEL: Record<TransferStatus, string> = {
-    PENDING: 'Pending',
-    IN_TRANSIT: 'In transit',
-    COMPLETED: 'Completed',
-    CANCELLED: 'Cancelled',
-}
-
-export const TRANSFER_STATUS_COLOR: Record<TransferStatus, BadgeColor> = {
-    PENDING: 'neutral',
-    IN_TRANSIT: 'info',
-    COMPLETED: 'success',
-    CANCELLED: 'error',
-}
-
-export interface TransferOrderResponse {
-    id: string
-    fromLocationId: string
-    toLocationId: string
-    productId: string
-    quantity: number
-    status: TransferStatus
-    outMovementId?: string | null
-    inMovementId?: string | null
-    notes?: string | null
-    createdAt?: string | null
-    updatedAt?: string | null
 }
