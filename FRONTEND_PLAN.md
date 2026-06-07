@@ -183,6 +183,62 @@ Mirror the backend working agreement:
 
 ---
 
+## Type-safety pipeline (F1 — backend↔frontend sync)
+
+**Status: generator adopted; drift gate pending.**
+
+The backend↔frontend contract is generated, not hand-maintained:
+
+- **Generator:** [Hey API](https://heyapi.dev) (`@hey-api/openapi-ts`), config in
+  `web/openapi-ts.config.ts`. `pnpm openapi:gen` (auto-runs on install) reads the springdoc
+  spec snapshot `api-docs.json` and emits `web/app/api/{types,zod}.gen.ts` (gitignored).
+- **Types:** `types.gen.ts` is the DTO source of truth. Migrate a module off hand-written
+  DTOs by re-exporting the generated types from its `~/types/*` file (bridge pattern, done for
+  `app/types/inventory.ts`); page imports stay unchanged. Remaining hand-written DTOs in
+  `~/types/*` are the migration backlog.
+- **Validation:** `zod.gen.ts` carries the backend's bean-validation rules as Zod schemas;
+  `useFormSubmit().validate(form, zCreateGroupRequest)` uses them directly (done for
+  groups/roles). No more hand-duplicated field rules.
+- **Client:** intentionally NOT generated — `useApi()` stays the HTTP layer (auth + 401 refresh).
+  A typed SDK + Nuxt client (`@hey-api/sdk` + `@hey-api/client-nuxt`) was evaluated for full
+  call-site type-safety but is **BLOCKED — see below.**
+
+### SDK / typed-client migration — BLOCKED on backend spec quality
+
+A full migration of all ~200 call sites onto a generated SDK (so query params/paths/responses
+are typed at the call site, not just the DTO) is the logical next step, but the generated SDK is
+unusable until the backend OpenAPI spec is cleaned up. Two root causes, both backend:
+
+1. **Spring Data REST pollution.** `api/build.gradle.kts` pulls
+   `spring-boot-starter-data-rest`, which auto-exposes JPA repositories as HAL endpoints. The
+   spec carries **408** machine-generated operationIds (`getCollectionResourceGroupGet`,
+   `deleteItemResourceGroupDelete`, `…PropertyReference…`) that duplicate the real controllers
+   and pollute every generated artifact. These repo exports should not be public anyway
+   (architecturally — `api/CLAUDE.md` Rule 6 — and as attack surface). Disable Data REST
+   exposure or exclude it from the springdoc spec.
+2. **No explicit `operationId`s.** Controller methods have none, so springdoc auto-numbers
+   collisions: `create`, `create_1`, `attachTag_1 … attachTag_5`. SDK function names would be
+   `create_1` / `attachTag_4` — meaningless and **unstable** (numbers shift on every spec
+   change). Add stable `@Operation(operationId = "createGroup")` (or a springdoc
+   `OperationCustomizer` naming strategy) to every endpoint.
+
+Until both are fixed and the spec regenerated, stay on `useApi()` + generated **types/zod**
+(which are keyed by schema *names* — clean — so they are unaffected). After the fix, the SDK
+rollout is mechanical: configure the Nuxt client's `onRequest`/`onResponseError` to mirror
+`useApi()` (or pass `useApi()` as its `$fetch`), then migrate call sites module by module.
+
+**Known drift to clear:**
+1. `TagDto` (generated) vs `TagResponse` (hand-written, richer) — unify before bridging
+   `ProductResponse`/`WarehouseResponse`.
+2. `MovementResponse` is hand-written because `GET /inventory/movements` post-dates the
+   `api-docs.json` snapshot — regenerate the spec to bridge it.
+
+**The drift gate (do next — needs the backend, so a dev-container/CI task):** add a CI job that
+boots the API against Postgres, dumps `/v3/api-docs`, and runs `git diff --exit-code api-docs.json`.
+This makes a stale snapshot fail the build — the actual enforcement of sync. The cleanest dump
+mechanism is a `@SpringBootTest` that `GET`s `/v3/api-docs` and writes the file (reuses the
+existing Testcontainers context), wired into the existing `pnpm typecheck && lint && build` CI.
+
 ## Appendix — Key file paths
 - Foundation: `app/composables/useApi.ts`, `app/stores/auth.ts`, `app/layouts/default.vue`
   (nav lives here), `app/composables/usePermissions.ts`, `app/app.config.ts`.
