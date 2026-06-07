@@ -144,9 +144,10 @@ Build out `index.vue` beyond stats: the 8 dashboard stat types + recent activity
 - **Stores/caching only where it pays.** Keep Pinia light; add a domain store/cache only for
   hot, cross-page data (e.g. lookups: pipelines, sources, types, users). Avoid premature
   global state.
-- **Tests + CI.** Raise Playwright coverage from ~11% → ~30% on critical paths (auth, leads
-  CRUD, quote send, sharing); add a CI workflow running `pnpm typecheck && pnpm lint && build`
-  (+ e2e against a Testcontainers-backed API where feasible).
+- **Tests + CI.** Playwright coverage raised (12 specs incl. auth, leads CRUD, quote send,
+  sharing, inventory, export). **CI workflow added** (`.github/workflows/ci.yml`): `web`
+  (typecheck · lint · format:check · build), `api` (`./gradlew build`, Testcontainers), and the
+  OpenAPI `drift-gate`. Remaining: wire the e2e suite into CI against a Testcontainers-backed API.
 
 ### Explicitly DEFERRED for MVP
 i18n (English-only now; ~11k LOC extraction is post-MVP), heavy global caching, and **all
@@ -185,7 +186,7 @@ Mirror the backend working agreement:
 
 ## Type-safety pipeline (F1 — backend↔frontend sync)
 
-**Status: generator adopted; drift gate pending.**
+**Status: generator adopted; drift gate LIVE in CI; SDK migration unblocked (next).**
 
 The backend↔frontend contract is generated, not hand-maintained:
 
@@ -203,41 +204,46 @@ The backend↔frontend contract is generated, not hand-maintained:
   A typed SDK + Nuxt client (`@hey-api/sdk` + `@hey-api/client-nuxt`) was evaluated for full
   call-site type-safety but is **BLOCKED — see below.**
 
-### SDK / typed-client migration — BLOCKED on backend spec quality
+### SDK / typed-client migration — UNBLOCKED (the documented next step)
 
 A full migration of all ~200 call sites onto a generated SDK (so query params/paths/responses
-are typed at the call site, not just the DTO) is the logical next step, but the generated SDK is
-unusable until the backend OpenAPI spec is cleaned up. Two root causes, both backend:
+are typed at the call site, not just the DTO) is the logical next step. It was blocked on two
+backend spec-quality issues; **both are now resolved (PR #61):**
 
-1. **Spring Data REST pollution.** `api/build.gradle.kts` pulls
-   `spring-boot-starter-data-rest`, which auto-exposes JPA repositories as HAL endpoints. The
-   spec carries **408** machine-generated operationIds (`getCollectionResourceGroupGet`,
-   `deleteItemResourceGroupDelete`, `…PropertyReference…`) that duplicate the real controllers
-   and pollute every generated artifact. These repo exports should not be public anyway
-   (architecturally — `api/CLAUDE.md` Rule 6 — and as attack surface). Disable Data REST
-   exposure or exclude it from the springdoc spec.
-2. **No explicit `operationId`s.** Controller methods have none, so springdoc auto-numbers
-   collisions: `create`, `create_1`, `attachTag_1 … attachTag_5`. SDK function names would be
-   `create_1` / `attachTag_4` — meaningless and **unstable** (numbers shift on every spec
-   change). Add stable `@Operation(operationId = "createGroup")` (or a springdoc
-   `OperationCustomizer` naming strategy) to every endpoint.
+1. ~~**Spring Data REST pollution.**~~ **RESOLVED** — `spring-boot-starter-data-rest` exposure
+   was removed, so the spec no longer carries the ~408 machine-generated HAL operationIds
+   (`getCollectionResourceGroupGet`, …). Verified: the snapshot now has **0** `…Resource…`
+   operationIds.
+2. ~~**No explicit `operationId`s.**~~ **RESOLVED** — `OpenApiConfig.stableOperationIds`
+   (an `OperationCustomizer`) now names every endpoint `controllerCamel + MethodPascal`
+   (`groupCreate`, `leadAttachTag`, …). Verified: **0** auto-numbered `_N` collision ids remain.
 
-Until both are fixed and the spec regenerated, stay on `useApi()` + generated **types/zod**
-(which are keyed by schema *names* — clean — so they are unaffected). After the fix, the SDK
-rollout is mechanical: configure the Nuxt client's `onRequest`/`onResponseError` to mirror
-`useApi()` (or pass `useApi()` as its `$fetch`), then migrate call sites module by module.
+So the SDK rollout is now mechanical and is the next phase: configure `@hey-api/sdk` +
+`@hey-api/client-nuxt`, point the Nuxt client's `onRequest`/`onResponseError` at `useApi()`
+(or pass `useApi()` as its `$fetch`), then migrate call sites module by module. Until then we
+stay on `useApi()` + generated **types/zod**.
 
-**Known drift to clear:**
-1. `TagDto` (generated) vs `TagResponse` (hand-written, richer) — unify before bridging
-   `ProductResponse`/`WarehouseResponse`.
-2. `MovementResponse` is hand-written because `GET /inventory/movements` post-dates the
-   `api-docs.json` snapshot — regenerate the spec to bridge it.
+> Note on the remaining hand-written `~/types/*` DTOs: they intentionally **narrow enum fields**
+> (e.g. `ActivityResponse.type: ActivityType`, `QuoteResponse.status: QuoteStatus`) that the
+> generated types emit as bare `string`, because those unions back the `Record<Enum, …>`
+> label/colour maps. Blanket-bridging them would *downgrade* type safety, so each module's bridge
+> must reconcile enums (keep the union, bridge the rest) — that's why this is incremental, not a
+> sweep. Bridged so far: `inventory` (incl. `ProductResponse`/`WarehouseResponse`), `pipelines`,
+> and the `Tag` types.
 
-**The drift gate (do next — needs the backend, so a dev-container/CI task):** add a CI job that
-boots the API against Postgres, dumps `/v3/api-docs`, and runs `git diff --exit-code api-docs.json`.
-This makes a stale snapshot fail the build — the actual enforcement of sync. The cleanest dump
-mechanism is a `@SpringBootTest` that `GET`s `/v3/api-docs` and writes the file (reuses the
-existing Testcontainers context), wired into the existing `pnpm typecheck && lint && build` CI.
+**Known drift — cleared:**
+1. ~~`TagDto` vs `TagResponse`~~ **DONE** — unified: `~/types/leads` re-exports both generated
+   types; `AppTagManager` widened to the minimal `TagDto` shape (a `TagResponse[]` is a
+   structural superset, so it flows in), unblocking the `ProductResponse`/`WarehouseResponse`
+   bridge (both now generated).
+2. ~~`MovementResponse` hand-written~~ **DONE** (PR #63) — bridged once the spec was regenerated.
+
+**The drift gate — DONE (live in CI).** `api/.../OpenApiSpecDriftTest` boots the Testcontainers
+context, GETs `/v3/api-docs`, and (under `-Dopenapi.dump=true`, via the `dumpOpenApiSpec` Gradle
+task) writes springdoc's **raw** output verbatim to `api-docs.json`. The `.github/workflows/ci.yml`
+`drift-gate` job runs that task then `git diff --exit-code api-docs.json`, so a stale snapshot
+fails the build. The same workflow runs `web` (typecheck · lint · format:check · build) and
+`api` (`./gradlew build`, Testcontainers).
 
 ## Appendix — Key file paths
 - Foundation: `app/composables/useApi.ts`, `app/stores/auth.ts`, `app/layouts/default.vue`

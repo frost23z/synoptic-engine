@@ -108,10 +108,11 @@ We deliberately do **not** generate an HTTP client; calls keep going through `us
 owns the auth header and 401 refresh. Config lives in `openapi-ts.config.ts`.
 
 > **Spec freshness:** `api-docs.json` is a committed snapshot dumped from springdoc
-> `/v3/api-docs`. It must be regenerated whenever the backend API changes (e.g. the new
-> `/inventory/movements` endpoint is not in the current snapshot, so `MovementResponse` is
-> still hand-written in `app/types/inventory.ts`). The drift gate that enforces this lives in
-> CI (boots the API, re-dumps the spec, `git diff --exit-code`) — see `FRONTEND_PLAN.md`.
+> `/v3/api-docs`. It must be regenerated whenever the backend API changes — run
+> `./gradlew dumpOpenApiSpec` in `api/` and commit the result, then `pnpm openapi:gen` here.
+> The **drift gate enforces this in CI** (`.github/workflows/ci.yml` → `drift-gate`: re-dumps
+> the spec via `OpenApiSpecDriftTest` and `git diff --exit-code api-docs.json`), so a stale
+> snapshot fails the build. See `FRONTEND_PLAN.md`.
 
 ### Rollout status
 

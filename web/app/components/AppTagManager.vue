@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TagResponse } from '~/types/leads'
+import type { TagDto } from '~/types/leads'
 
 /**
  * Tag sidebar card shared by detail pages (leads, persons). Renders the current
@@ -8,12 +8,16 @@ import type { TagResponse } from '~/types/leads'
  *
  * Self-contained: POSTs `{ tagId }` to `endpoint` to add and DELETEs
  * `endpoint/{tagId}` to remove, emitting `changed` so the parent can refresh.
+ *
+ * Props are typed to the minimal `TagDto` shape (`id`/`name`/`color`) so both
+ * embedded tags (`Product`/`Warehouse` carry `TagDto[]`) and the full tag
+ * catalogue (`TagResponse[]`, a structural superset) flow in without casts.
  */
 const props = defineProps<{
     /** Tags currently attached to the entity. */
-    tags: TagResponse[]
+    tags: TagDto[]
     /** All available tags to choose from. */
-    allTags: TagResponse[]
+    allTags: TagDto[]
     /** Tag collection endpoint, e.g. `/api/leads/{id}/tags`. */
     endpoint: string
     /** Whether add/remove controls are shown. */
@@ -33,7 +37,7 @@ const filteredTags = computed(() => {
     )
 })
 
-async function addTag(tag: TagResponse) {
+async function addTag(tag: TagDto) {
     adding.value = true
     try {
         await api(props.endpoint, { method: 'POST', body: { tagId: tag.id } })
