@@ -5,6 +5,7 @@ import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.security.SecurityScheme
+import org.springdoc.core.customizers.OperationCustomizer
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
@@ -41,6 +42,31 @@ class OpenApiConfig {
                         ),
                 ),
             )
+
+    /**
+     * Give every endpoint a stable, human-readable `operationId` of the form
+     * `controllerCamel + MethodPascal` (e.g. `GroupController.create` → `groupCreate`,
+     * `ActivityController.attachTag` → `activityAttachTag`).
+     *
+     * By default springdoc derives operationIds from the bare method name and
+     * disambiguates collisions across controllers with `_1`, `_2`, … suffixes —
+     * which are meaningless and **shift whenever endpoints are added/removed**.
+     * Stable ids are what a generated client/SDK (Hey API) turns into function
+     * names, so they must not churn. Prefixing with the controller name removes
+     * cross-controller collisions (e.g. the many `attachTag` methods become
+     * `leadAttachTag`, `personAttachTag`, …) without per-endpoint annotations.
+     */
+    @Bean
+    fun stableOperationIds(): OperationCustomizer =
+        OperationCustomizer { operation, handlerMethod ->
+            val controller =
+                handlerMethod.beanType.simpleName
+                    .removeSuffix("Controller")
+                    .replaceFirstChar { it.lowercaseChar() }
+            val method = handlerMethod.method.name.replaceFirstChar { it.uppercaseChar() }
+            operation.operationId = "$controller$method"
+            operation
+        }
 
     private companion object {
         const val BEARER_SCHEME = "bearerAuth"
