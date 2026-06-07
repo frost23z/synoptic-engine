@@ -183,6 +183,36 @@ Mirror the backend working agreement:
 
 ---
 
+## Type-safety pipeline (F1 — backend↔frontend sync)
+
+**Status: generator adopted; drift gate pending.**
+
+The backend↔frontend contract is generated, not hand-maintained:
+
+- **Generator:** [Hey API](https://heyapi.dev) (`@hey-api/openapi-ts`), config in
+  `web/openapi-ts.config.ts`. `pnpm openapi:gen` (auto-runs on install) reads the springdoc
+  spec snapshot `api-docs.json` and emits `web/app/api/{types,zod}.gen.ts` (gitignored).
+- **Types:** `types.gen.ts` is the DTO source of truth. Migrate a module off hand-written
+  DTOs by re-exporting the generated types from its `~/types/*` file (bridge pattern, done for
+  `app/types/inventory.ts`); page imports stay unchanged. Remaining hand-written DTOs in
+  `~/types/*` are the migration backlog.
+- **Validation:** `zod.gen.ts` carries the backend's bean-validation rules as Zod schemas;
+  `useFormSubmit().validate(form, zCreateGroupRequest)` uses them directly (done for
+  groups/roles). No more hand-duplicated field rules.
+- **Client:** intentionally NOT generated — `useApi()` stays the HTTP layer (auth + 401 refresh).
+
+**Known drift to clear:**
+1. `TagDto` (generated) vs `TagResponse` (hand-written, richer) — unify before bridging
+   `ProductResponse`/`WarehouseResponse`.
+2. `MovementResponse` is hand-written because `GET /inventory/movements` post-dates the
+   `api-docs.json` snapshot — regenerate the spec to bridge it.
+
+**The drift gate (do next — needs the backend, so a dev-container/CI task):** add a CI job that
+boots the API against Postgres, dumps `/v3/api-docs`, and runs `git diff --exit-code api-docs.json`.
+This makes a stale snapshot fail the build — the actual enforcement of sync. The cleanest dump
+mechanism is a `@SpringBootTest` that `GET`s `/v3/api-docs` and writes the file (reuses the
+existing Testcontainers context), wired into the existing `pnpm typecheck && lint && build` CI.
+
 ## Appendix — Key file paths
 - Foundation: `app/composables/useApi.ts`, `app/stores/auth.ts`, `app/layouts/default.vue`
   (nav lives here), `app/composables/usePermissions.ts`, `app/app.config.ts`.

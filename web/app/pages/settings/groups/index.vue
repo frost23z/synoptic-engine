@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
-import { z } from 'zod'
+import { zCreateGroupRequest } from '~/api/zod.gen'
 import type { GroupResponse } from '~/types/settings'
-
-const groupSchema = z.object({
-    name: z.string().trim().min(1, 'Name is required'),
-    description: z.string().optional(),
-})
 
 definePageMeta({ title: 'Groups' })
 useHead({ title: 'Groups — Synoptic' })
@@ -52,7 +47,7 @@ function openEdit(g: GroupResponse) {
 
 function submitForm() {
     run({
-        validate: () => validate(form, groupSchema),
+        validate: () => validate(form, zCreateGroupRequest),
         call: () =>
             api(isEdit.value ? `/api/groups/${editingId.value}` : '/api/groups', {
                 method: isEdit.value ? 'PUT' : 'POST',
