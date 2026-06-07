@@ -13,6 +13,19 @@ const toast = useToast()
 const router = useRouter()
 const { formatCurrency, formatDate } = useFormatters()
 const { can } = usePermissions()
+const { downloadBlob } = useDownload()
+
+const exporting = ref(false)
+async function exportCsv() {
+    exporting.value = true
+    try {
+        await downloadBlob('/api/leads/export', 'leads.csv')
+    } catch {
+        toast.add({ title: 'Export failed', color: 'error' })
+    } finally {
+        exporting.value = false
+    }
+}
 
 // ── View + selection ────────────────────────────────────────────────────
 const view = ref<'list' | 'kanban'>('list')
@@ -218,6 +231,15 @@ async function onDrop(toStageId: string) {
                         @click="view = 'kanban'"
                     />
                 </UButtonGroup>
+                <UButton
+                    v-if="can('leads.view')"
+                    icon="i-tabler-download"
+                    label="Export"
+                    color="neutral"
+                    variant="outline"
+                    :loading="exporting"
+                    @click="exportCsv"
+                />
                 <UButton
                     v-if="can('leads.create')"
                     icon="i-tabler-plus"
