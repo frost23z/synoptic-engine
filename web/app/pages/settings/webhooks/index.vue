@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { WebhookResponse } from '~/types/settings'
+import { required, url } from '~/utils/validators'
 
 definePageMeta({ title: 'Webhooks' })
 useHead({ title: 'Webhooks — Synoptic' })
@@ -9,6 +10,13 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const {
+    submitting: creating,
+    errors,
+    run,
+    validate,
+    clearErrors,
+} = useFormSubmit({ failureTitle: 'Failed to create webhook' })
 
 const KNOWN_EVENTS = [
     'lead.created',
@@ -28,7 +36,6 @@ const {
 
 // ── Create ──────────────────────────────────────────────────────────────
 const createOpen = ref(false)
-const creating = ref(false)
 const createForm = reactive({
     name: '',
     payloadUrl: '',
@@ -37,35 +44,35 @@ const createForm = reactive({
 })
 
 function openCreate() {
+    clearErrors()
     Object.assign(createForm, { name: '', payloadUrl: '', events: [], active: true })
     createOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
-    try {
-        await api('/api/settings/webhooks', {
-            method: 'POST',
-            body: {
-                name: createForm.name,
-                payloadUrl: createForm.payloadUrl,
-                events: createForm.events,
-                isActive: createForm.active,
-            },
-        })
-        toast.add({ title: 'Webhook created', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({
-            title: 'Failed to create webhook',
-            description: e?.data?.message,
-            color: 'error',
-        })
-    } finally {
-        creating.value = false
-    }
+function submitCreate() {
+    run({
+        validate: () =>
+            validate(createForm, {
+                name: [required('Name is required')],
+                payloadUrl: [required('Payload URL is required'), url('Enter a valid URL')],
+            }),
+        call: () =>
+            api('/api/settings/webhooks', {
+                method: 'POST',
+                body: {
+                    name: createForm.name,
+                    payloadUrl: createForm.payloadUrl,
+                    events: createForm.events,
+                    isActive: createForm.active,
+                },
+            }),
+        fieldHints: ['name', 'payloadUrl'],
+        onSuccess: () => {
+            toast.add({ title: 'Webhook created', color: 'success' })
+            createOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -174,14 +181,14 @@ function rowActions(w: WebhookResponse): DropdownMenuItem[][] {
             @confirm="submitCreate"
         >
             <form class="space-y-3" @submit.prevent="submitCreate">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput
                         v-model="createForm.name"
                         placeholder="e.g. Notify Slack on new lead"
                         class="w-full"
                     />
                 </UFormField>
-                <UFormField label="Payload URL" required>
+                <UFormField label="Payload URL" required :error="errors.payloadUrl">
                     <UInput
                         v-model="createForm.payloadUrl"
                         placeholder="https://example.com/hook"

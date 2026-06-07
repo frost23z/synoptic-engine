@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Email Templates' })
 useHead({ title: 'Email Templates — Synoptic' })
@@ -8,6 +9,15 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const { submitting, errors, run, validate, clearErrors } = useFormSubmit({
+    failureTitle: 'Failed to save template',
+})
+
+const templateSchema = {
+    name: [required('Name is required')],
+    subject: [required('Subject is required')],
+    content: [required('Content is required')],
+}
 
 interface EmailTemplateResponse {
     id: string
@@ -29,65 +39,67 @@ const {
 
 // ── Create ────────────────────────────────────────────────────────────────
 const createOpen = ref(false)
-const creating = ref(false)
 const createForm = reactive({ name: '', subject: '', content: '' })
 
 function openCreate() {
+    clearErrors()
     Object.assign(createForm, { name: '', subject: '', content: '' })
     createOpen.value = true
 }
 
-async function submitCreate() {
-    creating.value = true
-    try {
-        await api('/api/settings/email-templates', {
-            method: 'POST',
-            body: {
-                name: createForm.name,
-                subject: createForm.subject,
-                content: createForm.content,
-            },
-        })
-        toast.add({ title: 'Template created', color: 'success' })
-        createOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to create', description: e?.data?.message, color: 'error' })
-    } finally {
-        creating.value = false
-    }
+function submitCreate() {
+    run({
+        validate: () => validate(createForm, templateSchema),
+        call: () =>
+            api('/api/settings/email-templates', {
+                method: 'POST',
+                body: {
+                    name: createForm.name,
+                    subject: createForm.subject,
+                    content: createForm.content,
+                },
+            }),
+        fieldHints: ['name', 'subject', 'content'],
+        onSuccess: () => {
+            toast.add({ title: 'Template created', color: 'success' })
+            createOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────
 const editOpen = ref(false)
-const saving = ref(false)
 const editTarget = shallowRef<EmailTemplateResponse | null>(null)
 const editForm = reactive({ name: '', subject: '', content: '' })
 
 function openEdit(t: EmailTemplateResponse) {
+    clearErrors()
     editTarget.value = t
     Object.assign(editForm, { name: t.name, subject: t.subject, content: t.content })
     editOpen.value = true
 }
 
-async function submitEdit() {
+function submitEdit() {
     if (!editTarget.value) return
-    saving.value = true
-    try {
-        await api(`/api/settings/email-templates/${editTarget.value.id}`, {
-            method: 'PUT',
-            body: { name: editForm.name, subject: editForm.subject, content: editForm.content },
-        })
-        toast.add({ title: 'Template saved', color: 'success' })
-        editOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to save', description: e?.data?.message, color: 'error' })
-    } finally {
-        saving.value = false
-    }
+    run({
+        validate: () => validate(editForm, templateSchema),
+        call: () =>
+            api(`/api/settings/email-templates/${editTarget.value!.id}`, {
+                method: 'PUT',
+                body: {
+                    name: editForm.name,
+                    subject: editForm.subject,
+                    content: editForm.content,
+                },
+            }),
+        fieldHints: ['name', 'subject', 'content'],
+        onSuccess: () => {
+            toast.add({ title: 'Template saved', color: 'success' })
+            editOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -183,27 +195,27 @@ function rowActions(t: EmailTemplateResponse): DropdownMenuItem[][] {
             v-model:open="createOpen"
             title="Create Email Template"
             confirm-label="Create"
-            :loading="creating"
+            :loading="submitting"
             :confirm-disabled="!createForm.name || !createForm.subject || !createForm.content"
             width-class="sm:max-w-2xl"
             @confirm="submitCreate"
         >
             <form class="space-y-3" @submit.prevent="submitCreate">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput
                         v-model="createForm.name"
                         placeholder="e.g. Welcome Email"
                         class="w-full"
                     />
                 </UFormField>
-                <UFormField label="Subject" required>
+                <UFormField label="Subject" required :error="errors.subject">
                     <UInput
                         v-model="createForm.subject"
                         placeholder="Email subject line"
                         class="w-full"
                     />
                 </UFormField>
-                <UFormField label="Content" required>
+                <UFormField label="Content" required :error="errors.content">
                     <UTextarea
                         v-model="createForm.content"
                         placeholder="Email body (HTML supported)"
@@ -219,19 +231,19 @@ function rowActions(t: EmailTemplateResponse): DropdownMenuItem[][] {
             v-model:open="editOpen"
             title="Edit Email Template"
             confirm-label="Save"
-            :loading="saving"
+            :loading="submitting"
             :confirm-disabled="!editForm.name || !editForm.subject"
             width-class="sm:max-w-2xl"
             @confirm="submitEdit"
         >
             <form class="space-y-3" @submit.prevent="submitEdit">
-                <UFormField label="Name" required>
+                <UFormField label="Name" required :error="errors.name">
                     <UInput v-model="editForm.name" class="w-full" />
                 </UFormField>
-                <UFormField label="Subject" required>
+                <UFormField label="Subject" required :error="errors.subject">
                     <UInput v-model="editForm.subject" class="w-full" />
                 </UFormField>
-                <UFormField label="Content" required>
+                <UFormField label="Content" required :error="errors.content">
                     <UTextarea
                         v-model="editForm.content"
                         :rows="10"

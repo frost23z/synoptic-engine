@@ -13,6 +13,7 @@ import com.synopticengine.api.auth.web.MfaVerifyRequest
 import com.synopticengine.api.auth.web.SessionResponse
 import com.synopticengine.api.auth.web.TokenResponse
 import com.synopticengine.api.identity.IdentityApi
+import com.synopticengine.api.identity.TenantApi
 import com.synopticengine.api.identity.UserCredentials
 import com.synopticengine.api.shared.config.PasswordPolicyService
 import com.synopticengine.api.shared.email.MailSenderService
@@ -38,10 +39,35 @@ class AuthService(
     private val mailSenderService: MailSenderService,
     private val loginAttemptTracker: LoginAttemptTracker,
     private val forgotPasswordAttemptTracker: ForgotPasswordAttemptTracker,
+    private val registrationAttemptTracker: RegistrationAttemptTracker,
     private val passwordPolicyService: PasswordPolicyService,
     private val mfaService: MfaService,
+    private val tenantApi: TenantApi,
     @Value("\${synoptic.auth.password-reset.ttl-minutes:15}") private val resetTtlMinutes: Long,
 ) {
+    /**
+     * Self-serve signup: provision a brand-new tenant (company) with [companyName] and its first
+     * admin ([email] / [password]), then immediately log that admin in so the caller gets tokens.
+     * Public + rate-limited per (email, IP). Email is globally unique, so a duplicate is rejected.
+     */
+    @Transactional
+    fun register(
+        companyName: String,
+        email: String,
+        password: String,
+        clientIp: String? = null,
+    ): TokenResponse {
+        registrationAttemptTracker.assertNotLocked(email, clientIp)
+        registrationAttemptTracker.recordFailure(email, clientIp)
+        passwordPolicyService.validate(password)
+        if (identityApi.findCredentialsByEmail(email) != null) {
+            throw IllegalStateException("An account with this email already exists")
+        }
+        tenantApi.registerSelfService(companyName, email, password)
+        registrationAttemptTracker.recordSuccess(email, clientIp)
+        return login(email, password, clientIp)
+    }
+
     fun login(
         email: String,
         password: String,

@@ -50,9 +50,9 @@ function senderDisplay(email: EmailResponse) {
     return f.name || f.email || '—'
 }
 
-async function markRead(email: EmailResponse, read: boolean) {
+async function markRead(email: EmailResponse, isRead: boolean) {
     try {
-        await api(`/api/mail/${email.id}/read`, { method: 'PATCH', body: { read } })
+        await api(`/api/mail/${email.id}/read`, { method: 'PATCH', body: { isRead } })
         refresh()
     } catch {
         toast.add({ title: 'Failed to update', color: 'error' })
@@ -277,7 +277,7 @@ async function submitCompose() {
                     v-for="email in emails"
                     :key="email.id"
                     class="border-default hover:bg-muted/50 group flex cursor-pointer items-start gap-3 border-b px-4 py-3 transition-colors"
-                    :class="!email.read ? 'bg-primary/5' : ''"
+                    :class="!email.isRead ? 'bg-primary/5' : ''"
                     @click="router.push(`/mail/${email.id}`)"
                 >
                     <!-- Checkbox + unread dot -->
@@ -285,7 +285,7 @@ async function submitCompose() {
                         <UCheckbox :checked="isSelected(email.id)" @change="toggle(email.id)" />
                         <div
                             class="size-2 rounded-full"
-                            :class="!email.read ? 'bg-primary' : 'bg-transparent'"
+                            :class="!email.isRead ? 'bg-primary' : 'bg-transparent'"
                         />
                     </div>
 
@@ -294,7 +294,7 @@ async function submitCompose() {
                             <span
                                 class="truncate text-sm"
                                 :class="
-                                    !email.read
+                                    !email.isRead
                                         ? 'text-highlighted font-semibold'
                                         : 'text-default font-medium'
                                 "
@@ -307,7 +307,7 @@ async function submitCompose() {
                         </div>
                         <p
                             class="truncate text-sm"
-                            :class="!email.read ? 'text-highlighted' : 'text-muted'"
+                            :class="!email.isRead ? 'text-highlighted' : 'text-muted'"
                         >
                             {{ email.subject || '(no subject)' }}
                         </p>
@@ -319,13 +319,13 @@ async function submitCompose() {
                         class="invisible flex shrink-0 items-center gap-1 group-hover:visible"
                         @click.stop
                     >
-                        <UTooltip :text="email.read ? 'Mark unread' : 'Mark read'">
+                        <UTooltip :text="email.isRead ? 'Mark unread' : 'Mark read'">
                             <UButton
-                                :icon="email.read ? 'i-tabler-mail' : 'i-tabler-mail-opened'"
+                                :icon="email.isRead ? 'i-tabler-mail' : 'i-tabler-mail-opened'"
                                 color="neutral"
                                 variant="ghost"
                                 size="xs"
-                                @click="markRead(email, !email.read)"
+                                @click="markRead(email, !email.isRead)"
                             />
                         </UTooltip>
                         <UTooltip v-if="folder !== 'trash'" text="Move to trash">

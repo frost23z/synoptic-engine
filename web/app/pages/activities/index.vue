@@ -159,6 +159,15 @@ const userOptions = computed(
     () => allUsers.value?.map((u) => ({ label: u.fullName, value: u.id })) ?? []
 )
 
+/** Resolve a participant's display name/email from the users lookup. */
+function participantName(p: ActivityParticipantResponse): string {
+    const u = allUsers.value?.find((x) => x.id === p.userId)
+    return u?.fullName ?? p.personId ?? p.userId ?? '—'
+}
+function participantEmail(p: ActivityParticipantResponse): string {
+    return allUsers.value?.find((x) => x.id === p.userId)?.email ?? ''
+}
+
 async function loadParticipants(activityId: string) {
     participantsPending.value = true
     try {
@@ -191,13 +200,14 @@ async function addParticipant() {
     }
 }
 
-async function removeParticipant(userId: string) {
-    if (!selectedActivityId.value) return
+async function removeParticipant(participant: ActivityParticipantResponse) {
+    if (!selectedActivityId.value || !participant.userId) return
+    const userId = participant.userId
     try {
         await api(`/api/activities/${selectedActivityId.value}/participants/${userId}`, {
             method: 'DELETE',
         })
-        participants.value = participants.value.filter((p) => p.id !== userId)
+        participants.value = participants.value.filter((p) => p.userId !== userId)
         toast.add({ title: 'Participant removed', color: 'success' })
     } catch {
         toast.add({ title: 'Failed to remove participant', color: 'error' })
@@ -233,7 +243,7 @@ async function massMarkDone() {
     try {
         await api('/api/activities/mass-update', {
             method: 'POST',
-            body: { ids: massSelected.value, done: true },
+            body: { ids: massSelected.value, isDone: true },
         })
         toast.add({ title: `${count.value} activities marked done`, color: 'success' })
         clearAll()
@@ -259,8 +269,8 @@ function rowActions(a: ActivityResponse): DropdownMenuItem[][] {
         [
             { label: 'View', icon: 'i-tabler-eye', onSelect: () => openView(a) },
             {
-                label: a.done ? 'Mark pending' : 'Mark done',
-                icon: a.done ? 'i-tabler-circle-x' : 'i-tabler-circle-check',
+                label: a.isDone ? 'Mark pending' : 'Mark done',
+                icon: a.isDone ? 'i-tabler-circle-x' : 'i-tabler-circle-check',
                 onSelect: () => toggleDone(a),
             },
         ],
@@ -330,8 +340,8 @@ function rowActions(a: ActivityResponse): DropdownMenuItem[][] {
         >
             <template #done-cell="{ row }">
                 <UButton
-                    :icon="row.original.done ? 'i-tabler-circle-check-filled' : 'i-tabler-circle'"
-                    :color="row.original.done ? 'success' : 'neutral'"
+                    :icon="row.original.isDone ? 'i-tabler-circle-check-filled' : 'i-tabler-circle'"
+                    :color="row.original.isDone ? 'success' : 'neutral'"
                     variant="ghost"
                     size="xs"
                     :loading="togglingId === row.original.id"
@@ -341,7 +351,7 @@ function rowActions(a: ActivityResponse): DropdownMenuItem[][] {
             <template #title-cell="{ row }">
                 <span
                     class="text-sm font-medium"
-                    :class="row.original.done ? 'text-muted line-through' : 'text-highlighted'"
+                    :class="row.original.isDone ? 'text-muted line-through' : 'text-highlighted'"
                 >
                     {{ row.original.title }}
                 </span>
@@ -468,15 +478,15 @@ function rowActions(a: ActivityResponse): DropdownMenuItem[][] {
                                 class="border-default flex items-center justify-between rounded-lg border px-3 py-2"
                             >
                                 <div>
-                                    <p class="text-sm font-medium">{{ p.fullName }}</p>
-                                    <p class="text-muted text-xs">{{ p.email }}</p>
+                                    <p class="text-sm font-medium">{{ participantName(p) }}</p>
+                                    <p class="text-muted text-xs">{{ participantEmail(p) }}</p>
                                 </div>
                                 <UButton
                                     icon="i-tabler-x"
                                     size="xs"
                                     color="neutral"
                                     variant="ghost"
-                                    @click="removeParticipant(p.id)"
+                                    @click="removeParticipant(p)"
                                 />
                             </div>
                         </div>

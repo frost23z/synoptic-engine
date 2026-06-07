@@ -18,6 +18,17 @@ interface TenantApi {
     ): TenantSummary
 
     /**
+     * Self-serve signup: provision a tenant from just a company name + first admin, deriving a
+     * unique slug from the name. Used by the public registration flow where the caller can't be
+     * trusted to pick a slug.
+     */
+    fun registerSelfService(
+        name: String,
+        adminEmail: String,
+        adminPassword: String,
+    ): TenantSummary
+
+    /**
      * Idempotent. Re-runs seeding for an existing tenant (e.g. the seed tenant on app boot,
      * or after adding a new permission family that ADMIN should pick up automatically).
      */

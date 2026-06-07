@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import { required } from '~/utils/validators'
 
 definePageMeta({ title: 'Web Forms' })
 useHead({ title: 'Web Forms — Synoptic' })
@@ -8,6 +9,15 @@ const api = useApi()
 const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const {
+    submitting: formSaving,
+    errors,
+    run,
+    validate,
+    clearErrors,
+} = useFormSubmit({
+    failureTitle: 'Failed to save web form',
+})
 
 interface AttributeResponse {
     id: string
@@ -60,12 +70,12 @@ const attributeOptions = computed(() =>
 type FormMode = 'create' | 'edit'
 const formOpen = ref(false)
 const formMode = ref<FormMode>('create')
-const formSaving = ref(false)
 const formTarget = shallowRef<WebFormResponse | null>(null)
 const formData = reactive({ title: '', description: '', active: true })
 const formFields = ref<WebFormField[]>([])
 
 function openCreate() {
+    clearErrors()
     formMode.value = 'create'
     formTarget.value = null
     Object.assign(formData, { title: '', description: '', active: true })
@@ -74,6 +84,7 @@ function openCreate() {
 }
 
 function openEdit(w: WebFormResponse) {
+    clearErrors()
     formMode.value = 'edit'
     formTarget.value = w
     Object.assign(formData, { title: w.title, description: w.description ?? '', active: w.active })
@@ -96,36 +107,35 @@ function removeField(i: number) {
     })
 }
 
-async function submitForm() {
-    formSaving.value = true
-    try {
-        const body = {
-            title: formData.title,
-            description: formData.description || undefined,
-            active: formData.active,
-            fields: formFields.value
-                .filter((f) => f.attributeId)
-                .map((f, i) => ({
-                    attributeId: f.attributeId,
-                    sortOrder: i,
-                    required: f.required,
-                })),
-        }
-        if (formMode.value === 'create') {
-            await api('/api/settings/web-forms', { method: 'POST', body })
-            toast.add({ title: 'Web form created', color: 'success' })
-        } else if (formTarget.value) {
-            await api(`/api/settings/web-forms/${formTarget.value.id}`, { method: 'PUT', body })
-            toast.add({ title: 'Web form saved', color: 'success' })
-        }
-        formOpen.value = false
-        refresh()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({ title: 'Failed to save', description: e?.data?.message, color: 'error' })
-    } finally {
-        formSaving.value = false
+function submitForm() {
+    const body = {
+        title: formData.title,
+        description: formData.description || undefined,
+        active: formData.active,
+        fields: formFields.value
+            .filter((f) => f.attributeId)
+            .map((f, i) => ({
+                attributeId: f.attributeId,
+                sortOrder: i,
+                required: f.required,
+            })),
     }
+    run({
+        validate: () => validate(formData, { title: [required('Title is required')] }),
+        call: () =>
+            formMode.value === 'create'
+                ? api('/api/settings/web-forms', { method: 'POST', body })
+                : api(`/api/settings/web-forms/${formTarget.value!.id}`, { method: 'PUT', body }),
+        fieldHints: ['title'],
+        onSuccess: () => {
+            toast.add({
+                title: formMode.value === 'create' ? 'Web form created' : 'Web form saved',
+                color: 'success',
+            })
+            formOpen.value = false
+            refresh()
+        },
+    })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
@@ -231,7 +241,7 @@ function rowActions(w: WebFormResponse): DropdownMenuItem[][] {
             @confirm="submitForm"
         >
             <form class="space-y-4" @submit.prevent="submitForm">
-                <UFormField label="Title" required>
+                <UFormField label="Title" required :error="errors.title">
                     <UInput
                         v-model="formData.title"
                         placeholder="e.g. Lead Capture Form"

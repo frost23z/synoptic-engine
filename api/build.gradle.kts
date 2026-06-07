@@ -107,6 +107,22 @@ tasks.register<Test>("unitTests") {
     useJUnitPlatform { excludeTags("integration") }
 }
 
+// Drift gate: boots the context and re-dumps `/v3/api-docs` to the repo-root
+// `api-docs.json` snapshot (the frontend type generator's input). CI runs this,
+// then `git diff --exit-code api-docs.json` to fail on a stale spec. Needs Docker
+// (Testcontainers). See OpenApiSpecDriftTest.
+tasks.register<Test>("dumpOpenApiSpec") {
+    description = "Re-dumps the OpenAPI spec to ../api-docs.json for the drift gate."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("com.synopticengine.api.OpenApiSpecDriftTest") }
+    systemProperty("openapi.dump", "true")
+    // Always re-run; never serve a cached "up-to-date" result for a dump task.
+    outputs.upToDateWhen { false }
+}
+
 spotless {
     kotlin {
         target("src/**/*.kt")

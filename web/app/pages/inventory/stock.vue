@@ -12,6 +12,13 @@ const api = useApi()
 const toast = useToast()
 const { can } = usePermissions()
 const {
+    submitting,
+    errors,
+    run: runAction,
+    validate: validateAction,
+    clearErrors: clearActionErrors,
+} = useFormSubmit({ failureTitle: 'Stock action failed' })
+const {
     productOptions,
     warehouseOptions,
     locationsByWarehouse,
@@ -102,40 +109,42 @@ const actionOpen = ref(false)
 const actionMode = ref<'reserve' | 'release'>('reserve')
 const actionRow = shallowRef<StockRow | null>(null)
 const actionQty = ref(1)
-const submitting = ref(false)
+
+const qtyAtLeastOne = (v: unknown) =>
+    typeof v !== 'number' || Number.isNaN(v) || v < 1 ? 'Enter a quantity of at least 1' : undefined
 
 function openAction(mode: 'reserve' | 'release', row: StockRow) {
+    clearActionErrors()
     actionMode.value = mode
     actionRow.value = row
     actionQty.value = 1
     actionOpen.value = true
 }
 
-async function submitAction() {
+function submitAction() {
     const row = actionRow.value
-    if (!row || !row.locationId || actionQty.value < 1) return
-    submitting.value = true
-    try {
-        await api(`/api/inventory/${actionMode.value}`, {
-            method: 'POST',
-            body: { productId: row.productId, locationId: row.locationId, qty: actionQty.value },
-        })
-        toast.add({
-            title: actionMode.value === 'reserve' ? 'Stock reserved' : 'Stock released',
-            color: 'success',
-        })
-        actionOpen.value = false
-        loadStock()
-    } catch (err: unknown) {
-        const e = err as { data?: { message?: string } }
-        toast.add({
-            title: `Failed to ${actionMode.value}`,
-            description: e?.data?.message,
-            color: 'error',
-        })
-    } finally {
-        submitting.value = false
-    }
+    if (!row || !row.locationId) return
+    runAction({
+        validate: () => validateAction({ qty: actionQty.value }, { qty: [qtyAtLeastOne] }),
+        call: () =>
+            api(`/api/inventory/${actionMode.value}`, {
+                method: 'POST',
+                body: {
+                    productId: row.productId,
+                    locationId: row.locationId,
+                    qty: actionQty.value,
+                },
+            }),
+        fieldHints: ['qty'],
+        onSuccess: () => {
+            toast.add({
+                title: actionMode.value === 'reserve' ? 'Stock reserved' : 'Stock released',
+                color: 'success',
+            })
+            actionOpen.value = false
+            loadStock()
+        },
+    })
 }
 
 onMounted(() => {
@@ -245,7 +254,7 @@ onMounted(() => {
                     }}</strong
                     >.
                 </p>
-                <UFormField label="Quantity" required>
+                <UFormField label="Quantity" required :error="errors.qty">
                     <UInput v-model.number="actionQty" type="number" min="1" class="w-full" />
                 </UFormField>
             </form>
