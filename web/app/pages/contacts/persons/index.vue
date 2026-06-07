@@ -10,8 +10,21 @@ const toast = useToast()
 const router = useRouter()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
+const { downloadBlob } = useDownload()
 
 const { selected, selectAll, clearAll, count } = useMassSelect()
+
+const exporting = ref(false)
+async function exportCsv() {
+    exporting.value = true
+    try {
+        await downloadBlob('/api/persons/export', 'persons.csv')
+    } catch {
+        toast.add({ title: 'Export failed', color: 'error' })
+    } finally {
+        exporting.value = false
+    }
+}
 
 const {
     page,
@@ -97,6 +110,15 @@ function rowActions(person: PersonResponse): DropdownMenuItem[][] {
     <div class="space-y-4">
         <AppPageHeader title="Persons" :subtitle="`${total.toLocaleString()} contacts`">
             <template #actions>
+                <UButton
+                    v-if="can('contacts.view')"
+                    icon="i-tabler-download"
+                    label="Export"
+                    color="neutral"
+                    variant="outline"
+                    :loading="exporting"
+                    @click="exportCsv"
+                />
                 <UButton
                     v-if="can('contacts.persons.create')"
                     icon="i-tabler-plus"
