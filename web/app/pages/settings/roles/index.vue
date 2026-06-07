@@ -1,13 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
-import { z } from 'zod'
+import { zCreateRoleRequest } from '~/api/zod.gen'
 import type { PermissionResponse, RoleResponse } from '~/types/settings'
-
-const roleSchema = z.object({
-    name: z.string().trim().min(1, 'Name is required'),
-    description: z.string().optional(),
-    permissions: z.array(z.string()),
-})
 
 definePageMeta({ title: 'Roles' })
 useHead({ title: 'Roles — Synoptic' })
@@ -87,7 +81,7 @@ function openEdit(r: RoleResponse) {
 
 function submitForm() {
     run({
-        validate: () => validate(form, roleSchema),
+        validate: () => validate(form, zCreateRoleRequest),
         call: () =>
             api(isEdit.value ? `/api/roles/${editingId.value}` : '/api/roles', {
                 method: isEdit.value ? 'PUT' : 'POST',

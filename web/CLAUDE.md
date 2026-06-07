@@ -93,8 +93,25 @@ page duplication). Components are auto-imported.
 Reference implementations: `app/pages/leads/index.vue`, `contacts/persons/index.vue`,
 `quotes/index.vue`. Shared constants (`PAGE_SIZE`, …) in `app/utils/constants.ts`.
 
-**Typed API:** `pnpm openapi:types` generates `app/types/api.gen.ts` from `../api-docs.json`
-(gitignored; auto-generated on install). Prefer generated types over hand-written DTOs.
+**Typed API (Hey API):** `pnpm openapi:gen` (runs on install) generates, from the backend
+spec `../api-docs.json`, into `app/api/` (gitignored — a pure function of the spec):
+
+- `app/api/types.gen.ts` — request/response/enum DTOs. **Source of truth — prefer these over
+  hand-written `~/types/*` DTOs.** Migrate a module by re-exporting the generated types from
+  its `~/types/*` file (bridge pattern — see `app/types/inventory.ts`); consumers stay unchanged.
+- `app/api/zod.gen.ts` — Zod schemas mirroring the backend's bean-validation (`@NotBlank`,
+  `@Size`, …). Feed them straight into form validation: `validate(form, zCreateGroupRequest)`
+  (see `settings/groups/index.vue`, `settings/roles/index.vue`). Field rules now come from the
+  backend, not duplicated by hand.
+
+We deliberately do **not** generate an HTTP client; calls keep going through `useApi()`, which
+owns the auth header and 401 refresh. Config lives in `openapi-ts.config.ts`.
+
+> **Spec freshness:** `api-docs.json` is a committed snapshot dumped from springdoc
+> `/v3/api-docs`. It must be regenerated whenever the backend API changes (e.g. the new
+> `/inventory/movements` endpoint is not in the current snapshot, so `MovementResponse` is
+> still hand-written in `app/types/inventory.ts`). The drift gate that enforces this lives in
+> CI (boots the API, re-dumps the spec, `git diff --exit-code`) — see `FRONTEND_PLAN.md`.
 
 ### Rollout status
 
