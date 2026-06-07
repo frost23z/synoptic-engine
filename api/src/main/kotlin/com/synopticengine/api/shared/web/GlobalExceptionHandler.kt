@@ -15,6 +15,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.servlet.resource.NoResourceFoundException
 import java.net.URI
 
 @RestControllerAdvice
@@ -23,6 +24,13 @@ class GlobalExceptionHandler {
     @ExceptionHandler(NoSuchElementException::class)
     fun handleNotFound(ex: NoSuchElementException): ProblemDetail =
         problem(HttpStatus.NOT_FOUND, ex.message ?: "Resource not found")
+
+    // 404 — no controller handler / static resource matches the request path.
+    // Without this, an unmapped route falls through to the catch-all below and
+    // surfaces as a misleading 500. Caught explicitly so unknown paths return 404.
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNoResource(ex: NoResourceFoundException): ProblemDetail =
+        problem(HttpStatus.NOT_FOUND, "No resource found for the requested path")
 
     // 400 — bad input, wrong IDs, business rule violations (incl. file-size exceeded)
     @ExceptionHandler(IllegalArgumentException::class, FileSizeLimitExceededException::class)

@@ -110,9 +110,11 @@ owns the auth header and 401 refresh. Config lives in `openapi-ts.config.ts`.
 > **Spec freshness:** `api-docs.json` is a committed snapshot dumped from springdoc
 > `/v3/api-docs`. It must be regenerated whenever the backend API changes — run
 > `./gradlew dumpOpenApiSpec` in `api/` and commit the result, then `pnpm openapi:gen` here.
-> The **drift gate enforces this in CI** (`.github/workflows/ci.yml` → `drift-gate`: re-dumps
-> the spec via `OpenApiSpecDriftTest` and `git diff --exit-code api-docs.json`), so a stale
-> snapshot fails the build. See `FRONTEND_PLAN.md`.
+> A **drift test** enforces this (`OpenApiSpecDriftTest` re-dumps the spec and the dump must equal
+> the committed `api-docs.json`); it runs as part of `./gradlew test`. **NOTE (2026-06-07): this is
+> not yet wired into CI** — there is no `.github/workflows/` directory in the repo, so until the
+> `ci.yml` `drift-gate` job (YAML in `NEXT.md`) is committed, freshness is only enforced by running
+> the suite locally. See `FRONTEND_PLAN.md`.
 
 ### Rollout status
 

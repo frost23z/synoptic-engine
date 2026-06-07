@@ -5,13 +5,23 @@
 > (see [`FRONTEND_PLAN.md`](./FRONTEND_PLAN.md)); the agentic/AI direction is future work
 > (see [`FUTURE_AGENTIC_CRM.md`](./FUTURE_AGENTIC_CRM.md)).
 >
-> Last verified: 2026-05-30 — every controller read directly, cross-checked against Krayin feature docs
+> Last verified: 2026-06-07 — every controller read directly, cross-checked against Krayin feature
+> docs, and the **full Testcontainers integration suite was run end-to-end: 700 tests, 0 failures.**
 > Phase 1 completed: 2026-05-29
 > Phase 2 completed: 2026-05-30
 > Phase 3 completed: 2026-05-31
 > Phase 4 (MFA) completed: 2026-05-31
-> Next Flyway migration: **V027**
-> Build: `./gradlew testClasses` compiles clean (full integration suite needs Docker).
+> Next Flyway migration: **V027** (highest applied: `V026__mfa.sql`)
+> Build: `./gradlew testClasses` compiles clean; `./gradlew test` (Docker/Testcontainers) is
+> **green — 700 tests, 0 failures** (run 2026-06-07).
+>
+> 2026-06-07 fix: `TenantScopingIntegrationTest` hit pre-`/api`-prefix paths (`/leads`, `/persons`)
+> that 500'd on the catch-all handler; corrected to `/api/leads` and `/api/contacts/persons`. This
+> test predated the `api.base-path: /api` prefix and had never been executed (the full Docker suite
+> had not been run in CI/dev before). The endpoints themselves were always correct — proven by the
+> per-module Lead/Person integration tests, which use the prefixed paths and pass.
+> Minor pre-existing note: unmapped routes return **500** (caught by the catch-all
+> `@ExceptionHandler(Exception::class)`) rather than 404 — low severity, not changed.
 
 ---
 
@@ -149,7 +159,7 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 | Login history endpoint | V024 migration + `login_history` table + `GET /auth/login-history` | 2-3h | ✅ |
 | Multi-node rate limiter | Swap Caffeine → Redis in `LoginAttemptTracker` (interface already abstracted) | 3-4h | ❌ |
 | API keys for integrations | `api_keys` table + static-bearer `JwtAuthFilter` path | 4-6h | ✅ |
-| Tenant self-serve signup | Registration flow + email verification + default plan | 4-6h | ❌ |
+| Tenant self-serve signup | Registration flow + email verification + default plan | 4-6h | ✅ (email-verification deferred) |
 | Permission change audit | `auditLogService.record()` in `RoleService` create/update/delete | 1-2h | ✅ |
 | Folder permissions catalog | `GET /api/mail/folders` returning folders + permission keys | 1h | ✅ |
 
@@ -189,6 +199,27 @@ POST /api/leads/ai-create    (multipart: file + optional hints)
 - `AuthService.completeMfaLogin(mfaToken, code, clientIp)` — validates challenge token + TOTP/backup code, issues full tokens
 - Endpoints: `POST /auth/mfa/setup`, `POST /auth/mfa/confirm`, `POST /auth/mfa/verify` (public), `DELETE /auth/mfa`, `POST /auth/mfa/backup-codes/regenerate`
 - Tests: 401 guards, setup returns secret+qrUri, confirm with wrong code returns 400, mfa/verify with invalid token returns 400, login without MFA still returns normal tokens
+
+### Tenant self-serve signup ✅ (2026-06-07)
+- Public `POST /auth/register` (permit-listed in `SecurityConfig`) — a new company registers itself
+  with `{ companyName, email, password }`, gets its first **admin** user, and is **auto-logged-in**
+  (returns the normal `TokenResponse`). This is how a company onboards without an existing admin.
+- `AuthService.register()` — rate-limited per (email, IP) via the new `RegistrationAttemptTracker`
+  (mirrors `ForgotPasswordAttemptTracker`); enforces the password policy; rejects an already-used
+  email (email is globally unique → 409); then delegates to `TenantApi.registerSelfService()` and
+  logs the admin in.
+- `TenantProvisioningService.registerSelfService()` — derives a **unique slug** from the company
+  name (slugify + random suffix on collision) and reuses the existing `provision()` seeding path
+  (default roles + admin user + CRM defaults via `TenantProvisionedEvent`).
+- Tests: `RegistrationIntegrationTest` — 201 + tokens, new admin is scoped to its own tenant
+  (`GET /api/leads` → 200), duplicate email → 409, short password → 422, blank company → 422,
+  endpoint is public (never 401).
+- **Deferred:** email verification + plan selection (auto-login is the MVP onboarding path).
+
+### Routing: unmapped paths return 404 (2026-06-07)
+- `GlobalExceptionHandler` now has an `@ExceptionHandler(NoResourceFoundException)` → **404**.
+  Previously an unknown path fell through to the catch-all `Exception` handler and surfaced as a
+  misleading **500**. Test: `TenantScopingIntegrationTest.unmapped route returns 404 not 500`.
 
 ### API keys for integrations ✅
 - V025 migration: `api_keys(id, tenant_id, user_id, name, key_hash, key_prefix, created_at, expires_at, revoked_at, last_used_at)`

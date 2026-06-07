@@ -145,9 +145,19 @@ Build out `index.vue` beyond stats: the 8 dashboard stat types + recent activity
   hot, cross-page data (e.g. lookups: pipelines, sources, types, users). Avoid premature
   global state.
 - **Tests + CI.** Playwright coverage raised (12 specs incl. auth, leads CRUD, quote send,
-  sharing, inventory, export). **CI workflow added** (`.github/workflows/ci.yml`): `web`
-  (typecheck · lint · format:check · build), `api` (`./gradlew build`, Testcontainers), and the
-  OpenAPI `drift-gate`. Remaining: wire the e2e suite into CI against a Testcontainers-backed API.
+  sharing, inventory, export) — **verified green on 2026-06-07: 31 passed / 11 skipped / 0 failed**
+  against the live stack (skips are honest: the empty seed DB has no rows for the data-dependent
+  detail/mass-ops tests). **CI workflow NOT yet committed** — `.github/workflows/` does not exist in
+  the repo. The drift *mechanism* is real and passes locally (`OpenApiSpecDriftTest` +
+  `dumpOpenApiSpec` Gradle task; `api-docs.json` is in sync), but the GitHub Actions job that would
+  run it (plus `web` checks and `api` build) has never been landed — it was blocked on the
+  `workflow` OAuth scope from web sessions. The ready-to-paste YAML lives in `NEXT.md`. **Remaining:
+  commit `.github/workflows/ci.yml`** and wire the e2e suite into it against a Testcontainers API.
+
+- **Self-serve signup (2026-06-07).** New public `/register` page → `POST /auth/register`
+  (auto-login). Lets a company onboard with no pre-existing admin. Validation long-tail also
+  extended onto inventory **stock**/**transfers** and settings **email-templates**/**web-forms**/
+  **webhooks** via `useFormSubmit`. See `NEXT.md` for the full list + the remaining forms.
 
 ### Explicitly DEFERRED for MVP
 i18n (English-only now; ~11k LOC extraction is post-MVP), heavy global caching, and **all
@@ -186,7 +196,8 @@ Mirror the backend working agreement:
 
 ## Type-safety pipeline (F1 — backend↔frontend sync)
 
-**Status: generator adopted; drift gate LIVE in CI; SDK migration unblocked (next).**
+**Status: generator adopted; drift *test* passes locally (NOT yet wired into CI — no
+`.github/workflows/` in the repo); SDK migration unblocked (next).**
 
 The backend↔frontend contract is generated, not hand-maintained:
 
@@ -238,12 +249,15 @@ stay on `useApi()` + generated **types/zod**.
    bridge (both now generated).
 2. ~~`MovementResponse` hand-written~~ **DONE** (PR #63) — bridged once the spec was regenerated.
 
-**The drift gate — DONE (live in CI).** `api/.../OpenApiSpecDriftTest` boots the Testcontainers
-context, GETs `/v3/api-docs`, and (under `-Dopenapi.dump=true`, via the `dumpOpenApiSpec` Gradle
-task) writes springdoc's **raw** output verbatim to `api-docs.json`. The `.github/workflows/ci.yml`
-`drift-gate` job runs that task then `git diff --exit-code api-docs.json`, so a stale snapshot
-fails the build. The same workflow runs `web` (typecheck · lint · format:check · build) and
-`api` (`./gradlew build`, Testcontainers).
+**The drift gate — mechanism DONE, CI wiring NOT YET.** `api/.../OpenApiSpecDriftTest` boots the
+Testcontainers context, GETs `/v3/api-docs`, and (under `-Dopenapi.dump=true`, via the
+`dumpOpenApiSpec` Gradle task) writes springdoc's **raw** output verbatim to `api-docs.json`. As of
+2026-06-07 `api-docs.json` is in sync (the drift test passes inside the full suite). What's missing
+is the CI job: the intended `.github/workflows/ci.yml` `drift-gate` job (run the task, then
+`git diff --exit-code api-docs.json`) plus the `web` (typecheck · lint · format:check · build) and
+`api` (`./gradlew build`, Testcontainers) jobs **has never been committed** — there is no
+`.github/workflows/` directory. So the gate is only enforced by running the suite manually until the
+workflow YAML (in `NEXT.md`) is landed.
 
 ## Appendix — Key file paths
 - Foundation: `app/composables/useApi.ts`, `app/stores/auth.ts`, `app/layouts/default.vue`
