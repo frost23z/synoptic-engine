@@ -7,6 +7,7 @@ import type { TagResponse } from './leads'
 export type {
     InventoryEntryResponse,
     LowStockEntry,
+    MovementResponse,
     StockStateResponse,
     TransferOrderResponse,
     WarehouseLocationResponse,
@@ -65,9 +66,9 @@ export const TRANSFER_STATUS_COLOR: Record<TransferStatus, BadgeColor> = {
 }
 
 // ── Movement ledger ─────────────────────────────────────────────────────────
-// TEMP hand-written: the `GET /api/inventory/movements` endpoint is not yet in
-// the committed `api-docs.json` snapshot. Once the spec is regenerated from the
-// backend, drop this block and re-export `MovementResponse` from `~/api/types.gen`.
+// `MovementResponse` is re-exported from the generated types above. The
+// label/colour maps below are presentation concerns (not in the spec); the union
+// mirrors `MovementResponse.movementType`.
 export type MovementType =
     | 'RECEIPT'
     | 'ISSUE'
@@ -95,19 +96,4 @@ export const MOVEMENT_TYPE_COLOR: Record<MovementType, BadgeColor> = {
     TRANSFER_OUT: 'info',
     RESERVE: 'secondary',
     RELEASE: 'primary',
-}
-
-export interface MovementResponse {
-    id: string
-    productId: string
-    movementType: MovementType
-    fromLocationId?: string | null
-    toLocationId?: string | null
-    quantity: number
-    unitCost?: number | null
-    refDocType?: string | null
-    refDocId?: string | null
-    actorId?: string | null
-    notes?: string | null
-    createdAt?: string | null
 }
