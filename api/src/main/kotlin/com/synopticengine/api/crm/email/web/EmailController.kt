@@ -30,7 +30,7 @@ import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/mail")
+@RequestMapping("/mail")
 class EmailController(
     private val emailService: EmailService,
     private val inboundMailSignatureVerifier: InboundMailSignatureVerifier,

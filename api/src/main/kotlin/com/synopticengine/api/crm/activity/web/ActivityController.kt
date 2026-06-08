@@ -27,7 +27,7 @@ import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/activities")
+@RequestMapping("/activities")
 class ActivityController(
     private val activityService: ActivityService,
     private val fileUploadGuard: FileUploadGuard,

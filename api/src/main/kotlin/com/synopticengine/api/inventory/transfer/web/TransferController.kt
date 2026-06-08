@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("\${api.base-path}/inventory/transfers")
+@RequestMapping("/inventory/transfers")
 class TransferController(
     private val transferService: TransferService,
 ) {

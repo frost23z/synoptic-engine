@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/lead-sources")
+@RequestMapping("/lead-sources")
 class LeadSourceController(
     private val leadSourceService: LeadSourceService,
 ) {
@@ -50,7 +50,7 @@ class LeadSourceController(
 }
 
 @RestController
-@RequestMapping($$"${api.base-path}/lead-types")
+@RequestMapping("/lead-types")
 class LeadTypeController(
     private val leadTypeService: LeadTypeService,
 ) {

@@ -41,6 +41,7 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
+                        .contextPath("/api")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("X-Synoptic-Timestamp", timestamp.toString())
                         .header("X-Synoptic-Signature", sign(testSecret, timestamp, body))
@@ -72,6 +73,7 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
+                        .contextPath("/api")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("X-Synoptic-Timestamp", timestamp.toString())
                         .header("X-Synoptic-Signature", sign(testSecret, timestamp, body))
@@ -91,6 +93,7 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
+                        .contextPath("/api")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
                 ).andReturn()
@@ -112,6 +115,7 @@ class EmailInboundParseIntegrationTest : AbstractIntegrationTest() {
                 .perform(
                     MockMvcRequestBuilders
                         .post("/api/mail/inbound-parse")
+                        .contextPath("/api")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("X-Synoptic-Timestamp", timestamp.toString())
                         .header("X-Synoptic-Signature", "deadbeef")

@@ -1,0 +1,25 @@
+# Local development profile — active by default for `./gradlew bootRun` (spring.profiles.default
+# in application.yaml). Supplies the dev-only values the base config intentionally leaves unset so
+# that production fails fast on a missing env var. NEVER use these values outside local dev.
+#
+# The Postgres datasource is auto-wired from compose.yaml by spring-boot-docker-compose
+# (developmentOnly), so no spring.datasource.* is needed here.
+spring:
+    mail:
+        host: localhost
+        port: 1025
+mail:
+    from: noreply@synopticengine.com
+jwt:
+    # Dev-only signing key. Any value >= 32 bytes works; not a real secret.
+    secret: local-dev-jwt-secret-not-for-production-min-32-bytes-long
+cors:
+    allowed-origins: http://localhost:3000,http://127.0.0.1:3000
+synoptic:
+    admin:
+        email: admin@synoptic.dev
+        password: Admin@123
+    encryption:
+        # Fixed 32-byte dev key (base64). Decodes to "SYNOPTIC_TEST_ENCRYPTION_KEY32B!".
+        # NEVER use in production — set SYNOPTIC_ENCRYPTION_KEY there instead.
+        key: U1lOT1BUSUNfVEVTVF9FTkNSWVBUSU9OX0tFWTMyQiE=

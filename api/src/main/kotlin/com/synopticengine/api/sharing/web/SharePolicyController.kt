@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}")
+@RequestMapping("")
 class SharePolicyController(
     private val service: TenantSharePolicyService,
 ) {

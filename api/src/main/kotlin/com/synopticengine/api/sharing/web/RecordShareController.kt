@@ -24,7 +24,7 @@ import java.time.Instant
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}")
+@RequestMapping("")
 class RecordShareController(
     private val service: RecordShareService,
 ) {

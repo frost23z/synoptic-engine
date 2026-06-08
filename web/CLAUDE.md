@@ -24,13 +24,15 @@ pnpm format:check
 
 ## Backend API
 
-- Base host: `http://localhost:8090` (set as `runtimeConfig.public.apiBase`).
-  Resource endpoints live under `/api/*`; auth endpoints under `/auth/*`.
-- Auth: `POST /auth/login` → `{ accessToken, refreshToken }`
+- Base host: set via `NUXT_PUBLIC_API_BASE` → `runtimeConfig.public.apiBase` (local default
+  `http://localhost:8090`, supplied by `app/plugins/api-base.ts`; no hardcoded fallback in the
+  prod build). **Every** endpoint lives under `/api/*` via the backend
+  `server.servlet.context-path=/api` — auth included.
+- Auth: `POST /api/auth/login` → `{ accessToken, refreshToken }`
 - Header: `Authorization: Bearer <accessToken>` (15-min TTL)
-- Refresh: `POST /auth/refresh`
-- **API contract = the backend OpenAPI spec** at `http://localhost:8090/v3/api-docs`
-  (Swagger UI: `/swagger-ui`). Generate types from it rather than hand-writing DTOs.
+- Refresh: `POST /api/auth/refresh`
+- **API contract = the backend OpenAPI spec** at `http://localhost:8090/api/v3/api-docs`
+  (Swagger UI: `/api/swagger-ui`). Generate types from it rather than hand-writing DTOs.
 
 ## Directory layout (Nuxt 4)
 

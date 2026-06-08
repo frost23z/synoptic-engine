@@ -1,4 +1,8 @@
 spring:
+    # bootRun (no explicit profile) picks up dev conveniences from application-local.yaml.
+    # Production sets SPRING_PROFILES_ACTIVE=prod; the test suite sets @ActiveProfiles("test").
+    profiles:
+        default: local
     config:
         import: "optional:file:.env[.properties]"
     application:
@@ -30,8 +34,10 @@ spring:
     flyway:
         enabled: true
     mail:
-        host: ${MAIL_HOST:localhost}
-        port: ${MAIL_PORT:1025}
+        # No fallbacks for prod-critical config: a missing MAIL_HOST/MAIL_PORT must fail fast,
+        # not silently default to a local mailbox. Dev/test values live in the local/test profiles.
+        host: ${MAIL_HOST}
+        port: ${MAIL_PORT}
         username: ${MAIL_USERNAME:}
         password: ${MAIL_PASSWORD:}
         properties:
@@ -41,22 +47,24 @@ spring:
                     starttls:
                         enable: ${MAIL_SMTP_STARTTLS:false}
 server:
+    servlet:
+        context-path: /api
     port: 8090
     forward-headers-strategy: framework
-api:
-    base-path: /api
 mail:
-    from: ${MAIL_FROM:noreply@synopticengine.com}
+    from: ${MAIL_FROM}
 jwt:
-    secret: ${JWT_SECRET:your-256-bit-secret-change-in-production-never-hardcode-this}
+    # No fallback secret in the base config — a missing JWT_SECRET must fail the boot rather
+    # than ship a publicly-known signing key. Dev/test secrets live in the local/test profiles.
+    secret: ${JWT_SECRET}
     access-token-expiry: 900000      # 15 minutes
     refresh-token-expiry: 604800000  # 7 days
 cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
 synoptic:
     admin:
-        email: ${SYNOPTIC_ADMIN_EMAIL:admin@synoptic.dev}
-        password: ${SYNOPTIC_ADMIN_PASSWORD:Admin@123}
+        email: ${SYNOPTIC_ADMIN_EMAIL}
+        password: ${SYNOPTIC_ADMIN_PASSWORD}
     storage:
         root: ${SYNOPTIC_STORAGE_ROOT:./storage}
     inbound-mail:

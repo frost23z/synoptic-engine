@@ -41,7 +41,12 @@ class SecretsGuard(
 
     @PostConstruct
     fun verify() {
+        // When no profile is explicitly active (e.g. `bootRun` relying on
+        // `spring.profiles.default=local`), fall back to the default profiles — Spring loads the
+        // matching `application-{default}.yaml` but leaves activeProfiles empty, so the guard must
+        // look at the default set to recognise a local/dev boot.
         val activeProfiles = environment.activeProfiles.toSet()
+        val effectiveProfiles = activeProfiles.ifEmpty { environment.defaultProfiles.toSet() }
         val devProfiles =
             devProfilesCsv
                 .split(",")
@@ -49,7 +54,7 @@ class SecretsGuard(
                 .filter { it.isNotBlank() }
                 .toSet()
         val isDevDeployment =
-            (emptyProfileIsDev && activeProfiles.isEmpty()) || activeProfiles.any { it in devProfiles }
+            (emptyProfileIsDev && effectiveProfiles.isEmpty()) || effectiveProfiles.any { it in devProfiles }
 
         val violations = mutableListOf<String>()
         if (jwtSecret.contains(DEFAULT_JWT_SECRET_MARKER)) {
@@ -85,11 +90,11 @@ class SecretsGuard(
 
         val joined = violations.joinToString("\n  - ", prefix = "  - ")
         if (isDevDeployment) {
-            log.warn("Secrets-guard warnings (allowed on dev profiles $activeProfiles):\n$joined")
+            log.warn("Secrets-guard warnings (allowed on dev profiles $effectiveProfiles):\n$joined")
             return
         }
         throw IllegalStateException(
-            "Refusing to start on profile $activeProfiles with insecure defaults:\n$joined\n" +
+            "Refusing to start on profile $effectiveProfiles with insecure defaults:\n$joined\n" +
                 "Set the corresponding env vars (JWT_SECRET, SYNOPTIC_ADMIN_PASSWORD, " +
                 "SYNOPTIC_ENCRYPTION_KEY) before booting.",
         )

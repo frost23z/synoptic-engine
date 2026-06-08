@@ -18,11 +18,21 @@ class TestHttp(
     private val mockMvc: MockMvc,
     private val objectMapper: ObjectMapper,
 ) {
+    /**
+     * The app serves every endpoint under `server.servlet.context-path=/api`. MockMvc does
+     * **not** apply the servlet context path automatically, so we set it explicitly here and
+     * normalize each test's path to live under `/api`. This keeps the existing tests' literal
+     * paths working unchanged — both the historical `/api/...` business paths and the bare
+     * `/auth/...`, `/web-forms/...`, `/v3/api-docs` paths — while the handler/security layers
+     * see the context-relative path (`/leads`, `/auth/login`, …) as they do in production.
+     */
+    private fun apiPath(path: String): String = if (path.startsWith("$CONTEXT_PATH/") || path == CONTEXT_PATH) path else "$CONTEXT_PATH$path"
+
     fun get(
         path: String,
         token: String?,
     ): MvcResult {
-        val req = MockMvcRequestBuilders.get(path)
+        val req = MockMvcRequestBuilders.get(apiPath(path)).contextPath(CONTEXT_PATH)
         if (token != null) req.header("Authorization", "Bearer $token")
         return mockMvc.perform(req).andReturn()
     }
@@ -32,7 +42,7 @@ class TestHttp(
         token: String?,
         body: Any?,
     ): MvcResult {
-        val req = MockMvcRequestBuilders.post(path).contentType(MediaType.APPLICATION_JSON)
+        val req = MockMvcRequestBuilders.post(apiPath(path)).contextPath(CONTEXT_PATH).contentType(MediaType.APPLICATION_JSON)
         if (token != null) req.header("Authorization", "Bearer $token")
         if (body != null) req.content(objectMapper.writeValueAsString(body))
         return mockMvc.perform(req).andReturn()
@@ -43,7 +53,7 @@ class TestHttp(
         token: String?,
         body: Any?,
     ): MvcResult {
-        val req = MockMvcRequestBuilders.put(path).contentType(MediaType.APPLICATION_JSON)
+        val req = MockMvcRequestBuilders.put(apiPath(path)).contextPath(CONTEXT_PATH).contentType(MediaType.APPLICATION_JSON)
         if (token != null) req.header("Authorization", "Bearer $token")
         if (body != null) req.content(objectMapper.writeValueAsString(body))
         return mockMvc.perform(req).andReturn()
@@ -53,7 +63,7 @@ class TestHttp(
         path: String,
         token: String?,
     ): MvcResult {
-        val req = MockMvcRequestBuilders.delete(path)
+        val req = MockMvcRequestBuilders.delete(apiPath(path)).contextPath(CONTEXT_PATH)
         if (token != null) req.header("Authorization", "Bearer $token")
         return mockMvc.perform(req).andReturn()
     }
@@ -63,7 +73,7 @@ class TestHttp(
         token: String?,
         body: Any? = null,
     ): MvcResult {
-        val req = MockMvcRequestBuilders.patch(path).contentType(MediaType.APPLICATION_JSON)
+        val req = MockMvcRequestBuilders.patch(apiPath(path)).contextPath(CONTEXT_PATH).contentType(MediaType.APPLICATION_JSON)
         if (token != null) req.header("Authorization", "Bearer $token")
         if (body != null) req.content(objectMapper.writeValueAsString(body))
         return mockMvc.perform(req).andReturn()
@@ -78,8 +88,9 @@ class TestHttp(
     ): MvcResult {
         val req =
             MockMvcRequestBuilders
-                .multipart(path)
+                .multipart(apiPath(path))
                 .file(MockMultipartFile("file", filename, "text/csv", fileBytes))
+        req.contextPath(CONTEXT_PATH)
         if (token != null) req.header("Authorization", "Bearer $token")
         params.forEach { (k, v) -> req.param(k, v) }
         return mockMvc.perform(req).andReturn()
@@ -95,5 +106,10 @@ class TestHttp(
         val content = result.response.contentAsString
         if (content.isBlank()) return null
         return objectMapper.readValue(content, object : TypeReference<List<Map<String, Any>>>() {})
+    }
+
+    private companion object {
+        /** Mirrors `server.servlet.context-path` in application.yaml. */
+        const val CONTEXT_PATH = "/api"
     }
 }
