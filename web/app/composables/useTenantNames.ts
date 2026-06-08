@@ -9,7 +9,7 @@ import type { TenantResponse } from '~/types/sharing'
  * relationship/share DTOs only carry tenant ids).
  *
  * Also exposes the caller's own tenant (`sessionTenantId` / `isSelf`), sourced
- * from `/auth/me`, so cross-tenant surfaces can render "us vs them".
+ * from `/api/auth/me`, so cross-tenant surfaces can render "us vs them".
  */
 export function useTenantNames() {
     const api = useApi()

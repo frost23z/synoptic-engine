@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/settings/web-forms")
+@RequestMapping("/settings/web-forms")
 class WebFormController(
     private val webFormService: WebFormService,
 ) {

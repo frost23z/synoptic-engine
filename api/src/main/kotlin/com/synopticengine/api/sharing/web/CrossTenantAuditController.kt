@@ -21,7 +21,7 @@ import java.util.UUID
  * Admins of any tenant may also browse by actor tenant.
  */
 @RestController
-@RequestMapping($$"${api.base-path}/cross-tenant-audit")
+@RequestMapping("/cross-tenant-audit")
 class CrossTenantAuditController(
     private val auditService: CrossTenantAuditService,
 ) {

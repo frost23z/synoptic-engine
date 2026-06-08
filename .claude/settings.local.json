@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat compose.yaml)",
+      "Bash(ls -la ../api-docs.json api-docs.json)",
+      "Bash(find .. -maxdepth 2 -name \"api-docs.json\")",
+      "Bash(python3 -c \"import json;d=json.load\\(open\\('api-docs.json'\\)\\);print\\('servers:',d.get\\('servers'\\)\\);print\\('sample paths:',list\\(d['paths'].keys\\(\\)\\)[:6]\\)\")",
+      "Bash(grep -rhoE \"['\\\\\"\\\\`]/auth/[a-zA-Z0-9/_{}.\\\\$-]*\" app)",
+      "Bash(grep -rln \"'/api/\\\\|\\\\\"/api/\\\\|\\\\`/api/\" app)",
+      "Bash(grep -rhoE \"useApi[^\\)]*\\\\\\)\\\\s*\\\\.\\\\s*\\(get|post|put|patch|del|delete\\)\\\\\\(['\\\\\"\\\\`][^'\\\\\"\\\\`]+\" app)",
+      "Bash(ls src/main/resources/application*.y*ml)",
+      "Bash(find /workspaces/synoptic-engine/.github -type f)"
+    ]
+  }
+}

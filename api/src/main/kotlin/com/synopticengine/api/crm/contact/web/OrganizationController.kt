@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/contacts/organizations")
+@RequestMapping("/contacts/organizations")
 class OrganizationController(
     private val organizationService: OrganizationService,
     private val activityService: ActivityService,

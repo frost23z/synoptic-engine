@@ -32,7 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     async function login(email: string, password: string) {
-        const data = await $fetch<TokenResponse>('/auth/login', {
+        const data = await $fetch<TokenResponse>('/api/auth/login', {
             baseURL: config.public.apiBase,
             method: 'POST',
             body: { email, password },
@@ -43,7 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Self-serve signup: creates a new company (tenant) + first admin, then logs in (the
     // backend returns tokens directly, so we set the session straight away).
     async function register(companyName: string, email: string, password: string) {
-        const data = await $fetch<TokenResponse>('/auth/register', {
+        const data = await $fetch<TokenResponse>('/api/auth/register', {
             baseURL: config.public.apiBase,
             method: 'POST',
             body: { companyName, email, password },
@@ -52,7 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     // Single-flight refresh: concurrent 401s share one in-flight call instead
-    // of each firing its own /auth/refresh (which races and storms the server).
+    // of each firing its own /api/auth/refresh (which races and storms the server).
     // Kept inside the store setup so it stays per-instance (SSR-safe).
     let refreshInFlight: Promise<void> | null = null
 
@@ -60,7 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
         if (!refreshInFlight) {
             refreshInFlight = (async () => {
                 if (!refreshToken.value) throw new Error('No refresh token')
-                const data = await $fetch<TokenResponse>('/auth/refresh', {
+                const data = await $fetch<TokenResponse>('/api/auth/refresh', {
                     baseURL: config.public.apiBase,
                     method: 'POST',
                     body: { refreshToken: refreshToken.value },
@@ -80,7 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
             email: string
             fullName: string
             authorities: string[]
-        }>('/auth/me', {
+        }>('/api/auth/me', {
             baseURL: config.public.apiBase,
             headers: { Authorization: `Bearer ${accessToken.value}` },
         })

@@ -20,7 +20,7 @@ import java.time.LocalDate
  * query.
  */
 @RestController
-@RequestMapping($$"${api.base-path}/dashboard/stats")
+@RequestMapping("/dashboard/stats")
 class DashboardStatsController(
     private val statsService: DashboardStatsService,
 ) {

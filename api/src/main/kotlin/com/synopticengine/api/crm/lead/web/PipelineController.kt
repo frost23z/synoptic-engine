@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/pipelines")
+@RequestMapping("/pipelines")
 class PipelineController(
     private val pipelineService: PipelineService,
 ) {

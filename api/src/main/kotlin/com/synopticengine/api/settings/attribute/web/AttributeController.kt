@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/settings/attributes")
+@RequestMapping("/settings/attributes")
 class AttributeController(
     private val attributeService: AttributeService,
 ) {
