@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/settings/workflows")
+@RequestMapping("/settings/workflows")
 class WorkflowController(
     private val automationService: AutomationService,
 ) {
@@ -95,7 +95,7 @@ class WorkflowController(
 }
 
 @RestController
-@RequestMapping($$"${api.base-path}/settings/webhooks")
+@RequestMapping("/settings/webhooks")
 class WebhookController(
     private val automationService: AutomationService,
 ) {

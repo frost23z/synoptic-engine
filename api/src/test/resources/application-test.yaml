@@ -1,11 +1,26 @@
+# Test profile (@ActiveProfiles("test")). Mirrors the dev values the base application.yaml
+# intentionally omits (so production fails fast on missing env) so the Testcontainers suite
+# boots without real secrets. Datasource is provided by Testcontainers (@ServiceConnection).
 synoptic:
+    admin:
+        email: admin@synoptic.dev
+        password: Admin@123
     inbound-mail:
         webhook-secret: test-inbound-mail-secret
     encryption:
         # Fixed 32-byte dev/test key — NEVER use in production.
         # Decodes to "SYNOPTIC_TEST_ENCRYPTION_KEY32B!"
         key: U1lOT1BUSUNfVEVTVF9FTkNSWVBUSU9OX0tFWTMyQiE=
+mail:
+    from: noreply@synopticengine.com
+jwt:
+    secret: test-jwt-secret-not-for-production-min-32-bytes-long-xyz
+cors:
+    allowed-origins: http://localhost:3000,http://127.0.0.1:3000
 spring:
+    mail:
+        host: localhost
+        port: 1025
     datasource:
         hikari:
             connection-init-sql: SET ROLE synoptic_app

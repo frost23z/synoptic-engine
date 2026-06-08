@@ -17,7 +17,10 @@ export default defineNuxtConfig({
 
     runtimeConfig: {
         public: {
-            apiBase: 'http://localhost:8090',
+            // No hardcoded fallback — the value comes from NUXT_PUBLIC_API_BASE at runtime so a
+            // production build never silently points at localhost. `app/plugins/api-base.ts`
+            // supplies a localhost default in dev only and fails fast in production if it is unset.
+            apiBase: '',
         },
     },
     vite: {

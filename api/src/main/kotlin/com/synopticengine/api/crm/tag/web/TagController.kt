@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/tags")
+@RequestMapping("/tags")
 class TagController(
     private val tagService: TagService,
 ) {

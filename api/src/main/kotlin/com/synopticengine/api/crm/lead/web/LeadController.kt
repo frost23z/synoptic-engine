@@ -32,7 +32,7 @@ import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/leads")
+@RequestMapping("/leads")
 class LeadController(
     private val leadService: LeadService,
     private val activityService: ActivityService,

@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/quotes")
+@RequestMapping("/quotes")
 class QuoteController(
     private val quoteService: QuoteService,
     private val quotePdfService: QuotePdfService,
