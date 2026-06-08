@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/settings/email-templates")
+@RequestMapping("/settings/email-templates")
 class EmailTemplateController(
     private val emailTemplateService: EmailTemplateService,
 ) {

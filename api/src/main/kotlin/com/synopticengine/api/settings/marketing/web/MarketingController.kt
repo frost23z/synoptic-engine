@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/settings/marketing/events")
+@RequestMapping("/settings/marketing/events")
 class MarketingEventController(
     private val marketingService: MarketingService,
 ) {
@@ -67,7 +67,7 @@ class MarketingEventController(
 }
 
 @RestController
-@RequestMapping($$"${api.base-path}/settings/marketing/campaigns")
+@RequestMapping("/settings/marketing/campaigns")
 class MarketingCampaignController(
     private val marketingService: MarketingService,
 ) {

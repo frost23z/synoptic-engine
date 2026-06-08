@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/warehouses")
+@RequestMapping("/warehouses")
 class WarehouseController(
     private val warehouseService: WarehouseService,
     private val crmApi: CrmApi,

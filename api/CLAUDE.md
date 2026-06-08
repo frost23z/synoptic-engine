@@ -6,7 +6,9 @@
 - **Spring Data JPA** / **Hibernate 7** — `ddl-auto: validate`; schema owned by Flyway
 - **PostgreSQL** with Row-Level Security (RLS) — 38+ tables
 - **jjwt 0.13** for JWT, **Jackson 3** (`tools.jackson.databind`) for JSON
-- **springdoc-openapi 3** — Swagger UI at `/swagger-ui/**`, docs at `/v3/api-docs/**`
+- **springdoc-openapi 3** — Swagger UI at `/api/swagger-ui/**`, docs at `/api/v3/api-docs/**`
+  (all endpoints sit under `server.servlet.context-path=/api`; controllers use clean relative
+  `@RequestMapping` paths — there is **no** `api.base-path` placeholder)
 - **Caffeine** for in-process caches/rate limiters
 - **Testcontainers** for integration tests (needs Docker)
 

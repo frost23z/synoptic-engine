@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/datagrid/saved-filters")
+@RequestMapping("/datagrid/saved-filters")
 class DataGridFilterController(
     private val service: DataGridFilterService,
 ) {

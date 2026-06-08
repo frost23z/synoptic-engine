@@ -23,7 +23,7 @@ import java.util.UUID
 
 @Validated
 @RestController
-@RequestMapping($$"${api.base-path}/settings/imports")
+@RequestMapping("/settings/imports")
 class ImportController(
     private val dataImportService: DataImportService,
     private val csvExportService: CsvExportService,
@@ -137,7 +137,7 @@ class ImportController(
 }
 
 @RestController
-@RequestMapping($$"${api.base-path}")
+@RequestMapping("")
 class CsvExportController(
     private val csvExportService: CsvExportService,
 ) {

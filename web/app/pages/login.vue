@@ -38,7 +38,7 @@ function closeForgot() {
 async function submitForgot() {
     forgotSending.value = true
     try {
-        await $fetch('/auth/forgot-password', {
+        await $fetch('/api/auth/forgot-password', {
             baseURL: config.public.apiBase,
             method: 'POST',
             body: { email: forgotEmail.value },

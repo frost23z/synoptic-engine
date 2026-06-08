@@ -20,7 +20,7 @@ import java.time.Instant
 import java.util.UUID
 
 @RestController
-@RequestMapping($$"${api.base-path}/tenants")
+@RequestMapping("/tenants")
 class TenantController(
     private val tenantRepository: TenantRepository,
     private val tenantApi: TenantApi,
