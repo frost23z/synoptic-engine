@@ -9,7 +9,8 @@
       "Bash(grep -rln \"'/api/\\\\|\\\\\"/api/\\\\|\\\\`/api/\" app)",
       "Bash(grep -rhoE \"useApi[^\\)]*\\\\\\)\\\\s*\\\\.\\\\s*\\(get|post|put|patch|del|delete\\)\\\\\\(['\\\\\"\\\\`][^'\\\\\"\\\\`]+\" app)",
       "Bash(ls src/main/resources/application*.y*ml)",
-      "Bash(find /workspaces/synoptic-engine/.github -type f)"
+      "Bash(find /workspaces/synoptic-engine/.github -type f)",
+      "Bash(git -C /workspaces/synoptic-engine check-ignore -v api/.env api/.env.example)"
     ]
   }
 }
