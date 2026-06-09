@@ -19,14 +19,29 @@ const toast = useToast()
 const { formatDate } = useFormatters()
 const { can } = usePermissions()
 
+// GET /api/users returns the full list (a bare array, like the assignee-lookup
+// consumers expect) — not a paginated Page — so fetch it directly and filter
+// client-side rather than using usePaginatedList (which reads .content/.totalElements).
+const search = ref('')
+const page = ref(1)
 const {
-    page,
-    search,
-    items: users,
-    total,
+    data: allUsers,
     pending,
     refresh,
-} = await usePaginatedList<UserResponse>('/api/users', { key: 'users' })
+} = await useAsyncData<UserResponse[]>('users', () => api<UserResponse[]>('/api/users'), {
+    default: () => [],
+})
+const users = computed(() => {
+    const q = search.value.trim().toLowerCase()
+    const list = allUsers.value ?? []
+    if (!q) return list
+    return list.filter(
+        (u) =>
+            `${u.firstName} ${u.lastName}`.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q)
+    )
+})
+const total = computed(() => users.value.length)
 
 // ── Lookups for create/edit forms ───────────────────────────────────────
 const { data: availableRoles } = await useAsyncData<RoleResponse[]>('roles-list', () =>

@@ -19,7 +19,7 @@ const { tenantName } = useTenantNames()
 /** Records shared to us with MANAGE can be reshared onward (`records.reshare`). */
 const canReshare = computed(() => can('records.reshare'))
 
-const resourceType = ref('')
+const resourceType = ref<string | undefined>(undefined)
 
 const { data: shares, pending } = await useAsyncData<RecordShareResponse[]>(
     'shared-with-me',
@@ -33,7 +33,7 @@ const { data: shares, pending } = await useAsyncData<RecordShareResponse[]>(
 const rows = computed(() => (shares.value ?? []).filter((s) => !s.revokedAt))
 
 const typeFilterOptions = [
-    { label: 'All types', value: '' },
+    { label: 'All types', value: undefined },
     ...SHARE_RESOURCE_TYPES.map((t) => ({ label: RESOURCE_TYPE_LABEL[t] ?? t, value: t })),
 ]
 

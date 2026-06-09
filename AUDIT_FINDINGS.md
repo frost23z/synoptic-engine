@@ -8,6 +8,11 @@ This document is structured so each finding is self-contained and independently 
 
 See the **[Coverage Map](#coverage-map)** at the bottom for exactly what was read-in-full vs. sampled vs. not-yet-checked, and **[Verified Safe / Done Well](#verified-safe--done-well)** so you don't re-investigate things that are fine.
 
+> **Scope note (2026-06-09):** this audit measures *production multi-tenant SaaS* readiness. For
+> *final-year defense showcase* readiness — a single-tenant supervised demo — see
+> **[`SHOWCASE_READINESS.md`](./SHOWCASE_READINESS.md)**: the app was driven end-to-end across all 40
+> pages (40/40 render), seeded with demo data, and the one functional bug found ([FE-5](#fe-5)) was fixed.
+
 ---
 
 ## Priority Index
@@ -58,6 +63,12 @@ See the **[Coverage Map](#coverage-map)** at the bottom for exactly what was rea
 | [CQ-1](#cq-1) | 🔵 Minor | Code quality | Doc drift: comments reference non-existent `V040`, `sharedResourceFinder`, "Sprint 2b" |
 | [FE-4](#fe-4) | 🔵 Minor | Frontend | Placeholder avatar external request; `reset-password` `setTimeout` without cleanup |
 | [BE-9](#be-9) | 🔵 Minor | Backend | `WorkflowEngine` workflow-level failure is silently logged, not persisted |
+| [FE-5](#fe-5) | ✅ Fixed | Frontend | Leads page issued GET `/pipelines/{id}/stages` → 405 (path is POST-only) |
+| [BE-10](#be-10) | 🟡 Medium | Inventory | Soft-deleted product SKUs stay reserved (`uq_products_tenant_sku` not partial) → recreate 500s |
+| [BE-11](#be-11) | 🟡 Medium | Inventory | Low-stock / stock totals sum inventory across soft-deleted warehouses |
+| [FE-6](#fe-6) | ✅ Fixed | Frontend | `USelect` items with empty-string `value` crash the page (NuxtUI 4) — Stock, Shared-with-me, Marketing |
+| [FE-7](#fe-7) | ✅ Fixed | Frontend | Users settings page used `usePaginatedList` against an array endpoint → always showed 0 users |
+| [FE-8](#fe-8) | ✅ Fixed | Frontend | Cross-tenant names rendered as UUIDs — tenant directory gated on client-only auth at SSR |
 
 ---
 
@@ -329,6 +340,40 @@ Comments reference non-existent artifacts: `RLS (V040)` (latest is V026), `share
 ### BE-9
 **`WorkflowEngine` workflow-level failure silently logged.** `- [ ]`
 `WorkflowEngine.kt:69-72` catches per-workflow errors and only logs at `warn` (per-action failures *are* persisted at `:95-100`, which is good). **Fix.** Persist a workflow-level failure record for observability.
+
+### FE-5
+**Leads page issued `GET /api/pipelines/{id}/stages` → 405, leaving the mass-move stage list empty.** `[x]` (fixed 2026-06-09)
+- **What.** `web/app/pages/leads/index.vue` fetched stages from `GET /api/pipelines/{id}/stages`, but that path is **POST-only** on the backend (`PipelineController`), so it returned 405. The call was wrapped in `.catch(() => [])`, so the page rendered but the mass-action "move to stage" dropdown was silently empty and the browser console logged a 405 on every Leads visit. Not in the original audit because per-page Nuxt components were sampled, not read in full; surfaced by the end-to-end Playwright walk-through.
+- **Fix (applied).** Derive the stage list from the already-loaded `GET /api/pipelines` response (each `PipelineResponse` carries its `stages` inline) instead of a second request. Removes the 405 and an unnecessary round-trip. ESLint clean.
+
+### BE-10
+**Soft-deleted product SKUs are never released; recreating a SKU throws 500.** `- [ ]`
+- **What.** Products soft-delete (`deleted_at`), but `uq_products_tenant_sku` is a plain `UNIQUE (tenant_id, sku)` index — **not** partial (`WHERE deleted_at IS NULL`). So a soft-deleted product keeps its SKU reserved forever, and `POST /products` with that SKU hits a unique-constraint violation that surfaces as a generic **500** (not a 409/422). Found while re-seeding demo data (delete-then-recreate the catalog).
+- **Why it matters.** A normal user workflow — delete a product, later recreate it (or a new product) with the same SKU — fails opaquely. Also blocks any idempotent re-seed/import that reuses SKUs.
+- **Where.** `uq_products_tenant_sku` (products migration); `ProductService.create`; `GlobalExceptionHandler` (unique violation → 500).
+- **Fix.** Make the index partial: `... UNIQUE (tenant_id, sku) WHERE deleted_at IS NULL`; and map `DataIntegrityViolationException` to 409 with a clear message. (Same applies to any other soft-deleted entity with a non-partial unique index.)
+
+### BE-11
+**Stock totals / low-stock sum inventory across soft-deleted warehouses.** `- [ ]`
+- **What.** `InventoryMovementService.getLowStock` (and stock aggregation generally) sums `product_inventories` rows by `product_id` with **no filter on whether the owning warehouse is soft-deleted** (`InventoryMovementService.kt:59-62`). When a warehouse is deleted, its inventory rows remain and keep counting toward the product's on-hand total, so totals over-count and the reorder list silently mis-reports. Found when a re-seed that recreated warehouses caused on-hand totals to double.
+- **Where.** `InventoryMovementService.kt:51-74`; `product_inventories` ↔ `warehouses` relationship.
+- **Fix.** Exclude inventory tied to soft-deleted warehouses (join + `warehouse.deleted_at IS NULL`), and/or cascade-soft-delete `product_inventories` when a warehouse is deleted. Ties to BE-6's suggestion to replace the in-memory sum with a `GROUP BY … HAVING SUM(...)` aggregate that can carry the predicate.
+
+### FE-6
+**`USelect` items with an empty-string `value` crash the whole page under NuxtUI 4 / Reka UI.** `[x]` (fixed 2026-06-09)
+- **What.** Reka UI's `SelectItem` forbids `value=""` (empty string is reserved to clear the selection). Three pages defined an "All"/"None" option as `{ value: '' }`, which threw on render and tripped the page-level error boundary ("Something went wrong on this page — A `<SelectItem />` must have a value prop that is not an empty string"): `inventory/stock.vue` ("All locations"), `sharing/shared-with-me.vue` ("All types"), and `settings/marketing/index.vue` ("None", ×2 — latent, fires when the campaign modal opens). Surfaced by visual review of the screenshot tour (the error boundary renders without a console error, so the network/console smoke check didn't flag it).
+- **Fix (applied).** Use `value: undefined` for the placeholder/clear option, matching the existing working convention in `activities/index.vue` and `quotes/index.vue`. Refs typed `string | undefined`.
+
+### FE-7
+**Users settings page used `usePaginatedList` against an array endpoint, so it always showed "0 users".** `[x]` (fixed 2026-06-09)
+- **What.** `GET /api/users` returns a bare `List<UserResponse>` (the assignee-lookup consumers in `useDomainLookups.ts` and `activities/index.vue` rely on the full array). But `settings/users/index.vue` consumed it via `usePaginatedList`, which reads `.content`/`.totalElements` — undefined on an array — so the page rendered "0 total / No users found" even with users present (including the admin). This is the only `usePaginatedList` page pointed at a non-paginated endpoint (the others — leads/quotes/products/warehouses/persons/orgs/activities — are correctly paginated).
+- **Fix (applied).** Fetch the array directly with `useAsyncData<UserResponse[]>` and filter client-side, keeping the `users/total/search/page/pending/refresh` bindings the template already uses. (Leaving `GET /users` as an array is correct — paginating it would break the lookup dropdowns that need every user.)
+
+### FE-8
+**Cross-tenant tenant names render as raw UUIDs on the Sharing pages.** `[x]` (fixed 2026-06-09)
+- **What.** `useTenantNames` loads the tenant directory via `useAsyncData('sharing-tenants', () => can('tenants.view') ? api('/api/tenants') : [])`. The auth plugin is **client-only** (`web/app/plugins/01.auth.client.ts`), so during SSR there is no authenticated principal → `can('tenants.view')` is `false` → the directory resolves to `[]`, and `useAsyncData` caches that empty result (it doesn't refetch on the client). Result: `tenantName(id)` always hit its `${id.slice(0,8)}…` fallback, so Relationships and Shared-with-me showed UUIDs instead of the partner tenant's name. (Same root cause family as FE-2: SSR runs without the client-only auth.)
+- **Fix (applied).** Mark that `useAsyncData` `server: false` so the directory is fetched on the client, after the auth plugin has populated the store. Names now resolve.
+- **Related observation (not fixed).** `GET /api/tenants` returns the **entire** tenant directory (id/name/slug/status) to any tenant with `tenants.view`, which the relationship "target tenant" picker depends on — but it also lets any tenant enumerate every other tenant. Consider scoping the picker to an explicit invite/search flow if cross-tenant existence disclosure matters (cf. MT-4's existence-oracle theme).
 
 ---
 
