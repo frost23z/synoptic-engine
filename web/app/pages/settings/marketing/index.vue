@@ -116,7 +116,7 @@ const { data: templates } = await useAsyncData<{ id: string; name: string }[]>(
             : Promise.resolve([])
 )
 const templateOptions = computed(() => [
-    { label: 'None', value: '' },
+    { label: 'None', value: undefined },
     ...(templates.value?.map((t) => ({ label: t.name, value: t.id })) ?? []),
 ])
 
@@ -142,7 +142,7 @@ const campaignForm = reactive({
 const isCampaignEdit = computed(() => editingCampaignId.value !== null)
 
 const eventOptions = computed(() => [
-    { label: 'None', value: '' },
+    { label: 'None', value: undefined },
     ...(events.value?.map((e) => ({ label: e.name, value: e.id })) ?? []),
 ])
 

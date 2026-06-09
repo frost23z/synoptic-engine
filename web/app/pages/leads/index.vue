@@ -2,7 +2,6 @@
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { KanbanStageGroup, LeadResponse } from '~/types/leads'
 import type { PipelineResponse } from '~/types/pipelines'
-import type { StageResponse } from '~/types/settings'
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL } from '~/types/leads'
 
 definePageMeta({ title: 'Leads' })
@@ -74,20 +73,12 @@ watchEffect(() => {
     }
 })
 
-// Load stages when pipeline changes for the mass-move select
-const massStageList = ref<StageResponse[]>([])
-watch(
-    selectedPipelineId,
-    async (id) => {
-        if (!id) {
-            massStageList.value = []
-            return
-        }
-        massStageList.value = await api<StageResponse[]>(`/api/pipelines/${id}/stages`).catch(
-            () => []
-        )
-    },
-    { immediate: true }
+// Stages for the mass-move select come from the already-loaded pipelines list:
+// GET /api/pipelines returns each pipeline's stages inline. (There is no
+// GET /api/pipelines/{id}/stages endpoint — that path is POST-only — so fetching
+// it separately returned 405.)
+const massStageList = computed(
+    () => pipelines.value?.find((p) => p.id === selectedPipelineId.value)?.stages ?? []
 )
 const stageOptions = computed(() =>
     massStageList.value.map((s) => ({ label: s.name, value: s.id }))

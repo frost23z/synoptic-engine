@@ -1,0 +1,22 @@
+[
+  {
+    "page": "02-leads",
+    "kind": "http.405",
+    "text": "GET /pipelines/00000000-0000-0000-0000-000000000010/stages"
+  },
+  {
+    "page": "02-leads",
+    "kind": "console.error",
+    "text": "Failed to load resource: the server responded with a status of 405 ()"
+  },
+  {
+    "page": "02b-leads-kanban",
+    "kind": "http.405",
+    "text": "GET /pipelines/00000000-0000-0000-0000-000000000010/stages"
+  },
+  {
+    "page": "02b-leads-kanban",
+    "kind": "console.error",
+    "text": "Failed to load resource: the server responded with a status of 405 ()"
+  }
+]

@@ -31,14 +31,14 @@ const canCreate = can('inventory.movements.create')
 
 const productId = ref('')
 const warehouseId = ref('')
-const locationId = ref('')
+const locationId = ref<string | undefined>(undefined)
 
 const locationNameById = computed(() => {
     const list = warehouseId.value ? (locationsByWarehouse.value[warehouseId.value] ?? []) : []
     return Object.fromEntries(list.map((l) => [l.id, l.name]))
 })
 const locationOptions = computed(() => [
-    { label: 'All locations', value: '' },
+    { label: 'All locations', value: undefined },
     ...(warehouseId.value ? (locationsByWarehouse.value[warehouseId.value] ?? []) : []).map(
         (l) => ({
             label: l.name,
@@ -84,7 +84,7 @@ async function loadStock() {
 }
 
 watch(warehouseId, async (id) => {
-    locationId.value = ''
+    locationId.value = undefined
     if (id) await ensureLocations(id)
     loadStock()
 })
