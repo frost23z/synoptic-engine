@@ -19,10 +19,13 @@ export function useTenantNames() {
     const sessionTenantId = computed(() => authStore.user?.tenantId ?? null)
     const isSelf = (id?: string | null): boolean => !!id && id === sessionTenantId.value
 
+    // Client-only: the auth plugin (01.auth.client.ts) runs on the client, so at SSR
+    // `can('tenants.view')` is false and the directory would resolve empty (names would
+    // fall back to UUIDs). Fetching client-side lets it resolve once auth is hydrated.
     const { data } = useAsyncData<TenantResponse[]>(
         'sharing-tenants',
         () => (can('tenants.view') ? api<TenantResponse[]>('/api/tenants') : Promise.resolve([])),
-        { default: () => [] }
+        { default: () => [], server: false }
     )
 
     const tenants = computed(() => data.value ?? [])
