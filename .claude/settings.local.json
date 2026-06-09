@@ -65,7 +65,12 @@
       "Bash(grep -rnA8 \"fun \\(list|getUsers|all\\)\\\\b\\\\|@GetMapping\" api/src/main/kotlin/com/synopticengine/api/identity/web/UserController.kt)",
       "Bash(echo \"API\\(8090\\): $\\(lsof -ti:8090 || echo down\\)\")",
       "Bash(echo \"web\\(3000\\): $\\(lsof -ti:3000 || echo down\\)\")",
-      "Bash(grep -rhnA6 \"fun isKnown\" api/src/main/kotlin/com/synopticengine/api/sharing/domain/ResourceType.kt)"
+      "Bash(grep -rhnA6 \"fun isKnown\" api/src/main/kotlin/com/synopticengine/api/sharing/domain/ResourceType.kt)",
+      "Bash(pdftotext -layout demo.pdf demo.txt)",
+      "Bash(pdfinfo demo.pdf)",
+      "Bash(mkdir -p /tmp/demopages)",
+      "Bash(pdftoppm -jpeg -r 100 demo.pdf /tmp/demopages/p)",
+      "Bash(grep -iE '\\\\.\\(png|jpg\\)$')"
     ]
   }
 }
