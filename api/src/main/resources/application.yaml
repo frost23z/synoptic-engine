@@ -49,7 +49,6 @@ spring:
 server:
     servlet:
         context-path: /api
-    port: 8090
     forward-headers-strategy: framework
 mail:
     from: ${MAIL_FROM}
