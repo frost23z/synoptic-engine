@@ -49,7 +49,12 @@ spring:
 server:
     servlet:
         context-path: /api
+    port: ${PORT:8090}
     forward-headers-strategy: framework
+management:
+    health:
+        mail:
+            enabled: false
 mail:
     from: ${MAIL_FROM}
 jwt:
